@@ -39,6 +39,47 @@ export async function getAgents() {
   return apiFetch<Array<{ id: string; name: string; workspaceDir: string; status: string; hasConfig: boolean }>>('/api/agents')
 }
 
+// 获取 agent 的工作空间文档列表及内容
+export async function getAgentDocs(agentId: string) {
+  return apiFetch<Record<string, string>>(`/api/agents/${agentId}/docs`)
+}
+
+// 获取 agent 指定文档内容
+export async function getAgentDoc(agentId: string, filename: string) {
+  return apiFetch<{ content: string }>(`/api/agents/${agentId}/docs/${encodeURIComponent(filename)}`)
+}
+
+// 更新 agent 指定文档
+export async function updateAgentDoc(agentId: string, filename: string, content: string) {
+  return apiFetch<{ ok: boolean }>(`/api/agents/${agentId}/docs/${encodeURIComponent(filename)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  })
+}
+
+// 创建新 agent
+export async function createAgent(data: { id: string; name: string; model?: string }) {
+  return apiFetch<{ ok: boolean; id: string }>('/api/agents', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+// 更新 agent 配置
+export async function updateAgentConfig(agentId: string, data: Record<string, unknown>) {
+  return apiFetch<{ ok: boolean }>(`/api/agents/${agentId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+// 删除 agent
+export async function deleteAgent(agentId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/agents/${agentId}`, {
+    method: 'DELETE',
+  })
+}
+
 // Memory API
 
 // 获取 agent 的 MEMORY.md 内容
