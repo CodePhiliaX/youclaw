@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
-import { getSkills } from '../api/client'
+import { useState, useEffect, useCallback } from 'react'
+import { getSkills, configureSkillEnv, installSkill } from '../api/client'
 import type { Skill } from '../api/client'
-import { Puzzle, CheckCircle, AlertTriangle, XCircle, FolderOpen, Globe, Cpu, Terminal, Key, Wrench } from 'lucide-react'
+import { Puzzle, CheckCircle, AlertTriangle, XCircle, FolderOpen, Globe, Cpu, Terminal, Key, Wrench, Download, Copy, Check, Loader2 } from 'lucide-react'
 import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
 
-const sourceOrder: Skill['source'][] = ['workspace', 'project', 'user']
+const sourceOrder: Skill['source'][] = ['workspace', 'builtin', 'user']
 
 function EligibilityIcon({ skill }: { skill: Skill }) {
   if (skill.eligible) {
@@ -25,13 +27,15 @@ export function Skills() {
 
   const sourceLabels: Record<Skill['source'], string> = {
     workspace: t.skills.workspace,
-    project: t.skills.project,
+    builtin: t.skills.project,
     user: t.skills.user,
   }
 
-  useEffect(() => {
+  const loadSkills = useCallback(() => {
     getSkills().then(setSkills).catch(() => {})
   }, [])
+
+  useEffect(() => { loadSkills() }, [loadSkills])
 
   const selectedSkill = skills.find(s => s.name === selected)
 
@@ -114,7 +118,7 @@ export function Skills() {
             </div>
 
             {/* Eligibility status */}
-            <div className="rounded-md border border-border p-4 space-y-2">
+            <div className="rounded-md border border-border p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 {selectedSkill.eligible ? (
                   <>
@@ -128,15 +132,27 @@ export function Skills() {
                   </>
                 )}
               </div>
-              {selectedSkill.eligibilityErrors.length > 0 && (
-                <ul className="space-y-1">
-                  {selectedSkill.eligibilityErrors.map((err, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-yellow-400 shrink-0" />
-                      {err}
-                    </li>
+
+              {/* 环境变量配置：显示所有 env vars，支持配置和编辑 */}
+              {selectedSkill.eligibilityDetail?.env.results.length > 0 && (
+                <div className="space-y-2">
+                  {selectedSkill.eligibilityDetail.env.results.map(r => (
+                    <EnvConfigRow key={r.name} envName={r.name} configured={r.found} onSaved={loadSkills} />
                   ))}
-                </ul>
+                </div>
+              )}
+
+              {/* 缺失依赖 + 有安装命令：显示安装按钮 */}
+              {!selectedSkill.eligible && selectedSkill.frontmatter.install && Object.keys(selectedSkill.frontmatter.install).length > 0 && (
+                <div className="pt-2 border-t border-border/50 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Download className="h-3.5 w-3.5" />
+                    {t.skills.install}
+                  </div>
+                  {Object.entries(selectedSkill.frontmatter.install).map(([method, command]) => (
+                    <InstallButton key={method} method={method} command={command} skillName={selectedSkill.name} onInstalled={loadSkills} />
+                  ))}
+                </div>
               )}
             </div>
 
@@ -215,6 +231,146 @@ export function Skills() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 环境变量配置行：已配置显示掩码+编辑，未配置显示输入框 */
+function EnvConfigRow({ envName, configured, onSaved }: { envName: string; configured: boolean; onSaved: () => void }) {
+  const { t } = useI18n()
+  const [editing, setEditing] = useState(!configured)
+  const [value, setValue] = useState('')
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  const handleSave = async () => {
+    if (!value.trim()) return
+    setStatus('saving')
+    try {
+      await configureSkillEnv(envName, value.trim())
+      setStatus('saved')
+      setEditing(false)
+      setValue('')
+      onSaved()
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <Key className="h-3.5 w-3.5 text-green-400 shrink-0" />
+        <code className="text-xs font-mono shrink-0">{envName}</code>
+        <span className="flex-1 text-xs text-muted-foreground font-mono">••••••••</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => { setEditing(true); setStatus('idle') }}
+          className="h-7 px-2 text-xs"
+        >
+          {t.common.edit}
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Key className={cn("h-3.5 w-3.5 shrink-0", configured ? "text-green-400" : "text-yellow-400")} />
+      <code className="text-xs font-mono shrink-0">{envName}</code>
+      <Input
+        type="password"
+        placeholder={t.skills.envPlaceholder}
+        value={value}
+        onChange={(e) => { setValue(e.target.value); setStatus('idle') }}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+        className="h-7 text-xs flex-1"
+        disabled={status === 'saving'}
+        autoFocus
+      />
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={handleSave}
+        disabled={!value.trim() || status === 'saving'}
+        className="h-7 px-2 text-xs"
+      >
+        {status === 'saving' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+        {status === 'saving' ? t.skills.savingEnv : t.skills.configureEnv}
+      </Button>
+      {configured && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => { setEditing(false); setValue(''); setStatus('idle') }}
+          className="h-7 px-2 text-xs"
+        >
+          {t.common.cancel}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/** 安装按钮：复制命令 + 一键安装 */
+function InstallButton({ method, command, skillName, onInstalled }: { method: string; command: string; skillName: string; onInstalled: () => void }) {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'installing' | 'success' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const handleInstall = async () => {
+    setStatus('installing')
+    setErrorMsg('')
+    try {
+      const result = await installSkill(skillName, method)
+      if (result.ok) {
+        setStatus('success')
+        onInstalled()
+      } else {
+        setStatus('error')
+        setErrorMsg(result.stderr || `Exit code: ${result.exitCode}`)
+      }
+    } catch {
+      setStatus('error')
+      setErrorMsg('Request failed')
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <Badge variant="outline" className="text-xs shrink-0">{method}</Badge>
+        <code className="flex-1 text-xs font-mono bg-muted/50 px-2 py-1.5 rounded truncate">{command}</code>
+        <button
+          onClick={handleCopy}
+          className="shrink-0 p-1.5 rounded-md hover:bg-accent transition-colors"
+          title="Copy command"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+        </button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={handleInstall}
+          disabled={status === 'installing' || status === 'success'}
+          className="h-7 px-2 text-xs"
+        >
+          {status === 'installing' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+          {status === 'success' && <Check className="h-3 w-3 text-green-400 mr-1" />}
+          {status === 'success' ? t.skills.installSuccess : status === 'installing' ? t.skills.installing : t.skills.install}
+        </Button>
+      </div>
+      {status === 'error' && errorMsg && (
+        <pre className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap">{errorMsg}</pre>
+      )}
     </div>
   )
 }

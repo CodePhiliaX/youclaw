@@ -119,16 +119,24 @@ export interface SkillFrontmatter {
   dependencies?: string[]
   env?: string[]
   tools?: string[]
+  install?: Record<string, string>
+}
+
+export interface EligibilityDetail {
+  os: { passed: boolean; current: string; required?: string[] }
+  dependencies: { passed: boolean; results: Array<{ name: string; found: boolean; path?: string }> }
+  env: { passed: boolean; results: Array<{ name: string; found: boolean }> }
 }
 
 export interface Skill {
   name: string
-  source: 'workspace' | 'project' | 'user'
+  source: 'workspace' | 'builtin' | 'user'
   frontmatter: SkillFrontmatter
   content: string
   path: string
   eligible: boolean
   eligibilityErrors: string[]
+  eligibilityDetail: EligibilityDetail
 }
 
 // 获取所有可用 skills
@@ -139,6 +147,22 @@ export async function getSkills() {
 // 获取 agent 启用的 skills
 export async function getAgentSkills(agentId: string) {
   return apiFetch<Skill[]>(`/api/agents/${encodeURIComponent(agentId)}/skills`)
+}
+
+// 配置 skill 环境变量
+export async function configureSkillEnv(key: string, value: string) {
+  return apiFetch<{ ok: boolean }>('/api/skills/configure', {
+    method: 'POST',
+    body: JSON.stringify({ key, value }),
+  })
+}
+
+// 安装 skill 依赖
+export async function installSkill(skillName: string, method: string) {
+  return apiFetch<{ ok: boolean; stdout: string; stderr: string; exitCode: number }>('/api/skills/install', {
+    method: 'POST',
+    body: JSON.stringify({ skillName, method }),
+  })
 }
 
 // ===== 定时任务 API =====
