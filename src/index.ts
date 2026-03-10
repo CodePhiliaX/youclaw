@@ -1,3 +1,6 @@
+// 清除 CLAUDECODE 环境变量，避免 Claude Agent SDK 检测到嵌套 session 而拒绝运行
+delete process.env.CLAUDECODE
+
 import { loadEnv, getEnv } from './config/index.ts'
 import { initLogger, getLogger } from './logger/index.ts'
 import { initDatabase, createTask, updateTask, deleteTask, getTasks, getTask } from './db/index.ts'
