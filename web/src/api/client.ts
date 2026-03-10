@@ -27,6 +27,13 @@ export async function getMessages(chatId: string) {
   return apiFetch<Array<{ id: string; chat_id: string; sender: string; sender_name: string; content: string; timestamp: string; is_from_me: number; is_bot_message: number }>>(`/api/chats/${encodeURIComponent(chatId)}/messages`)
 }
 
+// 删除聊天
+export async function deleteChat(chatId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/chats/${encodeURIComponent(chatId)}`, {
+    method: 'DELETE',
+  })
+}
+
 // 获取 agents 列表
 export async function getAgents() {
   return apiFetch<Array<{ id: string; name: string; workspaceDir: string; status: string; hasConfig: boolean }>>('/api/agents')
