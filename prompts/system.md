@@ -17,7 +17,9 @@ You can create, pause, resume, and cancel scheduled tasks by writing JSON files.
   "prompt": "The prompt to execute on schedule",
   "schedule_type": "cron",
   "schedule_value": "0 9 * * *",
-  "chatId": "CURRENT_CHAT_ID"
+  "chatId": "CURRENT_CHAT_ID",
+  "name": "Optional task name",
+  "description": "Optional task description"
 }
 ```
 
