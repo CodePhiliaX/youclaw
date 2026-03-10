@@ -18,9 +18,10 @@ export function scanWorkspaceFiles(workspaceDir: string): string[] {
 
       // 构建相对路径
       const parentPath = entry.parentPath ?? (entry as any).path ?? ''
-      const relativePath = parentPath
-        ? `${parentPath.replace(workspaceDir, '').replace(/^\//, '')}/${entry.name}`
-        : entry.name
+      const relativeDir = parentPath
+        ? parentPath.replace(workspaceDir, '').replace(/^\//, '')
+        : ''
+      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name
 
       // 检查路径中是否包含排除目录
       const parts = relativePath.split('/')
