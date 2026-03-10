@@ -1,17 +1,19 @@
 import { NavLink } from 'react-router-dom'
 import { MessageSquare, Bot, CalendarClock, Brain, Puzzle, Settings } from 'lucide-react'
 import { cn } from '../../lib/utils'
-
-const navItems = [
-  { to: '/', icon: MessageSquare, label: 'Chat' },
-  { to: '/agents', icon: Bot, label: 'Agents' },
-  { to: '/tasks', icon: CalendarClock, label: 'Tasks' },
-  { to: '/memory', icon: Brain, label: 'Memory' },
-  { to: '/skills', icon: Puzzle, label: 'Skills' },
-  { to: '/system', icon: Settings, label: 'System' },
-]
+import { useI18n } from '../../i18n'
 
 export function Sidebar() {
+  const { t } = useI18n()
+
+  const navItems = [
+    { to: '/', icon: MessageSquare, label: t.nav.chat },
+    { to: '/agents', icon: Bot, label: t.nav.agents },
+    { to: '/tasks', icon: CalendarClock, label: t.nav.tasks },
+    { to: '/memory', icon: Brain, label: t.nav.memory },
+    { to: '/skills', icon: Puzzle, label: t.nav.skills },
+    { to: '/system', icon: Settings, label: t.nav.system },
+  ]
   return (
     <aside className="w-[220px] border-r border-border flex flex-col shrink-0">
       <nav className="flex-1 p-3 space-y-1">

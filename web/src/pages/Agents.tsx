@@ -3,6 +3,7 @@ import { getAgents } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { Bot, FolderOpen, MessageSquare } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { useI18n } from '../i18n'
 
 type Agent = {
   id: string
@@ -13,6 +14,7 @@ type Agent = {
 }
 
 export function Agents() {
+  const { t } = useI18n()
   const [agents, setAgents] = useState<Agent[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -28,7 +30,7 @@ export function Agents() {
       {/* 左侧：Agent 列表 */}
       <div className="w-[260px] border-r border-border flex flex-col">
         <div className="p-3 border-b border-border">
-          <h2 className="font-semibold text-sm">Agents</h2>
+          <h2 className="font-semibold text-sm">{t.agents.title}</h2>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {agents.map(agent => (
@@ -65,24 +67,24 @@ export function Agents() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold">{selectedAgent.name}</h1>
-                <p className="text-sm text-muted-foreground">ID: {selectedAgent.id}</p>
+                <p className="text-sm text-muted-foreground">{t.agents.id}: {selectedAgent.id}</p>
               </div>
             </div>
 
             <div className="grid gap-4">
-              <InfoRow label="Status" value={
+              <InfoRow label={t.agents.status} value={
                 <span className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-green-500" />
                   {selectedAgent.status}
                 </span>
               } />
-              <InfoRow label="Workspace" value={
+              <InfoRow label={t.agents.workspace} value={
                 <span className="flex items-center gap-1">
                   <FolderOpen className="h-3 w-3" />
                   {selectedAgent.workspaceDir}
                 </span>
               } />
-              <InfoRow label="Config" value={selectedAgent.hasConfig ? 'agent.yaml found' : 'No config file'} />
+              <InfoRow label={t.agents.config} value={selectedAgent.hasConfig ? t.agents.configFound : t.agents.noConfig} />
             </div>
 
             <div className="flex gap-2 pt-4">
@@ -91,7 +93,7 @@ export function Agents() {
                 className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
               >
                 <MessageSquare className="h-4 w-4" />
-                Start Chat
+                {t.agents.startChat}
               </button>
             </div>
           </div>
@@ -99,7 +101,7 @@ export function Agents() {
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
               <Bot className="h-12 w-12 mx-auto mb-4 opacity-20" />
-              <p>Select an agent to view details</p>
+              <p>{t.agents.selectAgent}</p>
             </div>
           </div>
         )}

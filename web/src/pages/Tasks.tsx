@@ -10,6 +10,7 @@ import {
 } from '../api/client'
 import type { ScheduledTaskDTO, TaskRunLogDTO } from '../api/client'
 import { cn } from '../lib/utils'
+import { useI18n } from '../i18n'
 import {
   Clock,
   Plus,
@@ -77,6 +78,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function Tasks() {
+  const { t } = useI18n()
   const [tasks, setTasks] = useState<ScheduledTaskDTO[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -137,7 +139,7 @@ export function Tasks() {
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <CalendarClock className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">Scheduled Tasks</h1>
+          <h1 className="text-lg font-semibold">{t.tasks.title}</h1>
           <span className="text-xs text-muted-foreground ml-1">({tasks.length})</span>
         </div>
         <button
@@ -145,7 +147,7 @@ export function Tasks() {
           className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Create Task
+          {t.tasks.createTask}
         </button>
       </div>
 
@@ -155,8 +157,8 @@ export function Tasks() {
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
               <Clock className="h-12 w-12 mx-auto mb-4 opacity-20" />
-              <p>No scheduled tasks yet</p>
-              <p className="text-xs mt-1">Create a task to automate agent execution</p>
+              <p>{t.tasks.noTasks}</p>
+              <p className="text-xs mt-1">{t.tasks.noTasksHint}</p>
             </div>
           </div>
         ) : (
@@ -189,7 +191,7 @@ export function Tasks() {
                     <button
                       onClick={() => handleRun(task.id)}
                       className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                      title="Run now"
+                      title={t.tasks.runNow}
                     >
                       <Play className="h-4 w-4" />
                     </button>
@@ -197,7 +199,7 @@ export function Tasks() {
                       <button
                         onClick={() => handleTogglePause(task)}
                         className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                        title={task.status === 'active' ? 'Pause' : 'Resume'}
+                        title={task.status === 'active' ? t.tasks.pause : t.tasks.resume}
                       >
                         <Pause className="h-4 w-4" />
                       </button>
@@ -205,7 +207,7 @@ export function Tasks() {
                     <button
                       onClick={() => handleDelete(task.id)}
                       className="p-1.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-red-400 transition-colors"
-                      title="Delete"
+                      title={t.common.delete}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -218,33 +220,33 @@ export function Tasks() {
                     <div className="ml-8 space-y-3">
                       {/* Prompt */}
                       <div>
-                        <div className="text-xs text-muted-foreground mb-1">Prompt</div>
+                        <div className="text-xs text-muted-foreground mb-1">{t.tasks.prompt}</div>
                         <div className="text-sm bg-background rounded p-2 border border-border whitespace-pre-wrap">{task.prompt}</div>
                       </div>
 
                       {/* Meta Info */}
                       <div className="grid grid-cols-3 gap-4 text-xs">
                         <div>
-                          <span className="text-muted-foreground">Task ID: </span>
+                          <span className="text-muted-foreground">{t.tasks.taskId}: </span>
                           <span className="font-mono">{task.id.slice(0, 8)}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Created: </span>
+                          <span className="text-muted-foreground">{t.tasks.created}: </span>
                           <span>{new Date(task.created_at).toLocaleString()}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Last Run: </span>
+                          <span className="text-muted-foreground">{t.tasks.lastRun}: </span>
                           <span>{task.last_run ? new Date(task.last_run).toLocaleString() : '-'}</span>
                         </div>
                       </div>
 
                       {/* Run Logs */}
                       <div>
-                        <div className="text-xs text-muted-foreground mb-1">Recent Runs</div>
+                        <div className="text-xs text-muted-foreground mb-1">{t.tasks.recentRuns}</div>
                         {logsLoading ? (
-                          <div className="text-xs text-muted-foreground">Loading...</div>
+                          <div className="text-xs text-muted-foreground">{t.common.loading}</div>
                         ) : logs.length === 0 ? (
-                          <div className="text-xs text-muted-foreground">No runs yet</div>
+                          <div className="text-xs text-muted-foreground">{t.tasks.noRuns}</div>
                         ) : (
                           <div className="space-y-1 max-h-48 overflow-y-auto">
                             {logs.slice(0, 20).map((log) => (
@@ -298,6 +300,7 @@ function CreateTaskModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  const { t } = useI18n()
   const [agentId, setAgentId] = useState(agents[0]?.id ?? '')
   const [prompt, setPrompt] = useState('')
   const [scheduleType, setScheduleType] = useState<'cron' | 'interval' | 'once'>('interval')
@@ -308,7 +311,7 @@ function CreateTaskModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!agentId || !prompt || !scheduleValue) {
-      setError('All fields are required')
+      setError(t.tasks.allRequired)
       return
     }
 
@@ -321,7 +324,7 @@ function CreateTaskModal({
       if (scheduleType === 'interval') {
         const mins = parseFloat(scheduleValue)
         if (isNaN(mins) || mins <= 0) {
-          setError('Interval must be a positive number (minutes)')
+          setError(t.tasks.invalidInterval)
           setSubmitting(false)
           return
         }
@@ -331,7 +334,7 @@ function CreateTaskModal({
       if (scheduleType === 'once') {
         const d = new Date(scheduleValue)
         if (isNaN(d.getTime())) {
-          setError('Invalid date/time')
+          setError(t.tasks.invalidDate)
           setSubmitting(false)
           return
         }
@@ -358,7 +361,7 @@ function CreateTaskModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-lg mx-4">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h2 className="font-semibold text-sm">Create Scheduled Task</h2>
+          <h2 className="font-semibold text-sm">{t.tasks.createTitle}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-accent text-muted-foreground">
             <X className="h-4 w-4" />
           </button>
@@ -366,7 +369,7 @@ function CreateTaskModal({
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Agent */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Agent</label>
+            <label className="block text-xs text-muted-foreground mb-1">{t.tasks.agent}</label>
             <select
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
@@ -382,36 +385,36 @@ function CreateTaskModal({
 
           {/* Prompt */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Prompt</label>
+            <label className="block text-xs text-muted-foreground mb-1">{t.tasks.prompt}</label>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={3}
-              placeholder="Enter the prompt to execute..."
+              placeholder={t.tasks.promptPlaceholder}
               className="w-full px-3 py-2 text-sm rounded-md bg-accent/30 border border-border focus:outline-none focus:ring-1 focus:ring-ring resize-none"
             />
           </div>
 
           {/* Schedule Type */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Schedule Type</label>
+            <label className="block text-xs text-muted-foreground mb-1">{t.tasks.scheduleType}</label>
             <div className="flex gap-2">
-              {(['interval', 'cron', 'once'] as const).map((t) => (
+              {(['interval', 'cron', 'once'] as const).map((st) => (
                 <button
-                  key={t}
+                  key={st}
                   type="button"
                   onClick={() => {
-                    setScheduleType(t)
+                    setScheduleType(st)
                     setScheduleValue('')
                   }}
                   className={cn(
                     'px-3 py-1.5 text-xs rounded-md border transition-colors',
-                    scheduleType === t
+                    scheduleType === st
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-accent/30 border-border text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {t === 'interval' ? 'Interval' : t === 'cron' ? 'Cron' : 'Once'}
+                  {st === 'interval' ? t.tasks.interval : st === 'cron' ? t.tasks.cron : t.tasks.once}
                 </button>
               ))}
             </div>
@@ -420,9 +423,9 @@ function CreateTaskModal({
           {/* Schedule Value */}
           <div>
             <label className="block text-xs text-muted-foreground mb-1">
-              {scheduleType === 'interval' && 'Interval (minutes)'}
-              {scheduleType === 'cron' && 'Cron Expression'}
-              {scheduleType === 'once' && 'Run At (datetime)'}
+              {scheduleType === 'interval' && t.tasks.intervalMinutes}
+              {scheduleType === 'cron' && t.tasks.cronExpression}
+              {scheduleType === 'once' && t.tasks.runAt}
             </label>
             <input
               type={scheduleType === 'once' ? 'datetime-local' : 'text'}
@@ -430,15 +433,15 @@ function CreateTaskModal({
               onChange={(e) => setScheduleValue(e.target.value)}
               placeholder={
                 scheduleType === 'interval'
-                  ? 'e.g. 30'
+                  ? t.tasks.intervalPlaceholder
                   : scheduleType === 'cron'
-                    ? 'e.g. 0 9 * * *'
+                    ? t.tasks.cronPlaceholder
                     : ''
               }
               className="w-full px-3 py-2 text-sm rounded-md bg-accent/30 border border-border focus:outline-none focus:ring-1 focus:ring-ring"
             />
             {scheduleType === 'cron' && (
-              <p className="text-xs text-muted-foreground mt-1">Standard cron: min hour day month weekday</p>
+              <p className="text-xs text-muted-foreground mt-1">{t.tasks.cronHelp}</p>
             )}
           </div>
 
@@ -450,14 +453,14 @@ function CreateTaskModal({
               onClick={onClose}
               className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:bg-accent transition-colors"
             >
-              Cancel
+              {t.common.cancel}
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              {submitting ? 'Creating...' : 'Create'}
+              {submitting ? t.tasks.creating : t.common.create}
             </button>
           </div>
         </form>

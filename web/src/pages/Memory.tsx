@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getAgents, getMemory, updateMemory, getMemoryLogs, getMemoryLog } from '../api/client'
 import { Brain, Save, Pencil, X, ChevronRight, Calendar, FileText } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { useI18n } from '../i18n'
 
 type Agent = {
   id: string
@@ -9,6 +10,7 @@ type Agent = {
 }
 
 export function Memory() {
+  const { t } = useI18n()
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState<string>('')
   const [memoryContent, setMemoryContent] = useState('')
@@ -89,7 +91,7 @@ export function Memory() {
         const res = await getMemoryLog(selectedAgentId, date)
         setLogContent((prev) => ({ ...prev, [date]: res.content }))
       } catch {
-        setLogContent((prev) => ({ ...prev, [date]: 'Failed to load log.' }))
+        setLogContent((prev) => ({ ...prev, [date]: t.memory.loadFailed }))
       }
     }
   }
@@ -99,7 +101,7 @@ export function Memory() {
       {/* 顶部：Agent 选择器 */}
       <div className="flex items-center gap-3 p-4 border-b border-border">
         <Brain className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-sm font-semibold">Memory</h1>
+        <h1 className="text-sm font-semibold">{t.memory.title}</h1>
         <select
           value={selectedAgentId}
           onChange={(e) => setSelectedAgentId(e.target.value)}
@@ -120,7 +122,7 @@ export function Memory() {
           <div className="flex items-center justify-between p-3 border-b border-border">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">MEMORY.md</span>
+              <span className="text-sm font-medium">{t.memory.memoryFile}</span>
             </div>
             <div className="flex items-center gap-2">
               {isEditing ? (
@@ -133,7 +135,7 @@ export function Memory() {
                     className="flex items-center gap-1 px-2 py-1 text-xs rounded-md text-muted-foreground hover:bg-accent transition-colors"
                   >
                     <X className="h-3 w-3" />
-                    Cancel
+                    {t.common.cancel}
                   </button>
                   <button
                     onClick={handleSave}
@@ -141,7 +143,7 @@ export function Memory() {
                     className="flex items-center gap-1 px-3 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     <Save className="h-3 w-3" />
-                    {isSaving ? 'Saving...' : 'Save'}
+                    {isSaving ? t.memory.saving : t.common.save}
                   </button>
                 </>
               ) : (
@@ -153,7 +155,7 @@ export function Memory() {
                   className="flex items-center gap-1 px-2 py-1 text-xs rounded-md text-muted-foreground hover:bg-accent transition-colors"
                 >
                   <Pencil className="h-3 w-3" />
-                  Edit
+                  {t.common.edit}
                 </button>
               )}
             </div>
@@ -165,13 +167,13 @@ export function Memory() {
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 className="w-full h-full bg-transparent text-sm font-mono resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
-                placeholder="Write long-term memory here..."
+                placeholder={t.memory.writePlaceholder}
               />
             ) : (
               <div className="text-sm whitespace-pre-wrap font-mono text-foreground/80">
                 {memoryContent || (
                   <span className="text-muted-foreground italic">
-                    No memory content yet. Click Edit to add notes.
+                    {t.memory.noContent}
                   </span>
                 )}
               </div>
@@ -183,7 +185,7 @@ export function Memory() {
         <div className="w-[380px] flex flex-col min-w-0">
           <div className="flex items-center gap-2 p-3 border-b border-border">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Daily Logs</span>
+            <span className="text-sm font-medium">{t.memory.dailyLogs}</span>
             <span className="text-xs text-muted-foreground">({logDates.length})</span>
           </div>
 
@@ -192,7 +194,7 @@ export function Memory() {
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 <div className="text-center">
                   <Calendar className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">No logs yet</p>
+                  <p className="text-sm">{t.memory.noLogs}</p>
                 </div>
               </div>
             ) : (
@@ -221,7 +223,7 @@ export function Memory() {
                     {expandedDate === date && (
                       <div className="mt-1 mx-2 p-3 rounded-md bg-muted/50 border border-border/50">
                         <pre className="text-xs whitespace-pre-wrap font-mono text-foreground/70 overflow-x-auto">
-                          {logContent[date] ?? 'Loading...'}
+                          {logContent[date] ?? t.common.loading}
                         </pre>
                       </div>
                     )}

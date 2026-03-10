@@ -5,8 +5,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Send, Plus, MessageSquare, Loader2 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { useI18n } from '../i18n'
 
 export function Chat() {
+  const { t } = useI18n()
   const [agentId] = useState('default')
   const { chatId, messages, streamingText, isProcessing, send, loadChat, newChat } = useChat(agentId)
   const [input, setInput] = useState('')
@@ -47,7 +49,7 @@ export function Chat() {
             className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            New Chat
+            {t.chat.newChat}
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -65,7 +67,7 @@ export function Chat() {
             </button>
           ))}
           {chatList.length === 0 && (
-            <p className="text-xs text-muted-foreground p-3 text-center">No conversations yet</p>
+            <p className="text-xs text-muted-foreground p-3 text-center">{t.chat.noConversations}</p>
           )}
         </div>
       </div>
@@ -78,8 +80,8 @@ export function Chat() {
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <div className="text-center">
                 <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p className="text-lg">Start a conversation</p>
-                <p className="text-sm mt-1">Send a message to begin chatting with the agent</p>
+                <p className="text-lg">{t.chat.startConversation}</p>
+                <p className="text-sm mt-1">{t.chat.startHint}</p>
               </div>
             </div>
           )}
@@ -105,7 +107,7 @@ export function Chat() {
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-medium">AI</div>
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Thinking...
+                {t.chat.thinking}
               </div>
             </div>
           )}
@@ -120,7 +122,7 @@ export function Chat() {
               value={input}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
+              placeholder={t.chat.placeholder}
               rows={1}
               className="flex-1 resize-none bg-secondary rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />

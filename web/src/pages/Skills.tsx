@@ -4,12 +4,7 @@ import type { Skill } from '../api/client'
 import { Puzzle, CheckCircle, AlertTriangle, XCircle, FolderOpen, Globe, Cpu, Terminal, Key, Wrench } from 'lucide-react'
 import { Badge } from '../components/ui/badge'
 import { cn } from '../lib/utils'
-
-const sourceLabels: Record<Skill['source'], string> = {
-  workspace: 'Workspace',
-  project: 'Project',
-  user: 'User',
-}
+import { useI18n } from '../i18n'
 
 const sourceOrder: Skill['source'][] = ['workspace', 'project', 'user']
 
@@ -24,8 +19,15 @@ function EligibilityIcon({ skill }: { skill: Skill }) {
 }
 
 export function Skills() {
+  const { t } = useI18n()
   const [skills, setSkills] = useState<Skill[]>([])
   const [selected, setSelected] = useState<string | null>(null)
+
+  const sourceLabels: Record<Skill['source'], string> = {
+    workspace: t.skills.workspace,
+    project: t.skills.project,
+    user: t.skills.user,
+  }
 
   useEffect(() => {
     getSkills().then(setSkills).catch(() => {})
@@ -46,12 +48,12 @@ export function Skills() {
       {/* 左侧：Skill 列表 */}
       <div className="w-[260px] border-r border-border flex flex-col">
         <div className="p-3 border-b border-border">
-          <h2 className="font-semibold text-sm">Skills</h2>
+          <h2 className="font-semibold text-sm">{t.skills.title}</h2>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-3">
           {grouped.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
-              No skills found
+              {t.skills.noSkills}
             </div>
           )}
           {grouped.map(group => (
@@ -117,12 +119,12 @@ export function Skills() {
                 {selectedSkill.eligible ? (
                   <>
                     <CheckCircle className="h-4 w-4 text-green-400" />
-                    <span className="text-green-400">Eligible</span>
+                    <span className="text-green-400">{t.skills.eligible}</span>
                   </>
                 ) : (
                   <>
                     <XCircle className="h-4 w-4 text-red-400" />
-                    <span className="text-red-400">Not Eligible</span>
+                    <span className="text-red-400">{t.skills.notEligible}</span>
                   </>
                 )}
               </div>
@@ -141,16 +143,16 @@ export function Skills() {
             {/* Metadata */}
             <div className="grid gap-4">
               {selectedSkill.frontmatter.version && (
-                <InfoRow label="Version" value={selectedSkill.frontmatter.version} />
+                <InfoRow label={t.skills.version} value={selectedSkill.frontmatter.version} />
               )}
-              <InfoRow label="Path" value={
+              <InfoRow label={t.skills.path} value={
                 <span className="flex items-center gap-1 font-mono text-xs">
                   <FolderOpen className="h-3 w-3 shrink-0" />
                   <span className="truncate">{selectedSkill.path}</span>
                 </span>
               } />
               {selectedSkill.frontmatter.os && selectedSkill.frontmatter.os.length > 0 && (
-                <InfoRow label="OS" value={
+                <InfoRow label={t.skills.os} value={
                   <span className="flex items-center gap-1.5">
                     <Globe className="h-3 w-3 shrink-0" />
                     {selectedSkill.frontmatter.os.map(os => (
@@ -160,7 +162,7 @@ export function Skills() {
                 } />
               )}
               {selectedSkill.frontmatter.dependencies && selectedSkill.frontmatter.dependencies.length > 0 && (
-                <InfoRow label="Dependencies" value={
+                <InfoRow label={t.skills.dependencies} value={
                   <span className="flex items-center gap-1.5 flex-wrap">
                     <Terminal className="h-3 w-3 shrink-0" />
                     {selectedSkill.frontmatter.dependencies.map(dep => (
@@ -170,7 +172,7 @@ export function Skills() {
                 } />
               )}
               {selectedSkill.frontmatter.env && selectedSkill.frontmatter.env.length > 0 && (
-                <InfoRow label="Env Vars" value={
+                <InfoRow label={t.skills.envVars} value={
                   <span className="flex items-center gap-1.5 flex-wrap">
                     <Key className="h-3 w-3 shrink-0" />
                     {selectedSkill.frontmatter.env.map(env => (
@@ -180,7 +182,7 @@ export function Skills() {
                 } />
               )}
               {selectedSkill.frontmatter.tools && selectedSkill.frontmatter.tools.length > 0 && (
-                <InfoRow label="Tools" value={
+                <InfoRow label={t.skills.tools} value={
                   <span className="flex items-center gap-1.5 flex-wrap">
                     <Wrench className="h-3 w-3 shrink-0" />
                     {selectedSkill.frontmatter.tools.map(tool => (
@@ -196,7 +198,7 @@ export function Skills() {
               <div className="space-y-2">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <Cpu className="h-4 w-4" />
-                  Skill Content
+                  {t.skills.content}
                 </h3>
                 <pre className="rounded-md border border-border bg-muted/30 p-4 text-sm overflow-x-auto whitespace-pre-wrap font-mono">
                   {selectedSkill.content}
@@ -208,7 +210,7 @@ export function Skills() {
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
               <Puzzle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-              <p>Select a skill to view details</p>
+              <p>{t.skills.selectSkill}</p>
             </div>
           </div>
         )}

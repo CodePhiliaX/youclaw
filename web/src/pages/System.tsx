@@ -3,6 +3,7 @@ import { Clock, Bot, Send, Database, Server, Cpu, HardDrive, Calendar } from 'lu
 import { getSystemStatus } from '../api/system'
 import type { SystemStatus } from '../api/system'
 import { cn } from '../lib/utils'
+import { useI18n } from '../i18n'
 
 // --- 工具函数 ---
 
@@ -75,6 +76,7 @@ function StatusCard({
 }
 
 export function System() {
+  const { t } = useI18n()
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const logIdRef = useRef(0)
@@ -144,7 +146,7 @@ export function System() {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         <Server className="h-5 w-5 animate-pulse mr-2" />
-        Loading system status...
+        {t.system.loadingStatus}
       </div>
     )
   }
@@ -153,30 +155,30 @@ export function System() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* 顶部: 状态卡片 */}
       <div className="p-4 pb-2 border-b border-border shrink-0">
-        <h1 className="text-lg font-semibold mb-3">System Monitor</h1>
+        <h1 className="text-lg font-semibold mb-3">{t.system.title}</h1>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatusCard
             icon={Clock}
-            label="Uptime"
+            label={t.system.uptime}
             value={formatUptime(status.uptime)}
             status="ok"
           />
           <StatusCard
             icon={Bot}
-            label="Agents"
+            label={t.system.agents}
             value={`${status.agents.active} / ${status.agents.total}`}
-            sub={`${status.agents.active} active`}
+            sub={`${status.agents.active} ${t.system.active}`}
             status={status.agents.total > 0 ? 'ok' : 'warn'}
           />
           <StatusCard
             icon={Send}
-            label="Telegram"
-            value={status.telegram.connected ? 'Connected' : 'Disconnected'}
+            label={t.system.telegram}
+            value={status.telegram.connected ? t.system.connected : t.system.disconnected}
             status={status.telegram.connected ? 'ok' : 'off'}
           />
           <StatusCard
             icon={Database}
-            label="Database"
+            label={t.system.database}
             value={formatBytes(status.database.sizeBytes)}
             status="ok"
           />
@@ -185,11 +187,11 @@ export function System() {
 
       {/* 中间: 实时日志流 */}
       <div className="flex-1 flex flex-col min-h-0 p-4 pb-2">
-        <h2 className="text-sm font-semibold text-muted-foreground mb-2">Live Events</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-2">{t.system.liveEvents}</h2>
         <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-zinc-950 font-mono text-xs p-3">
           {logs.length === 0 ? (
             <div className="text-muted-foreground text-center py-8">
-              Waiting for events...
+              {t.system.waitingEvents}
             </div>
           ) : (
             logs.map((log) => (
@@ -222,10 +224,10 @@ export function System() {
       {/* 底部: 系统信息 */}
       <div className="p-4 pt-2 border-t border-border shrink-0">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-          <InfoItem icon={Cpu} label="Platform" value={status.platform} />
-          <InfoItem icon={Server} label="Runtime" value={status.nodeVersion} />
-          <InfoItem icon={HardDrive} label="DB Path" value={status.database.path} />
-          <InfoItem icon={Calendar} label="Started At" value={formatTime(status.startedAt)} />
+          <InfoItem icon={Cpu} label={t.system.platform} value={status.platform} />
+          <InfoItem icon={Server} label={t.system.runtime} value={status.nodeVersion} />
+          <InfoItem icon={HardDrive} label={t.system.dbPath} value={status.database.path} />
+          <InfoItem icon={Calendar} label={t.system.startedAt} value={formatTime(status.startedAt)} />
         </div>
       </div>
     </div>
