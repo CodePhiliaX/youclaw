@@ -9,7 +9,7 @@ export function Sidebar() {
   const navItems = [
     { to: '/', icon: MessageSquare, label: t.nav.chat },
     { to: '/agents', icon: Bot, label: t.nav.agents },
-    { to: '/tasks', icon: CalendarClock, label: t.nav.tasks },
+    { to: '/cron', icon: CalendarClock, label: t.nav.tasks },
     { to: '/memory', icon: Brain, label: t.nav.memory },
     { to: '/skills', icon: Puzzle, label: t.nav.skills },
     { to: '/system', icon: Settings, label: t.nav.system },

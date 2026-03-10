@@ -14,7 +14,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Chat />} />
           <Route path="/agents" element={<Agents />} />
-          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/cron" element={<Tasks />} />
           <Route path="/memory" element={<Memory />} />
           <Route path="/skills" element={<Skills />} />
           <Route path="/system" element={<System />} />
