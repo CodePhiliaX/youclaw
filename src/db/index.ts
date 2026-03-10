@@ -89,6 +89,13 @@ export function initDatabase(): Database {
   try { _db.exec('ALTER TABLE scheduled_tasks ADD COLUMN timezone TEXT') } catch {}
   try { _db.exec('ALTER TABLE scheduled_tasks ADD COLUMN last_result TEXT') } catch {}
 
+  // 迁移：添加投递配置列
+  try { _db.exec("ALTER TABLE scheduled_tasks ADD COLUMN delivery_mode TEXT DEFAULT 'none'") } catch {}
+  try { _db.exec('ALTER TABLE scheduled_tasks ADD COLUMN delivery_target TEXT') } catch {}
+
+  // 迁移：添加投递状态列到运行日志
+  try { _db.exec('ALTER TABLE task_run_logs ADD COLUMN delivery_status TEXT') } catch {}
+
   getLogger().info({ path: paths.db }, '数据库初始化完成')
   return _db
 }
@@ -195,6 +202,8 @@ export interface ScheduledTask {
   consecutive_failures: number
   timezone: string | null
   last_result: string | null
+  delivery_mode: string | null
+  delivery_target: string | null
 }
 
 export interface TaskRunLog {
@@ -205,6 +214,7 @@ export interface TaskRunLog {
   status: string
   result: string | null
   error: string | null
+  delivery_status: string | null
 }
 
 export function createTask(task: {
@@ -218,12 +228,14 @@ export function createTask(task: {
   name?: string
   description?: string
   timezone?: string
+  deliveryMode?: string
+  deliveryTarget?: string
 }): void {
   const db = getDatabase()
   db.run(
-    `INSERT INTO scheduled_tasks (id, agent_id, chat_id, prompt, schedule_type, schedule_value, next_run, created_at, name, description, timezone)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [task.id, task.agentId, task.chatId, task.prompt, task.scheduleType, task.scheduleValue, task.nextRun, new Date().toISOString(), task.name ?? null, task.description ?? null, task.timezone ?? null]
+    `INSERT INTO scheduled_tasks (id, agent_id, chat_id, prompt, schedule_type, schedule_value, next_run, created_at, name, description, timezone, delivery_mode, delivery_target)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [task.id, task.agentId, task.chatId, task.prompt, task.scheduleType, task.scheduleValue, task.nextRun, new Date().toISOString(), task.name ?? null, task.description ?? null, task.timezone ?? null, task.deliveryMode ?? 'none', task.deliveryTarget ?? null]
   )
 }
 
@@ -250,6 +262,8 @@ export function updateTask(id: string, updates: Partial<{
   consecutiveFailures: number
   timezone: string | null
   lastResult: string | null
+  deliveryMode: string
+  deliveryTarget: string | null
 }>): void {
   const db = getDatabase()
   const fields: string[] = []
@@ -267,6 +281,8 @@ export function updateTask(id: string, updates: Partial<{
   if (updates.consecutiveFailures !== undefined) { fields.push('consecutive_failures = ?'); values.push(updates.consecutiveFailures) }
   if (updates.timezone !== undefined) { fields.push('timezone = ?'); values.push(updates.timezone) }
   if (updates.lastResult !== undefined) { fields.push('last_result = ?'); values.push(updates.lastResult) }
+  if (updates.deliveryMode !== undefined) { fields.push('delivery_mode = ?'); values.push(updates.deliveryMode) }
+  if (updates.deliveryTarget !== undefined) { fields.push('delivery_target = ?'); values.push(updates.deliveryTarget) }
 
   if (fields.length === 0) return
 
@@ -312,12 +328,13 @@ export function saveTaskRunLog(log: {
   status: string
   result?: string
   error?: string
+  deliveryStatus?: string
 }): void {
   const db = getDatabase()
   db.run(
-    `INSERT INTO task_run_logs (task_id, run_at, duration_ms, status, result, error)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [log.taskId, log.runAt, log.durationMs, log.status, log.result ?? null, log.error ?? null]
+    `INSERT INTO task_run_logs (task_id, run_at, duration_ms, status, result, error, delivery_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [log.taskId, log.runAt, log.durationMs, log.status, log.result ?? null, log.error ?? null, log.deliveryStatus ?? null]
   )
 }
 

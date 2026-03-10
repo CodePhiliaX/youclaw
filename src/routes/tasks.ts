@@ -24,6 +24,14 @@ const createTaskSchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
   timezone: z.string().optional(),
+  deliveryMode: z.enum(['push', 'none']).default('none').optional(),
+  deliveryTarget: z.string().optional(),
+}).refine((data) => {
+  // push 模式必须有 deliveryTarget
+  if (data.deliveryMode === 'push' && !data.deliveryTarget) return false
+  return true
+}, {
+  message: 'deliveryTarget is required when deliveryMode is "push"',
 }).refine((data) => {
   if (data.scheduleType === 'cron') {
     try {
@@ -56,6 +64,8 @@ const updateTaskSchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
   timezone: z.string().nullable().optional(),
+  deliveryMode: z.enum(['push', 'none']).optional(),
+  deliveryTarget: z.string().nullable().optional(),
 })
 
 export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManager, agentQueue: AgentQueue) {
@@ -113,6 +123,8 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
       name: data.name,
       description: data.description,
       timezone: data.timezone,
+      deliveryMode: data.deliveryMode,
+      deliveryTarget: data.deliveryTarget,
     })
 
     const task = getTask(id)
@@ -141,6 +153,8 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
     if (data.name !== undefined) updates.name = data.name
     if (data.description !== undefined) updates.description = data.description
     if (data.timezone !== undefined) updates.timezone = data.timezone
+    if (data.deliveryMode !== undefined) updates.deliveryMode = data.deliveryMode
+    if (data.deliveryTarget !== undefined) updates.deliveryTarget = data.deliveryTarget
 
     // 更新调度类型和调度值
     if (data.scheduleType !== undefined) updates.scheduleType = data.scheduleType
@@ -215,6 +229,8 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
       name: existing.name ? `${existing.name} (copy)` : undefined,
       description: existing.description ?? undefined,
       timezone: existing.timezone ?? undefined,
+      deliveryMode: existing.delivery_mode ?? undefined,
+      deliveryTarget: existing.delivery_target ?? undefined,
     })
 
     const task = getTask(newId)

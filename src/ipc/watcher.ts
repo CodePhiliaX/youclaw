@@ -14,6 +14,8 @@ interface ScheduleTaskMessage {
   name?: string
   description?: string
   timezone?: string
+  delivery_mode?: string
+  delivery_target?: string
 }
 
 interface PauseTaskMessage {
@@ -45,6 +47,8 @@ export interface IpcDeps {
     name?: string
     description?: string
     timezone?: string
+    deliveryMode?: string
+    deliveryTarget?: string
   }) => void
   onPauseTask: (taskId: string) => void
   onResumeTask: (taskId: string) => void
@@ -176,6 +180,8 @@ export class IpcWatcher {
           name: message.name,
           description: message.description,
           timezone: message.timezone,
+          deliveryMode: message.delivery_mode,
+          deliveryTarget: message.delivery_target,
         })
         break
       }

@@ -90,6 +90,8 @@ async function main() {
         nextRun: nextRun ?? new Date().toISOString(),
         name: data.name,
         description: data.description,
+        deliveryMode: data.deliveryMode,
+        deliveryTarget: data.deliveryTarget,
       })
 
       // 写入快照
