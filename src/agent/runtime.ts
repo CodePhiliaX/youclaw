@@ -3,66 +3,43 @@ import { getEnv } from '../config/index.ts'
 import { getLogger } from '../logger/index.ts'
 import { getSession, saveSession } from '../db/index.ts'
 import type { EventBus } from '../events/index.ts'
+import type { PromptBuilder } from './prompt-builder.ts'
 import type { AgentConfig, ProcessParams } from './types.ts'
 
 export class AgentRuntime {
   private config: AgentConfig
   private eventBus: EventBus
-  private systemPrompt: string
+  private promptBuilder: PromptBuilder
 
-  constructor(config: AgentConfig, eventBus: EventBus, systemPrompt: string) {
+  constructor(config: AgentConfig, eventBus: EventBus, promptBuilder: PromptBuilder) {
     this.config = config
     this.eventBus = eventBus
-    this.systemPrompt = systemPrompt
+    this.promptBuilder = promptBuilder
   }
 
+  /**
+   * 处理用户消息，返回 agent 回复
+   */
   async process(params: ProcessParams): Promise<string> {
     const { chatId, prompt, agentId } = params
     const logger = getLogger()
     const env = getEnv()
 
     // 通知开始处理
-    this.eventBus.emit({
-      type: 'processing',
-      agentId,
-      chatId,
-      isProcessing: true,
-    })
+    this.emitProcessing(agentId, chatId, true)
 
     // 查找已有 session
     const existingSessionId = getSession(agentId, chatId)
-
     logger.info({ agentId, chatId, hasSession: !!existingSessionId }, '开始处理消息')
 
     try {
-      const abortController = new AbortController()
-      let fullText = ''
-      let sessionId = existingSessionId ?? ''
-
-      // 注入当前上下文到系统提示词（Agent 创建定时任务时需要这些信息）
-      const contextualPrompt = this.systemPrompt + `\n\n## Current Context\n- Agent ID: ${agentId}\n- Chat ID: ${chatId}\n- IPC Directory: ./data/ipc/${agentId}/tasks/\n`
-
-      const q = query({
+      const { fullText, sessionId } = await this.executeQuery(
         prompt,
-        options: {
-          model: env.AGENT_MODEL,
-          cwd: this.config.workspaceDir,
-          systemPrompt: contextualPrompt,
-          abortController,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          ...(existingSessionId ? { resume: existingSessionId } : {}),
-        },
-      })
-
-      // 流式处理 SDK 消息
-      for await (const message of q) {
-        this.handleMessage(message, agentId, chatId, (text) => {
-          fullText += text
-        }, (sid) => {
-          sessionId = sid
-        })
-      }
+        agentId,
+        chatId,
+        existingSessionId,
+        env.AGENT_MODEL,
+      )
 
       // 保存 session
       if (sessionId) {
@@ -93,22 +70,87 @@ export class AgentRuntime {
 
       return `Error: ${errorMsg}`
     } finally {
-      this.eventBus.emit({
-        type: 'processing',
-        agentId,
-        chatId,
-        isProcessing: false,
-      })
+      this.emitProcessing(agentId, chatId, false)
     }
   }
 
+  /**
+   * 执行 SDK query 并流式处理消息
+   */
+  private async executeQuery(
+    prompt: string,
+    agentId: string,
+    chatId: string,
+    existingSessionId: string | null,
+    model: string,
+  ): Promise<{ fullText: string; sessionId: string }> {
+    const abortController = new AbortController()
+    let fullText = ''
+    let sessionId = existingSessionId ?? ''
+
+    // 实时构建系统提示词
+    const systemPrompt = this.promptBuilder.build(
+      this.config.workspaceDir,
+      this.config,
+      { agentId, chatId },
+    )
+
+    // 构建 query 选项
+    const queryOptions: Record<string, unknown> = {
+      model,
+      cwd: this.config.workspaceDir,
+      systemPrompt,
+      abortController,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      ...(existingSessionId ? { resume: existingSessionId } : {}),
+    }
+
+    // Phase 3: 子 Agent 配置
+    if (this.config.agents) {
+      queryOptions.agents = this.config.agents
+    }
+
+    // Phase 4: 工具控制
+    if (this.config.allowedTools) {
+      queryOptions.allowedTools = this.config.allowedTools
+    }
+    if (this.config.disallowedTools) {
+      queryOptions.disallowedTools = this.config.disallowedTools
+    }
+
+    // Phase 4: 其他 SDK 能力
+    if (this.config.maxTurns) {
+      queryOptions.maxTurns = this.config.maxTurns
+    }
+
+    const q = query({
+      prompt,
+      options: queryOptions as Parameters<typeof query>[0]['options'],
+    })
+
+    // 流式处理 SDK 消息
+    for await (const message of q) {
+      this.handleMessage(message, agentId, chatId, (text) => {
+        fullText += text
+      }, (sid) => {
+        sessionId = sid
+      })
+    }
+
+    return { fullText, sessionId }
+  }
+
+  /**
+   * 处理 SDK 消息
+   */
   private handleMessage(
     message: SDKMessage,
     agentId: string,
     chatId: string,
     appendText: (text: string) => void,
     setSessionId: (sid: string) => void,
-  ) {
+  ): void {
     switch (message.type) {
       case 'assistant': {
         // 提取 session_id
@@ -116,25 +158,13 @@ export class AgentRuntime {
           setSessionId(message.session_id)
         }
 
-        // 从 assistant message 中提取文本内容
+        // 从 assistant message 中提取文本和工具使用
         for (const block of message.message.content) {
           if (block.type === 'text') {
             appendText(block.text)
-            // 广播流式文本
-            this.eventBus.emit({
-              type: 'stream',
-              agentId,
-              chatId,
-              text: block.text,
-            })
+            this.emitStream(agentId, chatId, block.text)
           } else if (block.type === 'tool_use') {
-            this.eventBus.emit({
-              type: 'tool_use',
-              agentId,
-              chatId,
-              tool: block.name,
-              input: JSON.stringify(block.input).slice(0, 200),
-            })
+            this.emitToolUse(agentId, chatId, block.name, block.input)
           }
         }
         break
@@ -144,9 +174,87 @@ export class AgentRuntime {
         if (message.session_id) {
           setSessionId(message.session_id)
         }
-        // result 中的文本已在 assistant 消息中提取
+        break
+      }
+
+      // Phase 3: 子 Agent 系统消息处理
+      case 'system': {
+        this.handleSystemMessage(message, agentId, chatId)
         break
       }
     }
+  }
+
+  /**
+   * 处理 SDK system 类型消息（子 Agent 事件）
+   */
+  private handleSystemMessage(
+    message: SDKMessage & { type: 'system' },
+    agentId: string,
+    chatId: string,
+  ): void {
+    const msg = message as Record<string, unknown>
+    const subtype = msg.subtype as string | undefined
+
+    switch (subtype) {
+      case 'task_started': {
+        const taskId = String(msg.taskId ?? '')
+        const description = String(msg.description ?? '')
+        this.eventBus.emit({
+          type: 'subagent_started',
+          agentId,
+          chatId,
+          taskId,
+          description,
+        })
+        break
+      }
+      case 'task_progress': {
+        const taskId = String(msg.taskId ?? '')
+        const summary = msg.summary ? String(msg.summary) : undefined
+        this.eventBus.emit({
+          type: 'subagent_progress',
+          agentId,
+          chatId,
+          taskId,
+          summary,
+        })
+        break
+      }
+      case 'task_notification': {
+        const taskId = String(msg.taskId ?? '')
+        const status = String(msg.status ?? 'completed')
+        const summary = String(msg.summary ?? '')
+        this.eventBus.emit({
+          type: 'subagent_completed',
+          agentId,
+          chatId,
+          taskId,
+          status,
+          summary,
+        })
+        break
+      }
+    }
+  }
+
+  // --- Emit 辅助方法 ---
+
+  private emitProcessing(agentId: string, chatId: string, isProcessing: boolean): void {
+    this.eventBus.emit({ type: 'processing', agentId, chatId, isProcessing })
+  }
+
+  private emitStream(agentId: string, chatId: string, text: string): void {
+    this.eventBus.emit({ type: 'stream', agentId, chatId, text })
+  }
+
+  private emitToolUse(agentId: string, chatId: string, tool: string, input: unknown): void {
+    this.eventBus.emit({
+      type: 'tool_use',
+      agentId,
+      chatId,
+      tool,
+      input: JSON.stringify(input).slice(0, 200),
+    })
   }
 }

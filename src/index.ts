@@ -2,7 +2,7 @@ import { loadEnv, getEnv } from './config/index.ts'
 import { initLogger, getLogger } from './logger/index.ts'
 import { initDatabase, createTask, updateTask, deleteTask, getTasks, getTask } from './db/index.ts'
 import { EventBus } from './events/index.ts'
-import { AgentManager, AgentQueue } from './agent/index.ts'
+import { AgentManager, AgentQueue, PromptBuilder } from './agent/index.ts'
 import { MessageRouter, TelegramChannel } from './channel/index.ts'
 import { SkillsLoader, SkillsWatcher } from './skills/index.ts'
 import { MemoryManager } from './memory/index.ts'
@@ -39,8 +39,9 @@ async function main() {
   // 6. 创建 MemoryManager
   const memoryManager = new MemoryManager()
 
-  // 7. 创建 AgentManager 并加载 agents
-  const agentManager = new AgentManager(eventBus, skillsLoader)
+  // 7. 创建 PromptBuilder 和 AgentManager
+  const promptBuilder = new PromptBuilder(skillsLoader, memoryManager)
+  const agentManager = new AgentManager(eventBus, promptBuilder)
   await agentManager.loadAgents()
 
   // 8. 创建 AgentQueue
