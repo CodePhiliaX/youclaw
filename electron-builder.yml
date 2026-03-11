@@ -19,7 +19,6 @@ files:
   - "!node_modules/@img/sharp-*"
 
 asarUnpack:
-  - "dist/src/**/*"
   - "**/*.node"
   - "**/better-sqlite3/**"
   - "**/bindings/**"

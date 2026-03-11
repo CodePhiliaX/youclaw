@@ -30,8 +30,7 @@ const store = new Store({
 function getBackendDir(): string {
   // __dirname = dist/electron/main/，向上 3 级 = 项目根目录
   if (app.isPackaged) {
-    // asarUnpack 解包后的文件在 app.asar.unpacked/ 目录下
-    return path.join(process.resourcesPath, "app.asar.unpacked", "dist", "src");
+    return path.join(process.resourcesPath, "app.asar", "dist", "src");
   }
   return path.join(__dirname, "../../../dist/src");
 }
