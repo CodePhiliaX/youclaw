@@ -19,5 +19,6 @@ export function getPaths() {
     agents: resolve(ROOT_DIR, 'agents'),
     skills: resolve(ROOT_DIR, 'skills'),
     prompts: resolve(ROOT_DIR, 'prompts'),
+    browserProfiles: resolve(dataDir, 'browser-profiles'),
   }
 }

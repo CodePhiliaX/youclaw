@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS task_run_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_runs ON task_run_logs(task_id, run_at);
+
+CREATE TABLE IF NOT EXISTS browser_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 `
 
 export function initDatabase(): Database.Database {
@@ -338,4 +344,60 @@ export function getTaskRunLogs(taskId: string, limit = 50): TaskRunLog[] {
   return db.prepare(
     'SELECT * FROM task_run_logs WHERE task_id = ? ORDER BY run_at DESC LIMIT ?'
   ).all(taskId, limit) as TaskRunLog[]
+}
+
+// ===== 浏览器 Profile 操作 =====
+
+export interface BrowserProfile {
+  id: string
+  name: string
+  created_at: string
+}
+
+export function createBrowserProfile(profile: { id: string; name: string }): void {
+  const db = getDatabase()
+  db.run(
+    'INSERT INTO browser_profiles (id, name, created_at) VALUES (?, ?, ?)',
+    [profile.id, profile.name, new Date().toISOString()]
+  )
+}
+
+export function getBrowserProfiles(): BrowserProfile[] {
+  const db = getDatabase()
+  return db.query('SELECT * FROM browser_profiles ORDER BY created_at DESC').all() as BrowserProfile[]
+}
+
+export function getBrowserProfile(id: string): BrowserProfile | null {
+  const db = getDatabase()
+  return (db.query('SELECT * FROM browser_profiles WHERE id = ?').get(id) as BrowserProfile | null) ?? null
+}
+
+export function deleteBrowserProfile(id: string): void {
+  const db = getDatabase()
+  db.run('DELETE FROM browser_profiles WHERE id = ?', [id])
+}
+
+// ===== Skill 设置 =====
+
+export type SkillSettings = Record<string, { enabled: boolean }>
+
+export function getSkillSettings(): SkillSettings {
+  const db = getDatabase()
+  const row = db.query("SELECT value FROM kv_state WHERE key = 'skill_settings'").get() as { value: string } | null
+  if (!row) return {}
+  try {
+    return JSON.parse(row.value) as SkillSettings
+  } catch {
+    return {}
+  }
+}
+
+export function setSkillEnabled(name: string, enabled: boolean): void {
+  const db = getDatabase()
+  const settings = getSkillSettings()
+  settings[name] = { enabled }
+  db.run(
+    "INSERT OR REPLACE INTO kv_state (key, value) VALUES ('skill_settings', ?)",
+    [JSON.stringify(settings)]
+  )
 }
