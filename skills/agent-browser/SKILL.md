@@ -182,3 +182,13 @@ Always close your browser session when done:
 agent-browser close                    # Close default session
 agent-browser --session agent1 close   # Close specific session
 ```
+
+## Browser Profile (Persistent Login)
+
+If the system prompt provides a `--profile <dir>` parameter, you MUST always include it in every `agent-browser` command. This allows reusing persistent login state (cookies, localStorage, etc.) that the user has previously set up.
+
+```bash
+# With profile — login state is preserved across sessions
+agent-browser --profile /path/to/profile open https://app.example.com
+agent-browser --profile /path/to/profile snapshot -i
+```

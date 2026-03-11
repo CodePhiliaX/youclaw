@@ -6,6 +6,7 @@ import { Skills } from './pages/Skills'
 import { Memory } from './pages/Memory'
 import { Tasks } from './pages/Tasks'
 import { System } from './pages/System'
+import { BrowserProfiles } from './pages/BrowserProfiles'
 import { useTheme } from './hooks/useTheme'
 import { isElectron } from './api/transport'
 
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/cron" element={<Tasks />} />
           <Route path="/memory" element={<Memory />} />
           <Route path="/skills" element={<Skills />} />
+          <Route path="/browser" element={<BrowserProfiles />} />
           <Route path="/system" element={<System />} />
         </Routes>
       </Shell>

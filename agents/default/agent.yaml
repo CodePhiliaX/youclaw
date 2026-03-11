@@ -18,6 +18,9 @@ model: "claude-sonnet-4-6"
 #     model: sonnet
 #     maxTurns: 30
 
+# --- 浏览器 Profile（持久化登录状态） ---
+# browserProfile: "my-profile"
+
 # --- Phase 4: Agent 能力增强 ---
 # maxConcurrency: 1
 # allowedTools: ["Bash", "Read", "Write", "Edit", "Task", "TaskOutput"]

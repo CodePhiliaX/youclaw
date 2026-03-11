@@ -150,6 +150,8 @@ export interface Skill {
   eligible: boolean
   eligibilityErrors: string[]
   eligibilityDetail: EligibilityDetail
+  enabled: boolean
+  usable: boolean
 }
 
 // 获取所有可用 skills
@@ -175,6 +177,45 @@ export async function installSkill(skillName: string, method: string) {
   return apiFetch<{ ok: boolean; stdout: string; stderr: string; exitCode: number }>('/api/skills/install', {
     method: 'POST',
     body: JSON.stringify({ skillName, method }),
+  })
+}
+
+// 启用/停用 skill
+export async function toggleSkill(name: string, enabled: boolean) {
+  return apiFetch<Skill>(`/api/skills/${encodeURIComponent(name)}/toggle`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+// ===== 浏览器 Profile API =====
+
+export interface BrowserProfileDTO {
+  id: string
+  name: string
+  created_at: string
+}
+
+export async function getBrowserProfiles() {
+  return apiFetch<BrowserProfileDTO[]>('/api/browser-profiles')
+}
+
+export async function createBrowserProfile(name: string) {
+  return apiFetch<BrowserProfileDTO>('/api/browser-profiles', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+
+export async function deleteBrowserProfile(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/browser-profiles/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function launchBrowserProfile(id: string) {
+  return apiFetch<{ ok: boolean; profileDir: string }>(`/api/browser-profiles/${encodeURIComponent(id)}/launch`, {
+    method: 'POST',
   })
 }
 
