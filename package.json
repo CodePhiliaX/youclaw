@@ -15,7 +15,7 @@
   },
   "license": "ISC",
   "scripts": {
-    "dev": "npm rebuild better-sqlite3 && tsx --watch src/index.ts",
+    "dev": "tsx --watch src/index.ts",
     "start": "node --import tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "dev:web": "cd web && npm run dev",
