@@ -7,6 +7,7 @@ export interface InboundMessage {
   timestamp: string
   isGroup: boolean
   channel?: string        // "telegram" | "web" | "api"
+  agentId?: string        // 指定目标 agent（Web API 场景）
   tags?: string[]         // web 前端传入的路由标签
   requestedSkills?: string[]  // 显式请求的 skills
 }

@@ -24,14 +24,14 @@ test.describe('多 Agent 创建与协调', () => {
       data: { id: AGENT_ID, name: AGENT_NAME, model: 'claude-sonnet-4-6' },
     })
 
-    // 配置 Sub Agent
+    // 配置 Sub Agent（model 必须用 SDK 短名称: sonnet/opus/haiku）
     await request.put(`${API_BASE}/api/agents/${AGENT_ID}`, {
       data: {
         agents: {
           'math-helper': {
             description: '执行简单的数学计算和推理，返回计算结果',
             prompt: 'You are a math assistant. When asked a math question, compute the answer and return ONLY the numeric result. Be concise.',
-            model: 'claude-sonnet-4-6',
+            model: 'sonnet',
             maxTurns: 3,
           },
         },

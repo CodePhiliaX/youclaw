@@ -35,6 +35,7 @@ export function createMessagesRoutes(agentManager: AgentManager, agentQueue: Age
       content: body.prompt,
       timestamp: new Date().toISOString(),
       isGroup: false,
+      agentId,
       requestedSkills: body.skills,
     }
 

@@ -46,10 +46,12 @@ export class MessageRouter {
     // 推断 channel 类型（优先用消息自带的 channel 字段）
     const channel = message.channel ?? (message.chatId.startsWith('tg:') ? 'telegram' : 'web')
 
-    // 使用 AgentRouter 或回退到旧逻辑
-    const managed = this.agentManager.resolveAgent(message.chatId)
+    // 优先使用消息中指定的 agentId（Web API 场景），否则按 chatId 路由
+    const managed = message.agentId
+      ? this.agentManager.getAgent(message.agentId)
+      : this.agentManager.resolveAgent(message.chatId)
     if (!managed) {
-      logger.warn({ chatId: message.chatId }, '没有找到对应的 agent')
+      logger.warn({ chatId: message.chatId, agentId: message.agentId }, '没有找到对应的 agent')
       return
     }
 
