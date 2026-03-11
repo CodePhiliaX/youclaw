@@ -8,7 +8,7 @@ import { EventBus } from './events/index.ts'
 import { AgentManager, AgentQueue, PromptBuilder } from './agent/index.ts'
 import { MessageRouter, TelegramChannel } from './channel/index.ts'
 import { SkillsLoader, SkillsWatcher } from './skills/index.ts'
-import { MemoryManager } from './memory/index.ts'
+import { MemoryManager, MemoryIndexer } from './memory/index.ts'
 import { Scheduler } from './scheduler/index.ts'
 import { IpcWatcher, writeTasksSnapshot } from './ipc/index.ts'
 import { createApp } from './routes/index.ts'
@@ -39,8 +39,17 @@ async function main() {
   })
   skillsWatcher.start()
 
-  // 6. 创建 MemoryManager
+  // 6. 创建 MemoryManager 和 MemoryIndexer
   const memoryManager = new MemoryManager()
+  let memoryIndexer: MemoryIndexer | null = null
+  try {
+    memoryIndexer = new MemoryIndexer()
+    memoryIndexer.initTable()
+    memoryIndexer.rebuildIndex()
+    logger.info('记忆搜索索引已构建')
+  } catch (err) {
+    logger.warn({ error: err instanceof Error ? err.message : String(err) }, 'FTS5 索引初始化失败，搜索功能不可用')
+  }
 
   // 7. 创建 PromptBuilder 和 AgentManager
   const promptBuilder = new PromptBuilder(skillsLoader, memoryManager)
@@ -157,8 +166,14 @@ async function main() {
     writeTasksSnapshot(agentId, agentTasks)
   }
 
-  // 13. 创建 HTTP 服务
-  const app = createApp({ agentManager, agentQueue, eventBus, router, skillsLoader, memoryManager, scheduler })
+  // 13. 启动时记忆维护：日志清理 + 快照恢复
+  for (const agentConfig of agentManager.getAgents()) {
+    memoryManager.pruneOldLogs(agentConfig.id, 30)
+    memoryManager.restoreFromSnapshot(agentConfig.id)
+  }
+
+  // 14. 创建 HTTP 服务
+  const app = createApp({ agentManager, agentQueue, eventBus, router, skillsLoader, memoryManager, memoryIndexer, scheduler })
 
   const { serve } = await import('@hono/node-server')
   const server = serve({
@@ -169,7 +184,7 @@ async function main() {
   logger.info({ port: env.PORT }, `HTTP 服务已启动: http://localhost:${env.PORT}`)
   logger.info('YouClaw 已就绪')
 
-  // 14. 优雅关闭
+  // 15. 优雅关闭
   const shutdown = () => {
     logger.info('正在关闭...')
     skillsWatcher.stop()
