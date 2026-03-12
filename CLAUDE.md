@@ -17,9 +17,9 @@ pnpm dist            # 构建可分发安装包
 
 ## 技术栈
 
-- **运行时**: Node.js >= 24 (与 Electron 40 内置 Node 版本一致)
+- **运行时**: Node.js >= 22
 - **包管理**: pnpm
-- **后端**: Hono (HTTP) + better-sqlite3 (数据库) + Pino (日志)
+- **后端**: Hono (HTTP) + node:sqlite (数据库) + Pino (日志)
 - **Agent**: @anthropic-ai/claude-agent-sdk
 - **前端**: Vite + React + shadcn/ui + Tailwind CSS
 - **校验**: Zod (v4, 使用 `zod/v4` 导入)
@@ -41,7 +41,7 @@ src/
 ├── agent/          # AgentManager（加载 agent.yaml）、AgentRuntime（claude-agent-sdk）、AgentQueue（并发队列）、PromptBuilder、SubagentTracker
 ├── channel/        # MessageRouter（消息路由）、TelegramChannel
 ├── config/         # env.ts（Zod 校验环境变量）、paths.ts（路径常量）
-├── db/             # better-sqlite3 初始化、消息/会话/定时任务 CRUD
+├── db/             # node:sqlite 初始化、消息/会话/定时任务 CRUD
 ├── events/         # EventBus + 类型定义（stream/tool_use/complete/error/subagent_*）
 ├── ipc/            # IpcWatcher（文件轮询 IPC）、任务快照写入
 ├── logger/         # Pino 日志
@@ -71,7 +71,7 @@ web/src/
 
 ## 约定
 
-- 使用 `better-sqlite3` 作为 SQLite 驱动（非 bun:sqlite）
+- 使用 `node:sqlite`（Node 内置 SQLite）作为数据库驱动，无需 native addon
 - 使用 `node:fs` 的 readFileSync/writeFileSync（非 Bun.file）
 - 使用 `dotenv` 或 `.env` 文件加载环境变量
 - 提交信息使用 Conventional Commits（英文）

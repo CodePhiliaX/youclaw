@@ -14,9 +14,9 @@ Desktop AI assistant powered by Claude, inspired by nanoClaw / OpenClaw.
 
 | Layer | Choice |
 |-------|--------|
-| Runtime | Node.js >= 24 |
+| Runtime | Node.js >= 22 |
 | Package Manager | pnpm |
-| Backend | Hono + SQLite (better-sqlite3) + Pino |
+| Backend | Hono + SQLite (node:sqlite) + Pino |
 | Agent | `@anthropic-ai/claude-agent-sdk` |
 | Frontend | Vite + React + shadcn/ui + Tailwind CSS |
 | Telegram | grammY |
@@ -26,7 +26,7 @@ Desktop AI assistant powered by Claude, inspired by nanoClaw / OpenClaw.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) >= 24 (required to match Electron 40's embedded Node version)
+- [Node.js](https://nodejs.org/) >= 22
 - [pnpm](https://pnpm.io/) >= 9
 - An [Anthropic API key](https://console.anthropic.com/)
 

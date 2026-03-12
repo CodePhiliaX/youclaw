@@ -1,10 +1,10 @@
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { getPaths } from '../config/index.ts'
 import { getLogger } from '../logger/index.ts'
 
-let _db: Database.Database | null = null
+let _db: DatabaseSync | null = null
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS messages (
@@ -74,15 +74,15 @@ CREATE TABLE IF NOT EXISTS browser_profiles (
 );
 `
 
-export function initDatabase(): Database.Database {
+export function initDatabase(): DatabaseSync {
   if (_db) return _db
 
   const paths = getPaths()
   mkdirSync(dirname(paths.db), { recursive: true })
 
-  _db = new Database(paths.db)
-  _db.pragma('journal_mode = WAL')
-  _db.pragma('foreign_keys = ON')
+  _db = new DatabaseSync(paths.db)
+  _db.exec('PRAGMA journal_mode = WAL')
+  _db.exec('PRAGMA foreign_keys = ON')
   _db.exec(SCHEMA)
 
   // 迁移：添加 name 和 description 列
@@ -106,7 +106,7 @@ export function initDatabase(): Database.Database {
   return _db
 }
 
-export function getDatabase(): Database.Database {
+export function getDatabase(): DatabaseSync {
   if (!_db) throw new Error('数据库未初始化')
   return _db
 }
