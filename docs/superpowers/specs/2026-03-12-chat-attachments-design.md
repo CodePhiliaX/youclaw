@@ -11,15 +11,23 @@ Enable users to send file attachments (images and documents) to agents via the c
 ## Data Structure
 
 ```typescript
+// Frontend: web/src/types/attachment.ts
+// Backend: src/types/attachment.ts (duplicated, same interface)
 interface Attachment {
   filename: string    // Original filename
   mediaType: string   // MIME type, e.g. "image/png", "application/pdf"
   data: string        // Base64-encoded file content
-  size: number        // Original file size in bytes, computed from base64: Math.floor(base64.length * 3 / 4)
+  size: number        // Decoded file size in bytes
 }
 ```
 
-This structure is used consistently across the entire pipeline: frontend → API → backend → database → display.
+Size computation from base64:
+```typescript
+const padding = (base64.match(/=+$/) || [''])[0].length
+const size = Math.floor(base64.length * 3 / 4) - padding
+```
+
+This structure is used consistently across the entire pipeline: frontend → API → backend → database → display. The type is defined separately in both frontend and backend since they are separate TypeScript compilation targets.
 
 ## Data Flow
 
@@ -30,20 +38,20 @@ User selects files → PromptInput produces FileUIPart[] (with data URLs from co
   → ChatInput.handleSubmit parses data URLs to extract base64 + mediaType
     → useChat.send(text, attachments[])
       → API client: POST JSON { prompt, chatId, attachments }
-        → Backend messages route validates with Zod schema
+        → Backend messages route validates with Zod schema (import from zod/v4)
           → MessageRouter saves to DB (messages.attachments JSON column)
             → AgentQueue (attachments in QueueItem) → AgentRuntime.process
               → Build SDKUserMessage with MessageParam content blocks
-              → SDK executes via query({ prompt: AsyncIterable<SDKUserMessage> })
+              → SDK executes via query({ prompt: asyncIterable })
               → Streams response
 ```
 
 ### Displaying
 
 ```
-GET /api/chats/:chatId/messages → Returns messages with parsed attachments field
+GET /api/chats/:chatId/messages → Route handler JSON.parses attachments column
   → useChat.loadChat maps to Message (including attachments)
-    → UserMessage renders:
+    → UserMessage (web/src/components/chat/UserMessage.tsx, existing component) renders:
         Image → Clickable thumbnail (max-width ~200px), lightbox on click
         Document → File card (type icon + filename + readable size)
 ```
@@ -54,7 +62,7 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 - Modify `handleSubmit` to extract `msg.files` (which are already data URLs from PromptInput's `convertBlobUrlToDataUrl`)
 - Parse each data URL: strip `data:<mediaType>;base64,` prefix to get pure base64 data
 - Extract mediaType from the data URL prefix or from `FileUIPart.mediaType`
-- Compute size from base64 length: `Math.floor(base64.length * 3 / 4)`
+- Compute size from base64 length (accounting for padding)
 - Pass resulting `Attachment[]` to `send(text, attachments)`
 
 ### PromptInput props
@@ -76,7 +84,7 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 ### client.ts
 - Extend `sendMessage` to accept and include `attachments` in JSON body
 
-### UserMessage.tsx
+### UserMessage.tsx (existing: web/src/components/chat/UserMessage.tsx)
 - Add attachment display area below message text
 - Images: thumbnail grid, click to open lightbox
 - Documents: file card with type icon, filename, and human-readable size
@@ -84,8 +92,10 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 ## Backend Changes
 
 ### messages route (src/routes/messages.ts)
-- Extend POST handler request body with Zod schema:
+- Extend POST handler request body with Zod schema (import from `zod/v4`):
   ```typescript
+  import { z } from 'zod/v4'
+
   const AttachmentSchema = z.object({
     filename: z.string(),
     mediaType: z.string(),
@@ -102,6 +112,7 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 - Validate mediaType against whitelist
 - Validate decoded base64 size ≤ 10MB per file
 - Configure Hono body parser limit to handle up to ~70MB (5 files × 10MB × 1.33 base64 overhead)
+- GET handler: JSON.parse the `attachments` column in the route handler before returning (map over `getMessages` results)
 
 ### InboundMessage (src/channel/types.ts)
 - Add `attachments?: Attachment[]` field
@@ -114,10 +125,7 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 - Migration: `ALTER TABLE messages ADD COLUMN attachments TEXT` (try/catch pattern)
 - Update `saveMessage` parameter type: add `attachments?: string` (pre-stringified JSON)
 - Update INSERT SQL to include `attachments` column
-- Update `getMessages` to include `attachments` in returned rows
-
-### Message query
-- GET /api/chats/:chatId/messages: JSON.parse `attachments` column in response
+- Update `getMessages` return to include raw `attachments` TEXT column
 
 ### AgentQueue (src/agent/queue.ts)
 - Add `attachments?: Attachment[]` to `QueueItem` interface
@@ -126,27 +134,37 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 
 ### AgentRuntime (src/agent/runtime.ts)
 - Extend `ProcessParams`: add `attachments?: Attachment[]`
-- In `executeQuery`, when attachments are present, construct an `SDKUserMessage` wrapping a `MessageParam` with multi-part content:
+- In `executeQuery`, when attachments are present, construct an `SDKUserMessage` and pass as `AsyncIterable` to `query()`:
   ```typescript
-  // The SDK query() accepts string | AsyncIterable<SDKUserMessage>
-  // For attachments, we must use the SDKUserMessage format:
+  import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+
+  // Build multi-part MessageParam content
+  const content = [
+    { type: 'text' as const, text: prompt },
+    ...attachments.map(a => {
+      if (a.mediaType.startsWith('image/')) {
+        return { type: 'image' as const, source: { type: 'base64' as const, media_type: a.mediaType, data: a.data } }
+      }
+      return { type: 'document' as const, source: { type: 'base64' as const, media_type: a.mediaType, data: a.data } }
+    }),
+  ]
+
   const userMessage: SDKUserMessage = {
     type: 'user',
-    message: {
-      role: 'user',
-      content: [
-        { type: 'text', text: prompt },
-        // For images:
-        { type: 'image', source: { type: 'base64', media_type: attachment.mediaType, data: attachment.data } },
-        // For documents:
-        { type: 'document', source: { type: 'base64', media_type: attachment.mediaType, data: attachment.data } },
-      ],
-    },
+    message: { role: 'user', content },
     parent_tool_use_id: null,
+    session_id: existingSessionId || '',  // Required field; empty string for new sessions
   }
-  // Pass as AsyncIterable to query()
+
+  // Wrap in async generator for query()
+  async function* singleMessage(msg: SDKUserMessage) { yield msg }
+
+  const q = query({
+    prompt: singleMessage(userMessage),
+    options: queryOptions,
+  })
   ```
-- When no attachments, continue using the existing `prompt: string` path
+- When no attachments, continue using the existing `prompt: string` path (no behavior change)
 
 ## Constraints
 
@@ -167,7 +185,7 @@ GET /api/chats/:chatId/messages → Returns messages with parsed attachments fie
 - SDK-unsupported format → Skip attachment, log warning
 
 ### Known limitations
-- Electron IPC path: large attachments (~67MB JSON) may have performance implications through Electron IPC serialization. Acceptable for initial implementation.
+- Electron IPC path: large attachments (~67MB JSON) may cause performance issues or hit IPC message size limits. For the initial implementation this is acceptable; a file-based transfer approach can be added as a follow-up if needed.
 
 ## Out of Scope
 - Upload progress bar (base64 inline, single request)
