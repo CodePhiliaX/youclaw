@@ -10,7 +10,7 @@ import { useI18n } from '@/i18n'
 import { useSidebar } from '@/hooks/useSidebar'
 import { useChatContext } from '@/hooks/useChatContext'
 import { groupChatsByDate } from '@/lib/chat-utils'
-import { isElectron, getElectronAPI } from '@/api/transport'
+import { isTauri } from '@/api/transport'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -38,10 +38,13 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isElectron) setPlatform(getElectronAPI().getPlatform())
+    if (!isTauri) return
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke<string>('get_platform').then(setPlatform)
+    })
   }, [])
 
-  const isMac = platform === 'darwin'
+  const isMac = platform === 'macos'
 
   const navItems = [
     { to: '/agents', icon: Bot, label: t.nav.agents },

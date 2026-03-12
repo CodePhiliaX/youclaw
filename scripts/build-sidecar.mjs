@@ -9,7 +9,7 @@
  */
 
 import { execSync } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, unlinkSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -70,6 +70,13 @@ if (buildAll) {
 
   console.log(`Building sidecar for current platform (${currentTarget})...\n`)
   build(currentTarget, name)
+}
+
+// 清理 bun build --compile 产生的临时文件
+for (const f of readdirSync(root)) {
+  if (f.endsWith('.bun-build')) {
+    try { unlinkSync(resolve(root, f)) } catch {}
+  }
 }
 
 console.log('\nSidecar build complete!')
