@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Radio, CheckCircle, XCircle, Save, Eye, EyeOff,
+  Radio, CheckCircle, Save, Eye, EyeOff,
   ExternalLink, RefreshCw, AlertTriangle,
 } from 'lucide-react'
 import { getChannels, updateChannelEnv } from '../api/client'
