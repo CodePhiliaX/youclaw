@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { I18nProvider } from './i18n'
 import './index.css'
+import 'streamdown/styles.css'
 
 // 非 Mac 平台加 class，用于 CSS 覆盖原生滚动条
 const platform = (window as any).electronAPI?.getPlatform?.()

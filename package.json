@@ -28,7 +28,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.16.0",
     "electron": "^40.8.0",
     "electron-builder": "^26.8.1",
@@ -38,7 +37,6 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",
     "@hono/node-server": "^1.14.3",
-    "better-sqlite3": "^12.6.2",
     "croner": "^10.0.1",
     "electron-log": "^5.4.3",
     "electron-store": "^11.0.2",
