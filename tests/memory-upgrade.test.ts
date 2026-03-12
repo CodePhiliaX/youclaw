@@ -100,7 +100,7 @@ describe('日志截断', () => {
     const longMessage = 'A'.repeat(1000)
     const longReply = 'B'.repeat(1000)
 
-    memoryManager.appendDailyLog(agentId, 'web:chat-1', longMessage, longReply, { maxLogEntryLength: 500 })
+    memoryManager.appendDailyLog(agentId, 'web:chat-1', longMessage, longReply, 500)
 
     const today = new Date().toISOString().split('T')[0]!
     const logPath = resolve(getLogsDir(agentId), `${today}.md`)
@@ -153,7 +153,7 @@ describe('recentDays 配置', () => {
     writeFileSync(resolve(getLogsDir(agentId), '2026-03-07.md'), '# 2026-03-07\nold')
 
     // 只取最近 2 天
-    const context = memoryManager.getMemoryContext(agentId, 2)
+    const context = memoryManager.getMemoryContext(agentId, { recentDays: 2 })
     expect(context).toContain('log-10')
     expect(context).toContain('log-09')
     expect(context).not.toContain('log-08')

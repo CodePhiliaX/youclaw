@@ -22,6 +22,9 @@ describe('system routes', () => {
         },
       } as any,
       new EventBus(),
+      {
+        getChannelStatuses: () => [],
+      } as any,
     )
 
     const res = await app.request('/status')
@@ -39,7 +42,8 @@ describe('system routes', () => {
     expect(body.agents).toEqual({ total: 2, active: 1 })
     expect(body.platform).toBe(process.platform)
     expect(body.nodeVersion.startsWith('bun ')).toBe(true)
-    expect(body.telegram.connected).toBe(Boolean(process.env.TELEGRAM_BOT_TOKEN))
+    // mock router 返回空 channels，所以 telegram.connected 为 false
+    expect(body.telegram.connected).toBe(false)
     expect(body.database.path.endsWith('youclaw.db')).toBe(true)
     expect(body.database.sizeBytes).toBeGreaterThanOrEqual(0)
     expect(typeof body.startedAt).toBe('string')
