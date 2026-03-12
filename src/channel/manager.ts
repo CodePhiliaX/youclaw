@@ -156,18 +156,22 @@ export class ChannelManager {
       throw new Error(`Channel "${id}" 不存在`)
     }
 
-    // 如果更新了 config，校验新配置
+    // 如果更新了 config，先合并再校验（避免部分更新丢失其他字段）
+    let configToSave: string | undefined
     if (opts.config) {
-      const validation = validateChannelConfig(existing.type, opts.config)
+      const existingConfig = JSON.parse(existing.config) as Record<string, unknown>
+      const mergedConfig = { ...existingConfig, ...opts.config }
+      const validation = validateChannelConfig(existing.type, mergedConfig)
       if (!validation.success) {
         throw new Error(`配置校验失败: ${validation.error}`)
       }
+      configToSave = JSON.stringify(mergedConfig)
     }
 
     // 更新数据库
     const record = updateChannelRecord(id, {
       label: opts.label,
-      config: opts.config ? JSON.stringify(opts.config) : undefined,
+      config: configToSave,
       enabled: opts.enabled,
     })
 
