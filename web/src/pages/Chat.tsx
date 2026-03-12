@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useChat, type Message } from '../hooks/useChat'
 import { getChats, getAgents, deleteChat as deleteChatApi } from '../api/client'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import {
   Send,
   Plus,
@@ -34,6 +32,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu'
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '../components/ai-elements/conversation'
+import {
+  Message as AIMessage,
+  MessageContent,
+  MessageResponse,
+  MessageActions,
+  MessageAction,
+} from '../components/ai-elements/message'
 
 type ChatItem = { chat_id: string; name: string; agent_id: string; channel: string; last_message_time: string }
 type Agent = { id: string; name: string }
@@ -70,7 +80,6 @@ export function Chat() {
   const [input, setInput] = useState('')
   const [chatList, setChatList] = useState<ChatItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // 加载 agents
@@ -86,11 +95,6 @@ export function Chat() {
   }, [])
 
   useEffect(() => { refreshChats() }, [chatId, refreshChats])
-
-  // 自动滚动到底部
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingText])
 
   // 自动调节 textarea 高度
   useEffect(() => {
@@ -207,27 +211,28 @@ export function Chat() {
             </div>
           ) : (
             <>
-              <ScrollArea className="flex-1" data-testid="message-list">
-                <div className="max-w-3xl mx-auto px-4 py-6 space-y-1">
+              <Conversation data-testid="message-list">
+                <ConversationContent className="max-w-3xl mx-auto w-full px-4 py-6 gap-1">
                   {messages.map((msg) => (
                     <MessageBubble key={msg.id} message={msg} t={t} />
                   ))}
 
                   {streamingText && (
-                    <div className="flex gap-3 py-3">
-                      <Avatar className="h-8 w-8 mt-0.5">
-                        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-purple-500/20 text-[10px] font-semibold">
-                          AI
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-muted-foreground mb-1.5">{t.chat.assistant}</div>
-                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:rounded-xl prose-pre:bg-secondary prose-code:before:content-none prose-code:after:content-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingText}</ReactMarkdown>
-                          <span className="inline-block w-1.5 h-4 bg-primary/60 animate-pulse ml-0.5 rounded-sm" />
+                    <AIMessage from="assistant">
+                      <div className="flex gap-3 py-3">
+                        <Avatar className="h-8 w-8 mt-0.5">
+                          <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-purple-500/20 text-[10px] font-semibold">
+                            AI
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium text-muted-foreground mb-1.5">{t.chat.assistant}</div>
+                          <MessageContent>
+                            <MessageResponse parseIncompleteMarkdown>{streamingText}</MessageResponse>
+                          </MessageContent>
                         </div>
                       </div>
-                    </div>
+                    </AIMessage>
                   )}
 
                   {isProcessing && !streamingText && (
@@ -243,10 +248,9 @@ export function Chat() {
                       </div>
                     </div>
                   )}
-
-                  <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
+                </ConversationContent>
+                <ConversationScrollButton />
+              </Conversation>
 
               <div className="border-t border-border bg-background">
                 <div className="max-w-3xl mx-auto px-4 py-3">
@@ -400,66 +404,48 @@ function MessageBubble({ message, t }: { message: Message; t: any }) {
   }
 
   return (
-    <div className={cn('group flex gap-3 py-3', isUser && 'flex-row-reverse')} data-testid={isUser ? 'message-user' : 'message-assistant'}>
-      <Avatar className="h-8 w-8 mt-0.5">
-        <AvatarFallback
-          className={cn(
-            'text-[10px] font-semibold',
-            isUser
-              ? 'bg-blue-500/20 text-blue-500'
-              : 'bg-gradient-to-br from-violet-500/20 to-purple-500/20'
+    <AIMessage from={message.role} data-testid={isUser ? 'message-user' : 'message-assistant'}>
+      <div className={cn('group flex gap-3 py-3', isUser && 'flex-row-reverse')}>
+        <Avatar className="h-8 w-8 mt-0.5">
+          <AvatarFallback
+            className={cn(
+              'text-[10px] font-semibold',
+              isUser
+                ? 'bg-blue-500/20 text-blue-500'
+                : 'bg-gradient-to-br from-violet-500/20 to-purple-500/20'
+            )}
+          >
+            {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+          </AvatarFallback>
+        </Avatar>
+        <div className={cn('flex-1 min-w-0', isUser && 'flex flex-col items-end')}>
+          <div className="text-xs font-medium text-muted-foreground mb-1.5">
+            {isUser ? t.chat.you : t.chat.assistant}
+            <span className="ml-2 text-[10px] opacity-60">
+              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          {isUser ? (
+            <div className="inline-block bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[85%]">
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <MessageContent>
+                <MessageResponse>{message.content}</MessageResponse>
+              </MessageContent>
+              <MessageActions className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <MessageAction
+                  tooltip={copied ? t.chat.copied : t.chat.copyCode}
+                  onClick={() => handleCopy(message.content)}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                </MessageAction>
+              </MessageActions>
+            </div>
           )}
-        >
-          {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-        </AvatarFallback>
-      </Avatar>
-      <div className={cn('flex-1 min-w-0', isUser && 'flex flex-col items-end')}>
-        <div className="text-xs font-medium text-muted-foreground mb-1.5">
-          {isUser ? t.chat.you : t.chat.assistant}
-          <span className="ml-2 text-[10px] opacity-60">
-            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
         </div>
-        {isUser ? (
-          <div className="inline-block bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[85%]">
-            <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-          </div>
-        ) : (
-          <div className="relative">
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:rounded-xl prose-pre:bg-secondary prose-code:before:content-none prose-code:after:content-none">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  pre: ({ children, ...props }) => (
-                    <div className="relative group/code">
-                      <pre {...props}>{children}</pre>
-                      <button
-                        onClick={() => handleCopy(message.content)}
-                        className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 opacity-0 group-hover/code:opacity-100 transition-opacity"
-                      >
-                        {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
-                  ),
-                }}
-              >{message.content}</ReactMarkdown>
-            </div>
-            <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => handleCopy(message.content)}
-                    className="p-1 rounded hover:bg-accent text-muted-foreground transition-colors"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{copied ? t.chat.copied : t.chat.copyCode}</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
+    </AIMessage>
   )
 }
