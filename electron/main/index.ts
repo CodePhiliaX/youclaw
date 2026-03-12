@@ -407,6 +407,15 @@ function createAppMenu(): void {
   }
 }
 
+function getTitleBarOverlay() {
+  const isDark = nativeTheme.shouldUseDarkColors;
+  return {
+    color: isDark ? "#1a1a1a" : "#ffffff",
+    symbolColor: isDark ? "#fafafa" : "#171717",
+    height: 48,
+  };
+}
+
 function createWindow(): void {
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
@@ -430,11 +439,7 @@ function createWindow(): void {
     ...(isWin
       ? {
           titleBarStyle: "hidden",
-          titleBarOverlay: {
-            color: "#1a1a2e",
-            symbolColor: "#e5e7eb",
-            height: 48,
-          },
+          titleBarOverlay: getTitleBarOverlay(),
         }
       : {}),
     webPreferences: {
@@ -457,6 +462,12 @@ function createWindow(): void {
     mainWindow?.show();
   });
 
+  if (isWin) {
+    nativeTheme.on("updated", () => {
+      mainWindow?.setTitleBarOverlay(getTitleBarOverlay());
+    });
+  }
+
   mainWindow.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -478,6 +489,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("set-theme", (_event, theme: string) => {
     store.set("theme", theme);
     applyTheme(theme);
+    if (process.platform === "win32") {
+      mainWindow?.setTitleBarOverlay(getTitleBarOverlay());
+    }
   });
   ipcMain.handle("get-allow-prerelease", () => store.get("allowPrerelease"));
   ipcMain.handle("set-allow-prerelease", (_event, value: boolean) => {

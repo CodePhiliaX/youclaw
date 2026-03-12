@@ -43,7 +43,7 @@ if (currentABI === electronABI) {
   console.log(`\n── Native modules ── ABI ${electronABI} ✓`);
 } else {
   run(
-    "npx electron-rebuild --force --build-from-source -o better-sqlite3",
+    "npx electron-rebuild --force -o better-sqlite3",
     `Rebuild native modules (${currentABI} → ${electronABI})`
   );
 }

@@ -53,29 +53,22 @@ jobs:
             release/latest.yml
           retention-days: 1
 
-  # ── Job 1b: macOS / Linux build ──
-  build-others:
+  # ── Job 1b: macOS build (with codesign) ──
+  build-mac:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            arch: x64
+          - arch: x64
             build_arg: "--mac --x64"
             artifact: "You-Claw-${VERSION}-x64.dmg"
             platform_label: "macOS Intel"
-          - os: macos-latest
-            arch: arm64
+          - arch: arm64
             build_arg: "--mac --arm64"
             artifact: "You-Claw-${VERSION}-arm64.dmg"
             platform_label: "macOS Apple Silicon"
-          - os: ubuntu-latest
-            arch: x64
-            build_arg: "--linux --x64"
-            artifact: "You-Claw-${VERSION}-x86_64.AppImage"
-            platform_label: "Linux x64"
 
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     name: Build ${{ matrix.platform_label }}
 
     steps:
@@ -107,7 +100,6 @@ jobs:
         run: node scripts/build-electron.mjs
 
       - name: Import macOS certificates
-        if: runner.os == 'macOS'
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.MAC_CERTS }}
@@ -139,6 +131,75 @@ jobs:
             post:
               zh_cn:
                 title: "You Claw v${{ steps.version.outputs.VERSION }} · ${{ matrix.platform_label }} ${{ job.status == 'success' && '✅' || '❌' }}"
+                content:
+                - - tag: text
+                    text: "Build "
+                  - tag: a
+                    text: "#${{ github.run_number }}"
+                    href: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  - tag: text
+                    text: " ${{ job.status == 'success' && 'succeeded' || 'failed' }}"
+                - - tag: text
+                    text: "Download: "
+                  - tag: a
+                    text: "${{ steps.artifact.outputs.NAME }}"
+                    href: "${{ steps.artifact.outputs.URL }}"
+
+  # ── Job 1c: Linux build (no codesign) ──
+  build-linux:
+    runs-on: ubuntu-latest
+    name: Build Linux x64
+
+    steps:
+      - name: Extract version
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install web dependencies
+        run: npm install
+        working-directory: web
+
+      - name: Set version
+        shell: bash
+        run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+
+      - name: Build (renderer + backend + electron)
+        run: node scripts/build-electron.mjs
+
+      - name: Package & Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --x64 --publish always
+
+      - name: Resolve artifact name
+        id: artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          echo "NAME=You-Claw-${VERSION}-x86_64.AppImage" >> $GITHUB_OUTPUT
+          echo "URL=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/You-Claw-${VERSION}-x86_64.AppImage" >> $GITHUB_OUTPUT
+
+      - name: Notify Feishu
+        uses: foxundermoon/feishu-action@v2
+        with:
+          url: ${{ secrets.FEISHU_WEBHOOK }}
+          msg_type: post
+          content: |
+            post:
+              zh_cn:
+                title: "You Claw v${{ steps.version.outputs.VERSION }} · Linux x64 ${{ job.status == 'success' && '✅' || '❌' }}"
                 content:
                 - - tag: text
                     text: "Build "
