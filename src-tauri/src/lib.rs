@@ -9,6 +9,7 @@ use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::StoreExt;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::net::TcpListener;
 
 /// Sidecar 子进程句柄
 struct SidecarState(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
@@ -19,12 +20,30 @@ struct SidecarEvent {
     message: String,
 }
 
+/// 在动态端口范围内找一个可用端口
+fn find_available_port() -> Result<u16, String> {
+    // 绑定 0 端口让系统分配一个可用端口
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| format!("Failed to find available port: {}", e))?;
+    let port = listener.local_addr()
+        .map_err(|e| format!("Failed to get local addr: {}", e))?
+        .port();
+    // listener drop 时释放端口，sidecar 立即绑定
+    drop(listener);
+    Ok(port)
+}
+
 /// 启动 sidecar 后端
-fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
+fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
     let state = app.state::<SidecarState>();
+
+    // 分配随机可用端口
+    let port = find_available_port()?;
+    log::info!("Allocated random port {} for sidecar", port);
 
     // 从 Tauri Store 读取设置，注入到环境变量
     let mut env_vars: Vec<(String, String)> = vec![];
+    env_vars.push(("PORT".into(), port.to_string()));
 
     if let Ok(store) = app.store("settings.json") {
         if let Some(api_key) = store.get("api-key") {
@@ -41,11 +60,9 @@ fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
                 }
             }
         }
-        if let Some(port) = store.get("port") {
-            if let Some(p) = port.as_str() {
-                env_vars.push(("PORT".into(), p.to_string()));
-            }
-        }
+        // 将动态端口写入 store，前端从 store 读取
+        let _ = store.set("port", serde_json::Value::String(port.to_string()));
+        let _ = store.save();
     }
 
     // 设置数据目录
@@ -90,7 +107,7 @@ fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
         }
     });
 
-    Ok(())
+    Ok(port)
 }
 
 /// 等待后端健康检查通过（用标准库发最简 HTTP GET，不依赖 reqwest）
@@ -147,9 +164,7 @@ fn get_platform() -> String {
 async fn restart_sidecar(app: AppHandle) -> Result<(), String> {
     kill_sidecar(&app);
     tokio::time::sleep(Duration::from_millis(500)).await;
-    spawn_sidecar(&app)?;
-
-    let port = get_port(&app);
+    let port = spawn_sidecar(&app)?;
     wait_for_health(port, 30).await
 }
 
@@ -233,21 +248,28 @@ pub fn run() {
             // 启动后端（dev 模式由 beforeDevCommand 启动，release 模式用 sidecar）
             let app_handle = handle.clone();
             tauri::async_runtime::spawn(async move {
+                let port: u16;
+
                 #[cfg(not(debug_assertions))]
                 {
-                    if let Err(e) = spawn_sidecar(&app_handle) {
-                        log::error!("Failed to spawn sidecar: {}", e);
-                        let _ = app_handle.emit("sidecar-event", SidecarEvent {
-                            status: "error".into(),
-                            message: e,
-                        });
-                        return;
+                    match spawn_sidecar(&app_handle) {
+                        Ok(p) => port = p,
+                        Err(e) => {
+                            log::error!("Failed to spawn sidecar: {}", e);
+                            let _ = app_handle.emit("sidecar-event", SidecarEvent {
+                                status: "error".into(),
+                                message: e,
+                            });
+                            return;
+                        }
                     }
                 }
                 #[cfg(debug_assertions)]
-                log::info!("Dev mode: skipping sidecar, using bun dev server");
+                {
+                    log::info!("Dev mode: skipping sidecar, using bun dev server");
+                    port = get_port(&app_handle);
+                }
 
-                let port = get_port(&app_handle);
                 match wait_for_health(port, 60).await {
                     Ok(_) => {
                         let _ = app_handle.emit("sidecar-event", SidecarEvent {

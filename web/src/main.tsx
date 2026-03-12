@@ -11,13 +11,13 @@ if (navigator.platform && !navigator.platform.startsWith('Mac')) {
   document.documentElement.classList.add('custom-scrollbar')
 }
 
-// 预加载后端端口配置（Tauri 模式从 store 读取）
-initBaseUrl()
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <I18nProvider>
-      <App />
-    </I18nProvider>
-  </StrictMode>,
-)
+// 预加载后端端口配置（Tauri 模式从 store 读取），等待完成后再渲染
+initBaseUrl().then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <I18nProvider>
+        <App />
+      </I18nProvider>
+    </StrictMode>,
+  )
+})
