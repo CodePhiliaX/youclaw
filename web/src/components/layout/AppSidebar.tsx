@@ -241,13 +241,17 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
 
         {/* 底部 */}
         <div
-          className={cn('border-t border-border py-2 flex items-center h-[52px] shrink-0', ICON_PX)}
+          className="border-t border-border py-2 space-y-0.5 pr-1.5"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex items-center h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors whitespace-nowrap overflow-hidden"
+            className={cn(
+              'flex items-center h-9 w-full rounded-lg transition-colors whitespace-nowrap overflow-hidden',
+              ICON_PX,
+              'text-muted-foreground hover:text-foreground hover:bg-accent'
+            )}
             aria-label={t.settings.title}
           >
             <div className="w-9 h-9 shrink-0 flex items-center justify-center">
@@ -259,18 +263,6 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
             )}>
               {t.settings.title}
             </span>
-          </button>
-          <div className="flex-1 min-w-0" />
-          <button
-            type="button"
-            onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}
-            className={cn(
-              'shrink-0 rounded text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-[opacity] duration-200 w-9 h-7 mr-1.5',
-              isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
-            )}
-            tabIndex={isCollapsed ? -1 : 0}
-          >
-            {locale === 'en' ? '中' : 'EN'}
           </button>
         </div>
       </aside>
