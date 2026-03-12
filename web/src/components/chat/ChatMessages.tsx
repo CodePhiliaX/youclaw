@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Loader2, Bot } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -5,6 +6,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
+import { useStickToBottomContext } from 'use-stick-to-bottom'
 import {
   Message as AIMessage,
   MessageContent,
@@ -78,8 +80,20 @@ export function ChatMessages() {
             </div>
           </div>
         )}
+        <ScrollOnChange messageCount={messages.length} isProcessing={isProcessing} />
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
   )
+}
+
+/** 当消息数量变化或开始处理时，自动滚动到底部 */
+function ScrollOnChange({ messageCount, isProcessing }: { messageCount: number; isProcessing: boolean }) {
+  const { scrollToBottom } = useStickToBottomContext()
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messageCount, isProcessing, scrollToBottom])
+
+  return null
 }
