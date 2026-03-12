@@ -256,6 +256,31 @@ export class IpcWatcher {
 // ===== 任务快照写入 =====
 
 /** 将指定 agent 的当前任务列表写入 current_tasks.json */
+/** 从数据库刷新指定 agent 的任务快照 */
+export function refreshTasksSnapshot(agentId: string, getAllTasks: () => Array<{
+  id: string
+  agent_id: string
+  prompt: string
+  schedule_type: string
+  schedule_value: string
+  status: string
+  next_run: string | null
+  last_run: string | null
+}>): void {
+  const agentTasks = getAllTasks()
+    .filter((t) => t.agent_id === agentId)
+    .map((t) => ({
+      id: t.id,
+      prompt: t.prompt,
+      schedule_type: t.schedule_type,
+      schedule_value: t.schedule_value,
+      status: t.status,
+      next_run: t.next_run,
+      last_run: t.last_run,
+    }))
+  writeTasksSnapshot(agentId, agentTasks)
+}
+
 export function writeTasksSnapshot(agentId: string, tasks: Array<{
   id: string
   prompt: string

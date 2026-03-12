@@ -9,6 +9,7 @@ import {
   deleteTask,
   getTaskRunLogs,
 } from '../db/index.ts'
+import { refreshTasksSnapshot } from '../ipc/index.ts'
 import type { AgentManager } from '../agent/manager.ts'
 import type { AgentQueue } from '../agent/queue.ts'
 import type { Scheduler } from '../scheduler/scheduler.ts'
@@ -128,6 +129,7 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
     })
 
     const task = getTask(id)
+    refreshTasksSnapshot(data.agentId, getTasks)
     return c.json(task, 201)
   })
 
@@ -198,6 +200,7 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
 
     updateTask(id, updates)
     const updated = getTask(id)
+    refreshTasksSnapshot(existing.agent_id, getTasks)
     return c.json(updated)
   })
 
@@ -234,6 +237,7 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
     })
 
     const task = getTask(newId)
+    refreshTasksSnapshot(existing.agent_id, getTasks)
     return c.json(task, 201)
   })
 
@@ -246,6 +250,7 @@ export function createTasksRoutes(scheduler: Scheduler, agentManager: AgentManag
     }
 
     deleteTask(id)
+    refreshTasksSnapshot(existing.agent_id, getTasks)
     return c.json({ ok: true })
   })
 

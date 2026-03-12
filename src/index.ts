@@ -10,7 +10,7 @@ import { MessageRouter, TelegramChannel } from './channel/index.ts'
 import { SkillsLoader, SkillsWatcher, RegistryManager } from './skills/index.ts'
 import { MemoryManager, MemoryIndexer } from './memory/index.ts'
 import { Scheduler } from './scheduler/index.ts'
-import { IpcWatcher, writeTasksSnapshot } from './ipc/index.ts'
+import { IpcWatcher, refreshTasksSnapshot } from './ipc/index.ts'
 import { createApp } from './routes/index.ts'
 
 async function main() {
@@ -128,14 +128,14 @@ async function main() {
       })
 
       // 写入快照
-      refreshTasksSnapshot(data.agentId)
+      refreshSnapshot(data.agentId)
       logger.info({ taskId, agentId: data.agentId, scheduleType: data.scheduleType }, 'IPC: 定时任务已创建')
     },
     onPauseTask: (taskId) => {
       const task = getTask(taskId)
       if (task) {
         updateTask(taskId, { status: 'paused' })
-        refreshTasksSnapshot(task.agent_id)
+        refreshSnapshot(task.agent_id)
         logger.info({ taskId }, 'IPC: 定时任务已暂停')
       } else {
         logger.warn({ taskId }, 'IPC: 暂停失败，任务不存在')
@@ -150,7 +150,7 @@ async function main() {
           last_run: task.last_run,
         })
         updateTask(taskId, { status: 'active', nextRun: nextRun ?? new Date().toISOString() })
-        refreshTasksSnapshot(task.agent_id)
+        refreshSnapshot(task.agent_id)
         logger.info({ taskId }, 'IPC: 定时任务已恢复')
       } else {
         logger.warn({ taskId }, 'IPC: 恢复失败，任务不存在')
@@ -160,7 +160,7 @@ async function main() {
       const task = getTask(taskId)
       if (task) {
         deleteTask(taskId)
-        refreshTasksSnapshot(task.agent_id)
+        refreshSnapshot(task.agent_id)
         logger.info({ taskId }, 'IPC: 定时任务已取消')
       } else {
         logger.warn({ taskId }, 'IPC: 取消失败，任务不存在')
@@ -171,20 +171,8 @@ async function main() {
   logger.info('IPC Watcher 已启动')
 
   /** 刷新指定 agent 的任务快照 */
-  function refreshTasksSnapshot(agentId: string) {
-    const allTasks = getTasks()
-    const agentTasks = allTasks
-      .filter((t) => t.agent_id === agentId)
-      .map((t) => ({
-        id: t.id,
-        prompt: t.prompt,
-        schedule_type: t.schedule_type,
-        schedule_value: t.schedule_value,
-        status: t.status,
-        next_run: t.next_run,
-        last_run: t.last_run,
-      }))
-    writeTasksSnapshot(agentId, agentTasks)
+  function refreshSnapshot(agentId: string) {
+    refreshTasksSnapshot(agentId, getTasks)
   }
 
   // 16. 启动时记忆维护：日志清理 + 快照恢复
