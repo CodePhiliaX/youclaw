@@ -10,10 +10,13 @@ type SSEEvent = {
   error?: string
   isProcessing?: boolean
   tool?: string
+  input?: string
 }
 
 export function useSSE(chatId: string | null, onEvent: (event: SSEEvent) => void) {
   const eventSourceRef = useRef<EventSource | null>(null)
+  const subIdRef = useRef<string | null>(null)
+  const removeListenerRef = useRef<(() => void) | null>(null)
   const onEventRef = useRef(onEvent)
   onEventRef.current = onEvent
 
@@ -29,6 +32,7 @@ export function useSSE(chatId: string | null, onEvent: (event: SSEEvent) => void
       // 订阅 EventBus 事件
       api.subscribeEvents(chatId).then((result) => {
         subId = result.subId
+        subIdRef.current = subId
       })
 
       // 监听主进程推送的事件
@@ -39,11 +43,14 @@ export function useSSE(chatId: string | null, onEvent: (event: SSEEvent) => void
           onEventRef.current(e)
         }
       })
+      removeListenerRef.current = removeListener
 
       return () => {
         removeListener?.()
+        removeListenerRef.current = null
         if (subId) {
           api.unsubscribeEvents(subId)
+          subIdRef.current = null
         }
       }
     }
@@ -81,8 +88,16 @@ export function useSSE(chatId: string | null, onEvent: (event: SSEEvent) => void
   }, [chatId])
 
   const close = useCallback(() => {
+    // Web: close EventSource
     eventSourceRef.current?.close()
     eventSourceRef.current = null
+    // Electron: unsubscribe
+    if (subIdRef.current) {
+      getElectronAPI().unsubscribeEvents(subIdRef.current)
+      subIdRef.current = null
+    }
+    removeListenerRef.current?.()
+    removeListenerRef.current = null
   }, [])
 
   return { close }
