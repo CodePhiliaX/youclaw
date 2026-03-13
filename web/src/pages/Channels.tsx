@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Radio, CheckCircle, Save, Eye, EyeOff,
   ExternalLink, RefreshCw, Plus, Trash2,
-  Power, PowerOff, AlertTriangle,
+  Power, PowerOff, AlertTriangle, Pencil, Check, X,
 } from 'lucide-react'
 import {
   getChannels, getChannelTypes, createChannel,
@@ -304,6 +304,8 @@ function ChannelDetail({
   const [actionLoading, setActionLoading] = useState('')
   const [actionError, setActionError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editingLabel, setEditingLabel] = useState(false)
+  const [labelDraft, setLabelDraft] = useState(channel.label)
 
   const handleConnect = async () => {
     setActionLoading('connect')
@@ -345,6 +347,26 @@ function ChannelDetail({
     }
   }
 
+  const handleSaveLabel = async () => {
+    const trimmed = labelDraft.trim()
+    if (!trimmed || trimmed === channel.label) {
+      setEditingLabel(false)
+      setLabelDraft(channel.label)
+      return
+    }
+    setActionLoading('label')
+    setActionError('')
+    try {
+      await updateChannel(channel.id, { label: trimmed })
+      setEditingLabel(false)
+      onUpdated()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setActionLoading('')
+    }
+  }
+
   const handleToggleEnabled = async () => {
     setActionLoading('toggle')
     setActionError('')
@@ -378,7 +400,45 @@ function ChannelDetail({
             )}
           </div>
           <div>
-            <h1 className="text-xl font-semibold">{channel.label}</h1>
+            {editingLabel ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={labelDraft}
+                  onChange={(e) => setLabelDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveLabel()
+                    if (e.key === 'Escape') { setEditingLabel(false); setLabelDraft(channel.label) }
+                  }}
+                  className="text-xl font-semibold bg-muted border border-border rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="channel-label-input"
+                />
+                <button
+                  onClick={handleSaveLabel}
+                  disabled={actionLoading === 'label'}
+                  className="p-1 rounded-md text-green-400 hover:bg-green-500/10 transition-colors"
+                  data-testid="channel-label-save"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => { setEditingLabel(false); setLabelDraft(channel.label) }}
+                  className="p-1 rounded-md text-muted-foreground hover:bg-accent/50 transition-colors"
+                  data-testid="channel-label-cancel"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <h1
+                className="text-xl font-semibold group/label flex items-center gap-1.5 cursor-pointer"
+                onClick={() => { setEditingLabel(true); setLabelDraft(channel.label) }}
+                data-testid="channel-label-display"
+              >
+                {channel.label}
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover/label:opacity-100 transition-opacity" />
+              </h1>
+            )}
             <p className="text-sm text-muted-foreground font-mono">{channel.id}</p>
           </div>
         </div>

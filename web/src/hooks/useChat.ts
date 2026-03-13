@@ -117,8 +117,9 @@ export function useChat(agentId: string) {
   }, [agentId, chatId])
 
   const loadChat = useCallback(async (existingChatId: string) => {
-    setChatId(existingChatId)
     const msgs = await getMessages(existingChatId)
+    if (msgs.length === 0) throw new Error('Chat not found or empty')
+    setChatId(existingChatId)
     setMessages(msgs.map(m => ({
       id: m.id,
       role: m.is_bot_message ? 'assistant' as const : 'user' as const,

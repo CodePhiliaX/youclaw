@@ -93,8 +93,53 @@ export class ChannelManager {
       logger.info('已从 env 迁移飞书 channel 配置到数据库')
     }
 
+    // 迁移 QQ
+    if (env.QQ_BOT_APP_ID && env.QQ_BOT_SECRET) {
+      createChannelRecord({
+        id: 'qq',
+        type: 'qq',
+        label: 'QQ',
+        config: JSON.stringify({ botAppId: env.QQ_BOT_APP_ID, botSecret: env.QQ_BOT_SECRET }),
+        enabled: true,
+      })
+      seeded = true
+      logger.info('已从 env 迁移 QQ channel 配置到数据库')
+    }
+
+    // 迁移企业微信
+    if (env.WECOM_CORP_ID && env.WECOM_CORP_SECRET && env.WECOM_AGENT_ID && env.WECOM_TOKEN && env.WECOM_ENCODING_AES_KEY) {
+      createChannelRecord({
+        id: 'wecom',
+        type: 'wecom',
+        label: 'WeCom',
+        config: JSON.stringify({
+          corpId: env.WECOM_CORP_ID,
+          corpSecret: env.WECOM_CORP_SECRET,
+          agentId: env.WECOM_AGENT_ID,
+          token: env.WECOM_TOKEN,
+          encodingAESKey: env.WECOM_ENCODING_AES_KEY,
+        }),
+        enabled: true,
+      })
+      seeded = true
+      logger.info('已从 env 迁移企业微信 channel 配置到数据库')
+    }
+
+    // 迁移钉钉
+    if (env.DINGTALK_CLIENT_ID && env.DINGTALK_SECRET) {
+      createChannelRecord({
+        id: 'dingtalk',
+        type: 'dingtalk',
+        label: 'DingTalk',
+        config: JSON.stringify({ appKey: env.DINGTALK_CLIENT_ID, appSecret: env.DINGTALK_SECRET }),
+        enabled: true,
+      })
+      seeded = true
+      logger.info('已从 env 迁移钉钉 channel 配置到数据库')
+    }
+
     if (seeded) {
-      logger.info('Channel 配置已迁移到数据库，后续可从环境变量中移除 TELEGRAM_BOT_TOKEN / FEISHU_APP_ID / FEISHU_APP_SECRET')
+      logger.info('Channel 配置已迁移到数据库，后续可从环境变量中移除相关环境变量')
     }
   }
 
@@ -246,6 +291,13 @@ export class ChannelManager {
         configuredFields,
       }
     })
+  }
+
+  /**
+   * 获取 channel 实例（webhook 路由使用）
+   */
+  getChannelInstance(id: string): Channel | null {
+    return this.managed.get(id)?.instance ?? null
   }
 
   /**

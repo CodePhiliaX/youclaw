@@ -324,7 +324,7 @@ export class FeishuChannel implements Channel {
   private async addProcessingReaction(messageId: string, chatId: string): Promise<void> {
     try {
       const res = await this.client.im.messageReaction.create({
-        data: { reaction_type: { emoji_type: 'OnIt' } },
+        data: { reaction_type: { emoji_type: 'Typing' } },
         path: { message_id: messageId },
       })
       if (res?.data?.reaction_id) {

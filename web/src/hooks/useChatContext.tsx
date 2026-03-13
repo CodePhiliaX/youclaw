@@ -4,6 +4,9 @@ import { getChats, getAgents, deleteChat as deleteChatApi, getBrowserProfiles, t
 import type { ChatItem } from '../lib/chat-utils'
 import type { Attachment } from '../types/attachment'
 
+const LAST_AGENT_KEY = 'youclaw-last-agent-id'
+const chatKey = (agentId: string) => `youclaw-last-chat:${agentId}`
+
 type Agent = { id: string; name: string }
 
 interface ChatContextType {
@@ -46,7 +49,9 @@ export function useChatContext() {
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const [agentId, setAgentId] = useState('default')
+  const [agentId, setAgentId] = useState(
+    () => localStorage.getItem(LAST_AGENT_KEY) || 'default'
+  )
   const [agents, setAgents] = useState<Agent[]>([])
   const [chatList, setChatList] = useState<ChatItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -74,14 +79,46 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refreshChats() }, [chat.chatId, refreshChats])
 
+  // 持久化 agentId
+  useEffect(() => {
+    localStorage.setItem(LAST_AGENT_KEY, agentId)
+  }, [agentId])
+
+  // 持久化当前 agent 的 chatId
+  useEffect(() => {
+    if (chat.chatId) localStorage.setItem(chatKey(agentId), chat.chatId)
+  }, [chat.chatId, agentId])
+
+  // 切换 agent 或首次加载时，恢复该 agent 的上次会话
+  const prevAgentRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevAgentRef.current === agentId) return
+    prevAgentRef.current = agentId
+    const lastChatId = localStorage.getItem(chatKey(agentId))
+    if (lastChatId) {
+      chat.loadChat(lastChatId).catch(() => {
+        localStorage.removeItem(chatKey(agentId))
+        chat.newChat()
+      })
+    } else {
+      chat.newChat()
+    }
+  }, [agentId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const chatRef = useRef(chat)
   chatRef.current = chat
 
   const deleteChat = useCallback(async (chatIdToDelete: string) => {
     await deleteChatApi(chatIdToDelete)
     if (chatRef.current.chatId === chatIdToDelete) chatRef.current.newChat()
+    // 清理所有 agent 下匹配的 localStorage 记录
+    for (const a of agents) {
+      if (localStorage.getItem(chatKey(a.id)) === chatIdToDelete) {
+        localStorage.removeItem(chatKey(a.id))
+      }
+    }
     refreshChats()
-  }, [refreshChats])
+  }, [refreshChats, agents])
 
   return (
     <ChatContext.Provider value={{

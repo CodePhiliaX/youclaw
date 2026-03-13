@@ -16,6 +16,19 @@ export const QQConfigSchema = z.object({
   botSecret: z.string().min(1),
 })
 
+export const WeComConfigSchema = z.object({
+  corpId: z.string().min(1),
+  corpSecret: z.string().min(1),
+  agentId: z.string().min(1),
+  token: z.string().min(1),
+  encodingAESKey: z.string().min(1),
+})
+
+export const DingTalkConfigSchema = z.object({
+  appKey: z.string().min(1),
+  appSecret: z.string().min(1),
+})
+
 // ===== 配置字段描述 =====
 
 export interface ConfigFieldInfo {
@@ -72,6 +85,33 @@ export const CHANNEL_TYPE_REGISTRY: Record<string, ChannelTypeInfo> = {
     ],
     docsUrl: 'https://q.qq.com',
     configSchema: QQConfigSchema,
+  },
+  wecom: {
+    type: 'wecom',
+    label: 'WeCom',
+    description: 'WeCom Bot (Webhook Callback)',
+    chatIdPrefix: 'wecom:',
+    configFields: [
+      { key: 'corpId', label: 'Corp ID', placeholder: 'ww...', secret: false },
+      { key: 'corpSecret', label: 'Corp Secret', placeholder: '', secret: true },
+      { key: 'agentId', label: 'Agent ID', placeholder: '1000001', secret: false },
+      { key: 'token', label: 'Callback Token', placeholder: '', secret: true },
+      { key: 'encodingAESKey', label: 'Encoding AES Key', placeholder: '43 chars', secret: true },
+    ],
+    docsUrl: 'https://developer.work.weixin.qq.com',
+    configSchema: WeComConfigSchema,
+  },
+  dingtalk: {
+    type: 'dingtalk',
+    label: 'DingTalk',
+    description: 'DingTalk Bot (Stream Mode)',
+    chatIdPrefix: 'dingtalk:',
+    configFields: [
+      { key: 'appKey', label: 'App Key', placeholder: '', secret: false },
+      { key: 'appSecret', label: 'App Secret', placeholder: '', secret: true },
+    ],
+    docsUrl: 'https://open.dingtalk.com',
+    configSchema: DingTalkConfigSchema,
   },
 }
 

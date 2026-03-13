@@ -50,6 +50,15 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   FEISHU_APP_ID: z.string().optional(),
   FEISHU_APP_SECRET: z.string().optional(),
+  QQ_BOT_APP_ID: z.string().optional(),
+  QQ_BOT_SECRET: z.string().optional(),
+  WECOM_CORP_ID: z.string().optional(),
+  WECOM_CORP_SECRET: z.string().optional(),
+  WECOM_AGENT_ID: z.string().optional(),
+  WECOM_TOKEN: z.string().optional(),
+  WECOM_ENCODING_AES_KEY: z.string().optional(),
+  DINGTALK_CLIENT_ID: z.string().optional(),
+  DINGTALK_SECRET: z.string().optional(),
 })
 
 export type EnvConfig = z.infer<typeof envSchema>
