@@ -43,7 +43,8 @@
     "resources": [
       "../agents/**/*",
       "../skills/**/*",
-      "../prompts/**/*"
+      "../prompts/**/*",
+      "../node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
     ],
     "macOS": {
       "minimumSystemVersion": "10.15"

@@ -70,6 +70,46 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
         env_vars.push(("DATA_DIR".into(), app_data.to_string_lossy().to_string()));
     }
 
+    // 确保 PATH 包含常见的 bun/node 安装路径（Finder 启动时 PATH 很短）
+    {
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/default".into());
+        let extra_paths = [
+            format!("{}/.bun/bin", home),
+            format!("{}/.cargo/bin", home),
+            format!("{}/.nvm/current/bin", home),
+            "/usr/local/bin".into(),
+            "/opt/homebrew/bin".into(),
+        ];
+        let mut path_parts: Vec<&str> = current_path.split(':').collect();
+        for p in &extra_paths {
+            if !path_parts.contains(&p.as_str()) {
+                path_parts.push(p.as_str());
+            }
+        }
+        env_vars.push(("PATH".into(), path_parts.join(":")));
+    }
+
+    // 设置资源目录（agents/skills/prompts 的只读模板）
+    match app.path().resource_dir() {
+        Ok(resource_dir) => {
+            log::info!("Resource dir: {}", resource_dir.display());
+            env_vars.push(("RESOURCES_DIR".into(), resource_dir.to_string_lossy().to_string()));
+        }
+        Err(e) => {
+            log::warn!("Failed to get resource_dir: {}, falling back to exe dir", e);
+            // fallback: 可执行文件所在目录的上级 Resources 目录
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(macos_dir) = exe.parent() {
+                    let resources = macos_dir.parent().unwrap_or(macos_dir).join("Resources");
+                    if resources.exists() {
+                        env_vars.push(("RESOURCES_DIR".into(), resources.to_string_lossy().to_string()));
+                    }
+                }
+            }
+        }
+    }
+
     let shell = app.shell();
     let mut cmd = shell.sidecar("youclaw-server").map_err(|e| e.to_string())?;
 
@@ -169,6 +209,7 @@ async fn restart_sidecar(app: AppHandle) -> Result<(), String> {
 }
 
 /// 从 store 或默认值获取端口
+#[cfg(debug_assertions)]
 fn get_port(app: &AppHandle) -> u16 {
     if let Ok(store) = app.store("settings.json") {
         if let Some(port_val) = store.get("port") {
@@ -296,6 +337,11 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                kill_sidecar(app);
+            }
+        });
 }

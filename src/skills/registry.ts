@@ -174,8 +174,8 @@ export class RegistryManager {
   private loadRecommendedList(): void {
     const logger = getLogger()
     try {
-      // 从项目 data 目录读取
-      const filePath = resolve(import.meta.dirname, 'recommended-skills.json')
+      // 使用 Bun.file + import.meta.resolve 确保编译后也能读取嵌入的文件
+      const filePath = new URL('./recommended-skills.json', import.meta.url).pathname
       const raw = readFileSync(filePath, 'utf-8')
       this.recommended = JSON.parse(raw)
       logger.debug({ count: this.recommended.length }, '推荐技能列表已加载')

@@ -1,6 +1,7 @@
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
 import { getEnv } from '../config/index.ts'
 import { getLogger } from '../logger/index.ts'
 import { getSession, saveSession } from '../db/index.ts'
@@ -11,17 +12,28 @@ import type { HooksManager } from './hooks.ts'
 import { resolveMcpServers } from './mcp-utils.ts'
 import type { AgentConfig, ProcessParams } from './types.ts'
 
-// 将 asar 路径转换为 asar.unpacked 路径（非 asar 环境原样返回）
-function toUnpacked(p: string): string {
-  return p.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked')
-}
-
-// Electron 打包后 cli.js 在 asar.unpacked 中，需要显式指定路径
+// 解析 claude-agent-sdk cli.js 路径
+// - Tauri 打包模式：从 RESOURCES_DIR 读取
+// - 开发模式：通过 require.resolve 定位 node_modules
 function resolveCliPath(): string {
-  const require = createRequire(import.meta.url)
-  const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk')
-  const cliPath = resolve(dirname(sdkEntry), 'cli.js')
-  return toUnpacked(cliPath)
+  // Tauri 打包模式：cli.js 在 resources 目录中
+  const resourcesDir = process.env.RESOURCES_DIR
+  if (resourcesDir) {
+    const resourceCliPath = resolve(resourcesDir, '_up_/node_modules/@anthropic-ai/claude-agent-sdk/cli.js')
+    if (existsSync(resourceCliPath)) {
+      return resourceCliPath
+    }
+  }
+
+  // 开发模式：通过 require.resolve 定位
+  try {
+    const require = createRequire(import.meta.url)
+    const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk')
+    return resolve(dirname(sdkEntry), 'cli.js')
+  } catch {
+    // fallback: 相对于项目根目录
+    return resolve(process.cwd(), 'node_modules/@anthropic-ai/claude-agent-sdk/cli.js')
+  }
 }
 
 export class AgentRuntime {
@@ -200,8 +212,7 @@ export class AgentRuntime {
     )
 
     // 构建 query 选项
-    // cwd 和 cli 路径都需要指向 asar.unpacked 中的真实文件系统路径
-    const cwd = toUnpacked(this.config.workspaceDir)
+    const cwd = this.config.workspaceDir
     const mcpServerNames = this.config.mcpServers ? Object.keys(this.config.mcpServers) : []
 
     logger.info({

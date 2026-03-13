@@ -287,18 +287,18 @@ export class ChannelManager {
     }
     this.managed.set(record.id, managed)
 
-    try {
-      await instance.connect()
+    // 异步连接，不阻塞启动流程
+    instance.connect().then(() => {
       this.router.addChannel(instance)
       managed.retryCount = 0
       managed.lastError = undefined
       logger.info({ channelId: record.id, type: record.type }, 'Channel 已连接')
-    } catch (err) {
+    }).catch((err) => {
       const errMsg = err instanceof Error ? err.message : String(err)
       managed.lastError = errMsg
       logger.error({ channelId: record.id, error: errMsg }, 'Channel 连接失败')
       this.scheduleRetry(record.id)
-    }
+    })
   }
 
   /**
