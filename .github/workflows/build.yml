@@ -185,6 +185,10 @@ jobs:
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 2) + '\n');
           "
 
+      - name: Prepare runtime directories
+        run: mkdir -p agents && touch agents/.gitkeep
+        shell: bash
+
       - name: Build sidecar
         shell: bash
         run: |
