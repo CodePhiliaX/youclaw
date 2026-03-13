@@ -83,7 +83,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.tauri_args }}
-          includeUpdaterJson: false
+          includeUpdaterJson: true
 
       - name: Notify Feishu
         if: always()
@@ -130,7 +130,7 @@ jobs:
           releaseBody: ""
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: false
+          includeUpdaterJson: true
 
       - name: Notify Feishu
         if: always()
@@ -184,7 +184,7 @@ jobs:
           releaseBody: ""
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: false
+          includeUpdaterJson: true
 
       - name: Notify Feishu
         if: always()
