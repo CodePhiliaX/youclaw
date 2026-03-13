@@ -137,6 +137,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
           <button
             type="button"
             onClick={handleNewChat}
+            data-testid="chat-new"
             className={cn(
               'flex items-center h-9 w-full rounded-lg transition-colors whitespace-nowrap overflow-hidden',
               ICON_PX,
@@ -158,6 +159,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
             <NavLink
               key={item.to}
               to={item.to}
+              data-testid={`nav-${item.to.slice(1)}`}
               className={({ isActive }) => cn(
                 'flex items-center h-9 rounded-lg transition-colors whitespace-nowrap overflow-hidden',
                 ICON_PX,
@@ -185,6 +187,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
             <div className="px-3 py-2">
               <input
                 type="text"
+                data-testid="chat-search"
                 className="w-full bg-background border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 placeholder={t.sidebar.search}
                 value={chatCtx.searchQuery}
@@ -204,6 +207,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
                     <div
                       key={chat.chat_id}
                       role="option"
+                      data-testid="chat-item"
                       aria-selected={chatCtx.chatId === chat.chat_id}
                       className={cn(
                         'group flex items-center rounded-lg px-2.5 py-2 cursor-pointer transition-colors',
@@ -216,6 +220,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
+                            data-testid="chat-item-menu"
                             className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center hover:bg-accent transition-all shrink-0"
                             onClick={e => e.stopPropagation()}
                           >
@@ -224,6 +229,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                           <DropdownMenuItem
+                            data-testid="chat-item-delete"
                             className="text-destructive"
                             onClick={e => { e.stopPropagation(); setDeleteTarget(chat.chat_id) }}
                           >

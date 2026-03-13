@@ -40,13 +40,13 @@ export function ChatInput() {
             <PromptInputTools>
               {agents.length > 1 && (
                 <PromptInputSelect value={agentId} onValueChange={setAgentId}>
-                  <PromptInputSelectTrigger className="h-7 text-xs gap-1">
+                  <PromptInputSelectTrigger className="h-7 text-xs gap-1" data-testid="agent-selector">
                     <Bot className="h-3.5 w-3.5" />
                     <PromptInputSelectValue />
                   </PromptInputSelectTrigger>
                   <PromptInputSelectContent>
                     {agents.map((a) => (
-                      <PromptInputSelectItem key={a.id} value={a.id}>
+                      <PromptInputSelectItem key={a.id} value={a.id} data-testid={`agent-option-${a.id}`}>
                         {a.name}
                       </PromptInputSelectItem>
                     ))}
