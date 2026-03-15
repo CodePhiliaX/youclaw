@@ -11,6 +11,7 @@ import {
 import type { ChannelInstance, ChannelTypeInfo } from '../api/client'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
+import { SidePanel } from '@/components/layout/SidePanel'
 
 export function Channels() {
   const { t } = useI18n()
@@ -41,7 +42,7 @@ export function Channels() {
   return (
     <div className="flex h-full">
       {/* 左侧：Channel 列表 */}
-      <div className="w-[260px] border-r border-border flex flex-col">
+      <SidePanel>
         <div className="p-3 border-b border-border flex items-center justify-between">
           <h2 className="font-semibold text-sm">{t.channels.title}</h2>
           <div className="flex items-center gap-1">
@@ -114,7 +115,7 @@ export function Channels() {
             </div>
           )}
         </div>
-      </div>
+      </SidePanel>
 
       {/* 右侧：详情 / 创建 */}
       <div className="flex-1 overflow-y-auto">

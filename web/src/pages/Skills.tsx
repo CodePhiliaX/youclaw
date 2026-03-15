@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
+import { SidePanel } from '@/components/layout/SidePanel'
 
 const sourceOrder: Skill['source'][] = ['workspace', 'builtin', 'user']
 
@@ -120,7 +121,7 @@ export function Skills() {
       {tab === 'installed' ? (
         <div className="flex flex-1 min-h-0">
           {/* 左侧：Skill 列表 */}
-          <div className="w-[260px] border-r border-border flex flex-col">
+          <SidePanel>
             <div className="p-3 border-b border-border">
               <h2 className="font-semibold text-sm">{t.skills.title}</h2>
             </div>
@@ -163,7 +164,7 @@ export function Skills() {
                 </div>
               ))}
             </div>
-          </div>
+          </SidePanel>
 
           {/* 右侧：Skill 详情 */}
           <div className="flex-1 p-6 overflow-y-auto">

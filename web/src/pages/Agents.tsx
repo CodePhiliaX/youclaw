@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
+import { SidePanel } from '@/components/layout/SidePanel'
 
 type AgentState = {
   sessionId: string | null
@@ -191,7 +192,7 @@ export function Agents() {
   return (
     <div className="flex h-full">
       {/* 左侧：Agent 列表 */}
-      <div className="w-[260px] border-r border-border flex flex-col">
+      <SidePanel>
         <div className="p-3 border-b border-border flex items-center justify-between">
           <h2 className="font-semibold text-sm">{t.agents.title}</h2>
           <button
@@ -242,7 +243,7 @@ export function Agents() {
             </button>
           ))}
         </div>
-      </div>
+      </SidePanel>
 
       {/* 右侧 */}
       <div className="flex-1 overflow-y-auto">

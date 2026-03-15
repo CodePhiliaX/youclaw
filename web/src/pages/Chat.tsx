@@ -7,6 +7,7 @@ import { groupChatsByDate, resolveAvatar, PRESET_GRADIENTS } from "@/lib/chat-ut
 import { ChatWelcome } from "@/components/chat/ChatWelcome";
 import { ChatMessages } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { SidePanel } from "@/components/layout/SidePanel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,7 +102,7 @@ export function Chat() {
   return (
     <div className="flex h-full">
       {/* 左侧：对话列表 */}
-      <div className="w-[260px] border-r border-[var(--subtle-border)] flex flex-col shrink-0">
+      <SidePanel>
         <div className="p-3 border-b border-[var(--subtle-border)] flex items-center justify-between">
           <h2 className="font-semibold text-sm">{t.nav.chat}</h2>
           <div className="flex items-center gap-0.5">
@@ -302,7 +303,7 @@ export function Chat() {
             </div>
           ))}
         </div>
-      </div>
+      </SidePanel>
 
       {/* 右侧：聊天内容 */}
       <div className="flex-1 flex flex-col overflow-hidden relative">

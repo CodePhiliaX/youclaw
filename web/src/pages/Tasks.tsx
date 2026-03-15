@@ -12,6 +12,7 @@ import {
 import type { ScheduledTaskDTO, TaskRunLogDTO } from '../api/client'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
+import { SidePanel } from '@/components/layout/SidePanel'
 import {
   Clock,
   Plus,
@@ -24,7 +25,6 @@ import {
   CalendarClock,
   Copy,
   Pencil,
-  Search,
   PlayCircle,
 } from 'lucide-react'
 
@@ -107,7 +107,6 @@ export function Tasks() {
   const [logs, setLogs] = useState<TaskRunLogDTO[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
   const [panelMode, setPanelMode] = useState<PanelMode>('view')
-  const [searchQuery, setSearchQuery] = useState('')
 
   const selectedTask = tasks.find((t) => t.id === selectedId) ?? null
 
@@ -174,16 +173,6 @@ export function Tasks() {
     return a?.name ?? agentId
   }
 
-  // 过滤任务
-  const filteredTasks = tasks.filter((task) => {
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      (task.name?.toLowerCase().includes(q)) ||
-      task.prompt.toLowerCase().includes(q) ||
-      task.schedule_value.toLowerCase().includes(q)
-    )
-  })
 
   const handleCreateNew = () => {
     setSelectedId(null)
@@ -193,40 +182,22 @@ export function Tasks() {
   return (
     <div className="flex h-full">
       {/* 左面板 — 任务列表 */}
-      <div className="w-80 flex-shrink-0 border-r border-border flex flex-col">
-        {/* 搜索框 + 新建按钮 */}
-        <div className="p-3 border-b border-border space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="h-4 w-4 text-muted-foreground" />
-              <h1 className="text-sm font-semibold">{t.tasks.title}</h1>
-              <span className="text-xs text-muted-foreground">({tasks.length})</span>
-            </div>
-            <button
-              data-testid="task-create-btn"
-              onClick={handleCreateNew}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              {t.tasks.createTask}
-            </button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              data-testid="task-search"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t.tasks.search}
-              className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-accent/30 border border-border focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
+      <SidePanel>
+        <div className="p-3 border-b border-[var(--subtle-border)] flex items-center justify-between">
+          <h2 className="font-semibold text-sm">{t.tasks.title}</h2>
+          <button
+            data-testid="task-create-btn"
+            onClick={handleCreateNew}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-accent-foreground transition-all duration-200 ease-[var(--ease-soft)]"
+            title={t.tasks.createTask}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         {/* 任务列表 */}
         <div className="flex-1 overflow-y-auto">
-          {filteredTasks.length === 0 ? (
+          {tasks.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <div className="text-center">
                 <Clock className="h-10 w-10 mx-auto mb-3 opacity-20" />
@@ -236,7 +207,7 @@ export function Tasks() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {filteredTasks.map((task) => (
+              {tasks.map((task) => (
                 <div
                   key={task.id}
                   data-testid="task-item"
@@ -267,7 +238,7 @@ export function Tasks() {
             </div>
           )}
         </div>
-      </div>
+      </SidePanel>
 
       {/* 右面板 */}
       <div className="flex-1 overflow-y-auto">

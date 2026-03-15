@@ -8,6 +8,7 @@ import {
 import type { BrowserProfileDTO } from '../api/client'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
+import { SidePanel } from '@/components/layout/SidePanel'
 import { Globe, Plus, Trash2, Play, FolderOpen } from 'lucide-react'
 
 export function BrowserProfiles() {
@@ -53,26 +54,20 @@ export function BrowserProfiles() {
   return (
     <div className="flex h-full">
       {/* 左面板 — Profile 列表 */}
-      <div className="w-80 flex-shrink-0 border-r border-border flex flex-col">
-        <div className="p-3 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <h1 className="text-sm font-semibold">{t.browser.title}</h1>
-              <span className="text-xs text-muted-foreground">({profiles.length})</span>
-            </div>
-            <button
-              data-testid="browser-create-btn"
-              onClick={() => {
-                setSelectedId(null)
-                setShowCreate(true)
-              }}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              {t.browser.createProfile}
-            </button>
-          </div>
+      <SidePanel>
+        <div className="p-3 border-b border-[var(--subtle-border)] flex items-center justify-between">
+          <h2 className="font-semibold text-sm">{t.browser.title}</h2>
+          <button
+            data-testid="browser-create-btn"
+            onClick={() => {
+              setSelectedId(null)
+              setShowCreate(true)
+            }}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-accent-foreground transition-all duration-200 ease-[var(--ease-soft)]"
+            title={t.browser.createProfile}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -112,7 +107,7 @@ export function BrowserProfiles() {
             </div>
           )}
         </div>
-      </div>
+      </SidePanel>
 
       {/* 右面板 */}
       <div className="flex-1 overflow-y-auto">
