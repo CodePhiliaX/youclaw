@@ -39,6 +39,7 @@ export function Chat() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [avatarPickerChatId, setAvatarPickerChatId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +50,17 @@ export function Chat() {
       chatCtx.setSearchQuery("");
     }
   }, [searchOpen]);
+
+  // 编辑模式激活时聚焦 input
+  useEffect(() => {
+    if (editingChatId) {
+      // 等待 DOM 渲染完成后聚焦
+      requestAnimationFrame(() => {
+        editInputRef.current?.focus();
+        editInputRef.current?.select();
+      });
+    }
+  }, [editingChatId]);
 
   const filteredChats = chatCtx.searchQuery
     ? chatCtx.chatList.filter((c) =>
@@ -69,10 +81,10 @@ export function Chat() {
     }
   };
 
-  const handleStartEditName = (chatId: string, currentName: string) => {
-    setEditingChatId(chatId);
+  const handleStartEditName = (cid: string, currentName: string) => {
     setEditingName(currentName);
-    setTimeout(() => editInputRef.current?.select(), 0);
+    // 等 DropdownMenu 关闭动画完成后再激活编辑
+    setTimeout(() => setEditingChatId(cid), 100);
   };
 
   const handleSaveEditName = async () => {
@@ -177,10 +189,37 @@ export function Chat() {
                   )}
                   onClick={() => chatCtx.loadChat(chat.chat_id)}
                 >
-                  <div
-                    className="w-9 h-9 rounded-full shrink-0 mt-0.5"
-                    style={{ background: resolveAvatar(chat.avatar) }}
-                  />
+                  {/* 头像：作为 Popover 的锚点 */}
+                  <Popover
+                    open={avatarPickerChatId === chat.chat_id}
+                    onOpenChange={(open) => !open && setAvatarPickerChatId(null)}
+                  >
+                    <PopoverTrigger asChild>
+                      <div
+                        className="w-9 h-9 rounded-full shrink-0 mt-0.5"
+                        style={{ background: resolveAvatar(chat.avatar) }}
+                      />
+                    </PopoverTrigger>
+                    <PopoverContent side="right" align="start" className="w-auto p-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        {PRESET_GRADIENTS.map((gradient, i) => (
+                          <button
+                            key={i}
+                            className={cn(
+                              "w-9 h-9 rounded-full transition-all",
+                              chat.avatar === `gradient:${i}` ? "ring-2 ring-white ring-offset-2 ring-offset-background" : "hover:scale-110",
+                            )}
+                            style={{ background: gradient }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              chatCtx.updateChat(chat.chat_id, { avatar: `gradient:${i}` });
+                              setAvatarPickerChatId(null);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       {editingChatId === chat.chat_id ? (
@@ -220,35 +259,15 @@ export function Chat() {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <DropdownMenuItem
-                                  onSelect={(e) => e.preventDefault()}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Palette className="h-3.5 w-3.5 mr-2" />
-                                  {t.chat.editAvatar}
-                                </DropdownMenuItem>
-                              </PopoverTrigger>
-                              <PopoverContent side="right" align="start" className="w-auto p-3">
-                                <div className="grid grid-cols-4 gap-2">
-                                  {PRESET_GRADIENTS.map((gradient, i) => (
-                                    <button
-                                      key={i}
-                                      className={cn(
-                                        "w-9 h-9 rounded-full transition-all",
-                                        chat.avatar === `gradient:${i}` ? "ring-2 ring-white ring-offset-2 ring-offset-background" : "hover:scale-110",
-                                      )}
-                                      style={{ background: gradient }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        chatCtx.updateChat(chat.chat_id, { avatar: `gradient:${i}` });
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAvatarPickerChatId(chat.chat_id);
+                              }}
+                            >
+                              <Palette className="h-3.5 w-3.5 mr-2" />
+                              {t.chat.editAvatar}
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
