@@ -6,10 +6,7 @@ import {
 } from "@/components/ai-elements/attachments";
 import {
   PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
+  PromptInputButton,
   PromptInputFooter,
   PromptInputHeader,
   PromptInputSelect,
@@ -26,7 +23,24 @@ import {
 import { useChatContext } from "@/hooks/chatCtx";
 import { useI18n } from "@/i18n";
 import { useAppStore } from "@/stores/app";
-import { Bot, Globe } from "lucide-react";
+import { Bot, Globe, PlusIcon } from "lucide-react";
+
+const MAX_FILES = 5;
+
+// 直接打开文件浏览器的附件按钮
+function AddAttachmentButton() {
+  const attachments = usePromptInputAttachments();
+  const isFull = attachments.files.length >= MAX_FILES;
+  return (
+    <PromptInputButton
+      size="sm"
+      disabled={isFull}
+      onClick={() => attachments.openFileDialog()}
+    >
+      <PlusIcon className="size-4" />
+    </PromptInputButton>
+  );
+}
 
 // 输入框中的附件预览（textarea 上方）
 function AttachmentPreviews() {
@@ -99,7 +113,7 @@ export function ChatInput() {
       <PromptInput
         onSubmit={handleSubmit}
         accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv"
-        maxFiles={5}
+        maxFiles={MAX_FILES}
         maxFileSize={10 * 1024 * 1024}
       >
         <AttachmentPreviews />
@@ -109,12 +123,7 @@ export function ChatInput() {
         />
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger />
-              <PromptInputActionMenuContent>
-                <PromptInputActionAddAttachments />
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
+            <AddAttachmentButton />
             {agents.length > 1 && (
               <PromptInputSelect value={agentId} onValueChange={setAgentId}>
                 <PromptInputSelectTrigger

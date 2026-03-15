@@ -550,6 +550,150 @@ describe('saveTaskRunLog — 非常大的 result', () => {
   })
 })
 
+// ===== Delivery 字段测试 =====
+
+describe('createTask — delivery 字段', () => {
+  beforeEach(() => cleanTables('scheduled_tasks'))
+
+  test('不传 deliveryMode 时默认为 none', () => {
+    createTask({
+      id: 'dlv-db-1',
+      agentId: 'agent-1',
+      chatId: 'task:dlv',
+      prompt: 'test',
+      scheduleType: 'interval',
+      scheduleValue: '60000',
+      nextRun: new Date().toISOString(),
+    })
+
+    const task = getTask('dlv-db-1')!
+    expect(task.delivery_mode).toBe('none')
+    expect(task.delivery_target).toBeNull()
+  })
+
+  test('传入 deliveryMode=push 和 deliveryTarget', () => {
+    createTask({
+      id: 'dlv-db-2',
+      agentId: 'agent-1',
+      chatId: 'task:dlv2',
+      prompt: 'test',
+      scheduleType: 'interval',
+      scheduleValue: '60000',
+      nextRun: new Date().toISOString(),
+      deliveryMode: 'push',
+      deliveryTarget: 'tg:123456',
+    })
+
+    const task = getTask('dlv-db-2')!
+    expect(task.delivery_mode).toBe('push')
+    expect(task.delivery_target).toBe('tg:123456')
+  })
+
+  test('deliveryMode=none 时 deliveryTarget 为 null', () => {
+    createTask({
+      id: 'dlv-db-3',
+      agentId: 'agent-1',
+      chatId: 'task:dlv3',
+      prompt: 'test',
+      scheduleType: 'interval',
+      scheduleValue: '60000',
+      nextRun: new Date().toISOString(),
+      deliveryMode: 'none',
+    })
+
+    const task = getTask('dlv-db-3')!
+    expect(task.delivery_mode).toBe('none')
+    expect(task.delivery_target).toBeNull()
+  })
+})
+
+describe('updateTask — delivery 字段', () => {
+  beforeEach(() => {
+    cleanTables('scheduled_tasks')
+    createTask({
+      id: 'dlv-up-1',
+      agentId: 'agent-1',
+      chatId: 'task:dlv-up',
+      prompt: 'test',
+      scheduleType: 'interval',
+      scheduleValue: '60000',
+      nextRun: new Date().toISOString(),
+    })
+  })
+
+  test('更新 deliveryMode 和 deliveryTarget', () => {
+    updateTask('dlv-up-1', { deliveryMode: 'push', deliveryTarget: 'tg:999' })
+    const task = getTask('dlv-up-1')!
+    expect(task.delivery_mode).toBe('push')
+    expect(task.delivery_target).toBe('tg:999')
+  })
+
+  test('将 deliveryTarget 设为 null', () => {
+    updateTask('dlv-up-1', { deliveryMode: 'push', deliveryTarget: 'tg:111' })
+    updateTask('dlv-up-1', { deliveryMode: 'none', deliveryTarget: null })
+    const task = getTask('dlv-up-1')!
+    expect(task.delivery_mode).toBe('none')
+    expect(task.delivery_target).toBeNull()
+  })
+})
+
+describe('saveTaskRunLog — delivery_status 字段', () => {
+  beforeEach(() => cleanTables('task_run_logs'))
+
+  test('保存带 deliveryStatus 的日志', () => {
+    saveTaskRunLog({
+      taskId: 'dlv-log-1',
+      runAt: new Date().toISOString(),
+      durationMs: 100,
+      status: 'success',
+      result: 'ok',
+      deliveryStatus: 'sent',
+    })
+
+    const logs = getTaskRunLogs('dlv-log-1')
+    expect(logs[0].delivery_status).toBe('sent')
+  })
+
+  test('不传 deliveryStatus 时为 null', () => {
+    saveTaskRunLog({
+      taskId: 'dlv-log-2',
+      runAt: new Date().toISOString(),
+      durationMs: 100,
+      status: 'success',
+    })
+
+    const logs = getTaskRunLogs('dlv-log-2')
+    expect(logs[0].delivery_status).toBeNull()
+  })
+
+  test('deliveryStatus 值为 failed', () => {
+    saveTaskRunLog({
+      taskId: 'dlv-log-3',
+      runAt: new Date().toISOString(),
+      durationMs: 100,
+      status: 'success',
+      deliveryStatus: 'failed',
+    })
+
+    const logs = getTaskRunLogs('dlv-log-3')
+    expect(logs[0].delivery_status).toBe('failed')
+  })
+
+  test('deliveryStatus 值为 skipped', () => {
+    saveTaskRunLog({
+      taskId: 'dlv-log-4',
+      runAt: new Date().toISOString(),
+      durationMs: 100,
+      status: 'error',
+      error: 'fail',
+      deliveryStatus: 'skipped',
+    })
+
+    const logs = getTaskRunLogs('dlv-log-4')
+    expect(logs[0].delivery_status).toBe('skipped')
+  })
+})
+
 describe('deleteTask — 删除后重新创建同 ID', () => {
   beforeEach(() => cleanTables('scheduled_tasks', 'task_run_logs'))
 

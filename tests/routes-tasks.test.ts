@@ -591,6 +591,123 @@ describe('DELETE — 删除后 GET 返回 404', () => {
   })
 })
 
+// ===== Delivery 相关路由测试 =====
+
+describe('POST /tasks — delivery 字段', () => {
+  test('创建带 deliveryMode=push 和 deliveryTarget 的任务', async () => {
+    const res = await app.request('/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'agent-1', chatId: 'task:dlv', prompt: '投递测试',
+        scheduleType: 'interval', scheduleValue: '120000',
+        deliveryMode: 'push', deliveryTarget: 'tg:123456',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json() as any
+    expect(body.delivery_mode).toBe('push')
+    expect(body.delivery_target).toBe('tg:123456')
+  })
+
+  test('deliveryMode=push 不传 deliveryTarget → 400', async () => {
+    const res = await app.request('/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'agent-1', chatId: 'task:dlv-fail', prompt: '缺少目标',
+        scheduleType: 'interval', scheduleValue: '120000',
+        deliveryMode: 'push',
+        // 缺少 deliveryTarget
+      }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as any
+    expect(body.error).toContain('deliveryTarget')
+  })
+
+  test('不传 deliveryMode 时默认 none', async () => {
+    const res = await app.request('/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'agent-1', chatId: 'task:dlv-default', prompt: '默认投递',
+        scheduleType: 'interval', scheduleValue: '120000',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json() as any
+    expect(body.delivery_mode).toBe('none')
+    expect(body.delivery_target).toBeNull()
+  })
+})
+
+describe('PUT /tasks/:id — delivery 字段', () => {
+  test('更新 deliveryMode 和 deliveryTarget', async () => {
+    createTask({ id: 'put-dlv-1', agentId: 'agent-1', chatId: 'c', prompt: 'p', scheduleType: 'interval', scheduleValue: '60000', nextRun: new Date().toISOString() })
+
+    const res = await app.request('/tasks/put-dlv-1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deliveryMode: 'push', deliveryTarget: 'tg:789' }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.delivery_mode).toBe('push')
+    expect(body.delivery_target).toBe('tg:789')
+  })
+
+  test('将 deliveryTarget 设为 null', async () => {
+    createTask({ id: 'put-dlv-2', agentId: 'agent-1', chatId: 'c', prompt: 'p', scheduleType: 'interval', scheduleValue: '60000', nextRun: new Date().toISOString(), deliveryMode: 'push', deliveryTarget: 'tg:111' })
+
+    const res = await app.request('/tasks/put-dlv-2', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deliveryMode: 'none', deliveryTarget: null }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.delivery_mode).toBe('none')
+    expect(body.delivery_target).toBeNull()
+  })
+})
+
+describe('POST /tasks/:id/clone — delivery 字段', () => {
+  test('克隆任务保留 delivery 配置', async () => {
+    createTask({ id: 'clone-dlv-1', agentId: 'agent-1', chatId: 'c', prompt: 'p', scheduleType: 'interval', scheduleValue: '60000', nextRun: new Date().toISOString(), name: '投递任务', deliveryMode: 'push', deliveryTarget: 'tg:555' })
+
+    const res = await app.request('/tasks/clone-dlv-1/clone', { method: 'POST' })
+    expect(res.status).toBe(201)
+    const body = await res.json() as any
+    expect(body.delivery_mode).toBe('push')
+    expect(body.delivery_target).toBe('tg:555')
+    expect(body.name).toBe('投递任务 (copy)')
+  })
+
+  test('克隆无 delivery 配置的任务', async () => {
+    createTask({ id: 'clone-dlv-2', agentId: 'agent-1', chatId: 'c', prompt: 'p', scheduleType: 'interval', scheduleValue: '60000', nextRun: new Date().toISOString() })
+
+    const res = await app.request('/tasks/clone-dlv-2/clone', { method: 'POST' })
+    expect(res.status).toBe(201)
+    const body = await res.json() as any
+    expect(body.delivery_mode).toBe('none')
+    expect(body.delivery_target).toBeNull()
+  })
+})
+
+describe('GET /tasks/:id/logs — delivery_status 字段', () => {
+  test('运行日志包含 delivery_status', async () => {
+    createTask({ id: 'log-dlv-1', agentId: 'agent-1', chatId: 'c', prompt: 'p', scheduleType: 'interval', scheduleValue: '60000', nextRun: new Date().toISOString() })
+    saveTaskRunLog({ taskId: 'log-dlv-1', runAt: '2026-03-10T10:00:00.000Z', durationMs: 1000, status: 'success', result: 'ok', deliveryStatus: 'sent' })
+    saveTaskRunLog({ taskId: 'log-dlv-1', runAt: '2026-03-10T11:00:00.000Z', durationMs: 500, status: 'success', result: 'ok', deliveryStatus: 'skipped' })
+
+    const res = await app.request('/tasks/log-dlv-1/logs')
+    const body = await res.json() as any[]
+    expect(body[0].delivery_status).toBe('skipped')
+    expect(body[1].delivery_status).toBe('sent')
+  })
+})
+
 describe('PUT /tasks/:id — 空 body', () => {
   test('空对象 {} 不修改任务', async () => {
     createTask({ id: 'put-empty-1', agentId: 'agent-1', chatId: 'c', prompt: 'original', scheduleType: 'interval', scheduleValue: '60000', nextRun: new Date().toISOString(), name: '原始名', description: '原始描述' })
