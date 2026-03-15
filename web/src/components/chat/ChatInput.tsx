@@ -1,33 +1,32 @@
-import { useI18n } from "@/i18n";
-import { useChatContext } from "@/hooks/chatCtx";
+import {
+  Attachment,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+} from "@/components/ai-elements/attachments";
 import {
   PromptInput,
-  PromptInputTextarea,
-  PromptInputHeader,
+  PromptInputActionAddAttachments,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
   PromptInputFooter,
-  PromptInputTools,
-  PromptInputSubmit,
+  PromptInputHeader,
   PromptInputSelect,
-  PromptInputSelectTrigger,
   PromptInputSelectContent,
   PromptInputSelectItem,
+  PromptInputSelectTrigger,
   PromptInputSelectValue,
-  PromptInputActionMenu,
-  PromptInputActionMenuTrigger,
-  PromptInputActionMenuContent,
-  PromptInputActionAddAttachments,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Attachments,
-  Attachment,
-  AttachmentPreview,
-  AttachmentInfo,
-  AttachmentRemove,
-} from "@/components/ai-elements/attachments";
-import { Bot, Globe } from "lucide-react";
+import { useChatContext } from "@/hooks/chatCtx";
+import { useI18n } from "@/i18n";
 import { useAppStore } from "@/stores/app";
+import { Bot, Globe } from "lucide-react";
 
 // 输入框中的附件预览（textarea 上方）
 function AttachmentPreviews() {
@@ -55,8 +54,15 @@ function AttachmentPreviews() {
 export function ChatInput() {
   const { t } = useI18n();
   const {
-    send, chatStatus, stop, agentId, setAgentId, agents,
-    browserProfiles, selectedProfileId, setSelectedProfileId,
+    send,
+    chatStatus,
+    stop,
+    agentId,
+    setAgentId,
+    agents,
+    browserProfiles,
+    selectedProfileId,
+    setSelectedProfileId,
   } = useChatContext();
   const modelReady = useAppStore((s) => s.modelReady);
 
@@ -75,13 +81,17 @@ export function ChatInput() {
         const match = f.url.match(/^data:([^;]+);base64,(.+)$/s);
         if (!match) return null;
         const [, mediaType, data] = match;
-        const padding = (data.match(/=+$/) || [''])[0].length;
-        const size = Math.floor(data.length * 3 / 4) - padding;
+        const padding = (data.match(/=+$/) || [""])[0].length;
+        const size = Math.floor((data.length * 3) / 4) - padding;
         return { filename: f.filename, mediaType, data, size };
       })
       .filter((a): a is NonNullable<typeof a> => a !== null);
 
-    send(text, selectedProfileId ?? undefined, attachments.length > 0 ? attachments : undefined);
+    send(
+      text,
+      selectedProfileId ?? undefined,
+      attachments.length > 0 ? attachments : undefined,
+    );
   };
 
   return (
@@ -92,63 +102,78 @@ export function ChatInput() {
         maxFiles={5}
         maxFileSize={10 * 1024 * 1024}
       >
-          <AttachmentPreviews />
-          <PromptInputTextarea
-            placeholder={t.chat.placeholder}
-            data-testid="chat-input"
-          />
-          <PromptInputFooter>
-            <PromptInputTools>
-              <PromptInputActionMenu>
-                <PromptInputActionMenuTrigger />
-                <PromptInputActionMenuContent>
-                  <PromptInputActionAddAttachments />
-                </PromptInputActionMenuContent>
-              </PromptInputActionMenu>
-              {agents.length > 1 && (
-                <PromptInputSelect value={agentId} onValueChange={setAgentId}>
-                  <PromptInputSelectTrigger className="h-7 text-xs gap-1" data-testid="agent-selector">
-                    <Bot className="h-3.5 w-3.5" />
-                    <PromptInputSelectValue />
-                  </PromptInputSelectTrigger>
-                  <PromptInputSelectContent>
-                    {agents.map((a) => (
-                      <PromptInputSelectItem key={a.id} value={a.id} data-testid={`agent-option-${a.id}`}>
-                        {a.name}
-                      </PromptInputSelectItem>
-                    ))}
-                  </PromptInputSelectContent>
-                </PromptInputSelect>
-              )}
-              {browserProfiles.length > 0 && (
-                <PromptInputSelect
-                  value={selectedProfileId ?? '__none__'}
-                  onValueChange={v => setSelectedProfileId(v === '__none__' ? null : v)}
+        <AttachmentPreviews />
+        <PromptInputTextarea
+          placeholder={t.chat.placeholder}
+          data-testid="chat-input"
+        />
+        <PromptInputFooter>
+          <PromptInputTools>
+            <PromptInputActionMenu>
+              <PromptInputActionMenuTrigger />
+              <PromptInputActionMenuContent>
+                <PromptInputActionAddAttachments />
+              </PromptInputActionMenuContent>
+            </PromptInputActionMenu>
+            {agents.length > 1 && (
+              <PromptInputSelect value={agentId} onValueChange={setAgentId}>
+                <PromptInputSelectTrigger
+                  className="h-7 text-xs gap-1"
+                  data-testid="agent-selector"
                 >
-                  <PromptInputSelectTrigger className="h-7 text-xs gap-1" data-testid="chat-browser-profile-trigger">
-                    <Globe className="h-3.5 w-3.5" />
-                    <PromptInputSelectValue />
-                  </PromptInputSelectTrigger>
-                  <PromptInputSelectContent>
-                    <PromptInputSelectItem value="__none__" data-testid="chat-browser-profile-none">
-                      {t.chat.noBrowserProfile}
+                  <Bot className="h-3.5 w-3.5" />
+                  <PromptInputSelectValue />
+                </PromptInputSelectTrigger>
+                <PromptInputSelectContent>
+                  {agents.map((a) => (
+                    <PromptInputSelectItem
+                      key={a.id}
+                      value={a.id}
+                      data-testid={`agent-option-${a.id}`}
+                    >
+                      {a.name}
                     </PromptInputSelectItem>
-                    {browserProfiles.map(p => (
-                      <PromptInputSelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </PromptInputSelectItem>
-                    ))}
-                  </PromptInputSelectContent>
-                </PromptInputSelect>
-              )}
-            </PromptInputTools>
-            <PromptInputSubmit
-              status={chatStatus}
-              onStop={stop}
-              data-testid="chat-send"
-            />
-          </PromptInputFooter>
-        </PromptInput>
+                  ))}
+                </PromptInputSelectContent>
+              </PromptInputSelect>
+            )}
+            {browserProfiles.length > 0 && (
+              <PromptInputSelect
+                value={selectedProfileId ?? "__none__"}
+                onValueChange={(v) =>
+                  setSelectedProfileId(v === "__none__" ? null : v)
+                }
+              >
+                <PromptInputSelectTrigger
+                  className="h-7 text-xs gap-1"
+                  data-testid="chat-browser-profile-trigger"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  <PromptInputSelectValue />
+                </PromptInputSelectTrigger>
+                <PromptInputSelectContent>
+                  <PromptInputSelectItem
+                    value="__none__"
+                    data-testid="chat-browser-profile-none"
+                  >
+                    {t.chat.noBrowserProfile}
+                  </PromptInputSelectItem>
+                  {browserProfiles.map((p) => (
+                    <PromptInputSelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </PromptInputSelectItem>
+                  ))}
+                </PromptInputSelectContent>
+              </PromptInputSelect>
+            )}
+          </PromptInputTools>
+          <PromptInputSubmit
+            status={chatStatus}
+            onStop={stop}
+            data-testid="chat-send"
+          />
+        </PromptInputFooter>
+      </PromptInput>
     </div>
   );
 }
