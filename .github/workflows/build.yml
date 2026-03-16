@@ -252,29 +252,17 @@ jobs:
         shell: bash
         run: npm install -g @tauri-apps/cli@latest
 
-      - name: Re-package signed nsis.zip and regenerate all signatures
+      - name: Regenerate Tauri updater signatures for signed exe
         shell: bash
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_PRIVATE_KEY_PASSWORD: ""
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          NSIS_ZIP="unsigned/You.Claw_${VERSION}_x64-setup.nsis.zip"
           EXE_PATH=$(ls unsigned/*.exe | head -1)
 
-          # Replace exe in zip with signed version, then regenerate .nsis.zip.sig
-          if [ -f "$NSIS_ZIP" ]; then
-            cd unsigned
-            unzip -o "$(basename "$NSIS_ZIP")" -d nsis_tmp
-            cp "$(basename "$EXE_PATH")" nsis_tmp/
-            cd nsis_tmp
-            zip -r "../$(basename "$NSIS_ZIP")" .
-            cd ../..
-            rm -rf unsigned/nsis_tmp
-
-            echo "Regenerating .nsis.zip.sig for re-packaged nsis.zip..."
-            npx tauri signer sign "$NSIS_ZIP"
-          fi
+          # The exe was modified by code signing, so regenerate its Tauri updater signature
+          echo "Regenerating .exe.sig for code-signed exe..."
+          npx tauri signer sign "$EXE_PATH"
 
       - name: Upload signed artifacts to release
         shell: bash
@@ -498,7 +486,7 @@ jobs:
             --arg version "$VERSION" \
             --arg date "$DATE" \
             --argjson platforms "$PLATFORMS" \
-            '{version: $version, pub_date: $date, platforms: $platforms}' > latest.json
+            '{version: $version, notes: "", pub_date: $date, platforms: $platforms}' > latest.json
 
           echo "=== latest.json ==="
           cat latest.json

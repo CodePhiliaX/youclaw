@@ -10,12 +10,12 @@ import {
 } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { unzipSync } from 'fflate'
 import { getLogger } from '../logger/index.ts'
 import { parseFrontmatter } from './frontmatter.ts'
 import type { SkillsLoader } from './loader.ts'
 import type { SkillRegistryMeta } from './types.ts'
+import recommendedSkillsData from './recommended-skills.json'
 
 export type MarketplaceSort =
   | 'updated'
@@ -1020,19 +1020,8 @@ export class RegistryManager {
 
   /** Load the bundled recommendation list once at startup */
   private loadRecommendedList(): void {
-    const logger = getLogger()
-    try {
-      const filePath = new URL('./recommended-skills.json', import.meta.url).pathname
-      const raw = readFileSync(filePath, 'utf-8')
-      this.recommended = JSON.parse(raw)
-      logger.debug({ count: this.recommended.length }, 'Recommendation list loaded')
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error) },
-        'Failed to load recommendation list',
-      )
-      this.recommended = []
-    }
+    this.recommended = recommendedSkillsData
+    getLogger().debug({ count: this.recommended.length }, 'Recommendation list loaded')
   }
 
   /** Get locally installed skill slug set */

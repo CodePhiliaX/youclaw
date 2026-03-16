@@ -81,17 +81,18 @@ export class SkillsLoader {
 
   /**
    * Filter loaded skills based on agent.yaml skills field.
-   * Returns all skills if agent does not specify a skills field.
+   * "*" wildcard = all skills; undefined or empty = no skills; otherwise filter by explicit list.
    */
   loadSkillsForAgent(agentConfig: AgentConfig): Skill[] {
     const allSkills = this.loadAllSkills()
-
-    // If agent does not specify skills, return all skills
-    if (!agentConfig.skills || agentConfig.skills.length === 0) {
+    // "*" wildcard = all skills
+    if (agentConfig.skills?.includes('*')) {
       return allSkills
     }
-
-    // Return only the skills specified by the agent
+    // undefined or empty = no skills
+    if (!agentConfig.skills || agentConfig.skills.length === 0) {
+      return []
+    }
     return allSkills.filter((skill) => agentConfig.skills!.includes(skill.name))
   }
 
@@ -109,18 +110,14 @@ export class SkillsLoader {
    */
   getAgentSkillsView(agentConfig: AgentConfig): AgentSkillsView {
     const allSkills = this.loadAllSkills()
-
-    // available: all skills accessible to this agent
     const available = allSkills
-
-    // enabled: skills listed in agent.yaml skills field
-    const enabled = agentConfig.skills && agentConfig.skills.length > 0
-      ? allSkills.filter((s) => agentConfig.skills!.includes(s.name))
-      : allSkills
-
-    // eligible: skills that passed eligibility checks
+    const isWildcard = agentConfig.skills?.includes('*')
+    const enabled = isWildcard
+      ? allSkills
+      : agentConfig.skills && agentConfig.skills.length > 0
+        ? allSkills.filter((s) => agentConfig.skills!.includes(s.name))
+        : []
     const eligible = enabled.filter((s) => s.eligible)
-
     return { available, enabled, eligible }
   }
 
