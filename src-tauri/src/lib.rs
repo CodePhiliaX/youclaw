@@ -180,10 +180,14 @@ fn kill_sidecar(app: &AppHandle) {
     if let Some(child) = guard.take() {
         let pid = child.pid();
         // Windows: use taskkill /T to kill entire process tree (including bun child processes)
+        // CREATE_NO_WINDOW prevents a console window from flashing on screen
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
             let _ = std::process::Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output();
             log::info!("Sidecar process tree killed (PID: {})", pid);
         }
@@ -273,6 +277,14 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // Windows: remove native decorations, frontend will draw custom title bar
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_decorations(false);
+                }
+            }
 
             // Create system tray
             let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;

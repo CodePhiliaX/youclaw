@@ -283,7 +283,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const resolvedTheme = (theme as Theme) ?? "system"
     set({
       theme: resolvedTheme,
-      locale: (locale as Locale) ?? "en",
+      locale: (locale as Locale) ?? (navigator.language.startsWith("zh") ? "zh" : "en"),
       sidebarCollapsed: sidebar === "true",
     })
     applyThemeToDOM(resolvedTheme)
