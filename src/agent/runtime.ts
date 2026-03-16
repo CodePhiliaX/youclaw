@@ -119,12 +119,18 @@ function validateCliExecutable(cliPath: string): void {
   }
 
   // Quick spawn test: verify the CLI can at least start
+  // In Tauri bundled mode, process.execPath is the compiled sidecar binary —
+  // using it to run cli.js would launch the whole server again and fail with EADDRINUSE.
+  // Fall back to 'bun' (same logic as executeQuery).
+  const isBundled = process.execPath.includes('.app/') || process.execPath.includes('youclaw-server')
+  const runtime = isBundled ? 'bun' : process.execPath
   try {
-    execSync(`"${process.execPath}" "${cliPath}" --help`, { timeout: 5000, encoding: 'utf-8', stdio: 'pipe' })
-    safeLog('info', 'SDK cli.js validation passed', { cliPath })
+    execSync(`"${runtime}" "${cliPath}" --help`, { timeout: 5000, encoding: 'utf-8', stdio: 'pipe' })
+    safeLog('info', 'SDK cli.js validation passed', { cliPath, runtime })
   } catch (spawnErr) {
     safeLog('warn', 'SDK cli.js quick-test failed — the agent may not start correctly', {
       cliPath,
+      runtime,
       error: spawnErr instanceof Error ? spawnErr.message : String(spawnErr),
     })
   }
