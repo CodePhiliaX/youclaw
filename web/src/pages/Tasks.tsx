@@ -13,6 +13,7 @@ import type { ScheduledTaskDTO, TaskRunLogDTO } from '../api/client'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
 import { SidePanel } from '@/components/layout/SidePanel'
+import { useDragRegion } from "@/hooks/useDragRegion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import {
@@ -103,6 +104,7 @@ type PanelMode = 'view' | 'create' | 'edit'
 
 export function Tasks() {
   const { t } = useI18n()
+  const drag = useDragRegion()
   const [tasks, setTasks] = useState<ScheduledTaskDTO[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -185,7 +187,7 @@ export function Tasks() {
     <div className="flex h-full">
       {/* Left panel — Task list */}
       <SidePanel>
-        <div className="h-12 shrink-0 px-3 border-b border-[var(--subtle-border)] flex items-center justify-between">
+        <div className="h-12 shrink-0 px-3 border-b border-[var(--subtle-border)] flex items-center justify-between" {...drag}>
           <h2 className="font-semibold text-sm">{t.tasks.title}</h2>
           <button
             data-testid="task-create-btn"

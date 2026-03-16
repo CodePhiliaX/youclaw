@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { getDatabase } from '../db/index.ts'
 import { getEnv } from '../config/index.ts'
 import { getLogger } from '../logger/index.ts'
@@ -219,7 +220,7 @@ export function createAuthRoutes() {
       })
 
       if (!res.ok) {
-        return c.json({ error: 'Upload failed' }, res.status)
+        return c.json({ error: 'Upload failed' }, res.status as ContentfulStatusCode)
       }
 
       const data = await res.json() as { data?: string }
@@ -255,7 +256,7 @@ export function createAuthRoutes() {
       })
 
       if (!res.ok) {
-        return c.json({ error: 'Update profile failed' }, res.status)
+        return c.json({ error: 'Update profile failed' }, res.status as ContentfulStatusCode)
       }
 
       const data = await res.json() as { data?: { id?: number; displayName?: string; avatar?: string; email?: string } }

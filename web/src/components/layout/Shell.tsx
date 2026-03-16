@@ -28,21 +28,12 @@ export function Shell({ children }: { children: ReactNode }) {
     <PlatformContext.Provider value={platformCtx}>
       <ChatProvider>
         <div className="h-screen flex flex-col bg-background text-foreground">
-          {/* Windows: full-width titlebar at top */}
+          {/* Windows: full-width titlebar with controls */}
           {isWin && <WindowsTitleBar />}
           <div className="flex-1 flex overflow-hidden">
             <AppSidebar onOpenSettings={(tab) => { setSettingsTab(tab as SettingsTab); setSettingsOpen(true) }} />
             <main className="flex-1 overflow-hidden flex flex-col">
-              {/* macOS: drag region at top of main content area */}
-              {isMac && (
-                <div
-                  className="h-11 shrink-0"
-                  style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-                />
-              )}
-              <div className="flex-1 overflow-hidden">
-                {children}
-              </div>
+              {children}
             </main>
           </div>
         </div>

@@ -102,45 +102,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ authLoading: true })
 
-      if (isTauri) {
-        // Tauri mode: use deep link callback
-        const { loginUrl } = await getAuthLoginUrl('tauri')
-        const { openUrl } = await import('@tauri-apps/plugin-opener')
-        await openUrl(loginUrl)
-
-        // Listen for deep link events
-        const { listen } = await import('@tauri-apps/api/event')
-        let timeoutId: ReturnType<typeof setTimeout>
-        const unlisten = await listen<string>('deep-link-received', async (event) => {
-          try {
-            const url = new URL(event.payload)
-            if (url.host === 'auth' || url.pathname.startsWith('/auth/callback') || url.pathname.startsWith('auth/callback')) {
-              const token = url.searchParams.get('token')
-              if (token) {
-                await saveAuthToken(token)
-                await get().fetchUser()
-                await get().fetchCreditBalance()
-              }
-            }
-          } catch (err) {
-            console.error('Deep link auth failed:', err)
-          } finally {
-            unlisten()
-            clearTimeout(timeoutId)
-            set({ authLoading: false })
-          }
-        })
-
-        // 120 second timeout
-        timeoutId = setTimeout(() => {
-          unlisten()
-          set({ authLoading: false })
-        }, 120000)
-      } else {
-        // Web mode: keep polling logic
-        const { loginUrl } = await getAuthLoginUrl()
-        window.open(loginUrl, '_blank')
-
+      // Helper: poll /auth/status until logged in
+      const startPolling = () => {
         const pollInterval = setInterval(async () => {
           try {
             const { loggedIn } = await getAuthStatus()
@@ -148,17 +111,62 @@ export const useAppStore = create<AppState>((set, get) => ({
               clearInterval(pollInterval)
               await get().fetchUser()
               await get().fetchCreditBalance()
+              set({ authLoading: false })
             }
           } catch {
             // Continue polling
           }
         }, 2000)
-
-        // 60 second timeout
+        // 120 second timeout
         setTimeout(() => {
           clearInterval(pollInterval)
           set({ authLoading: false })
-        }, 60000)
+        }, 120000)
+        return pollInterval
+      }
+
+      if (isTauri) {
+        // Tauri mode: use HTTP callback (works in both dev and release)
+        // plus deep link listener as fast path for release builds
+        const { loginUrl } = await getAuthLoginUrl()
+        const { openUrl } = await import('@tauri-apps/plugin-opener')
+        await openUrl(loginUrl)
+
+        // Start polling as primary mechanism (HTTP callback saves token server-side)
+        const pollInterval = startPolling()
+
+        // Also listen for deep link as fast path (release builds with registered scheme)
+        try {
+          const { listen } = await import('@tauri-apps/api/event')
+          const unlisten = await listen<string>('deep-link-received', async (event) => {
+            try {
+              const url = new URL(event.payload)
+              if (url.host === 'auth' || url.pathname.startsWith('/auth/callback') || url.pathname.startsWith('auth/callback')) {
+                const token = url.searchParams.get('token')
+                if (token) {
+                  clearInterval(pollInterval)
+                  await saveAuthToken(token)
+                  await get().fetchUser()
+                  await get().fetchCreditBalance()
+                  set({ authLoading: false })
+                }
+              }
+            } catch (err) {
+              console.error('Deep link auth failed:', err)
+            } finally {
+              unlisten()
+            }
+          })
+          // Clean up listener after timeout
+          setTimeout(() => unlisten(), 120000)
+        } catch {
+          // Deep link not available, polling handles it
+        }
+      } else {
+        // Web mode: polling
+        const { loginUrl } = await getAuthLoginUrl()
+        window.open(loginUrl, '_blank')
+        startPolling()
       }
     } catch (err) {
       console.error('Login failed:', err)

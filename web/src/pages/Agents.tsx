@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { useI18n } from '../i18n'
 import { useChatContext } from '../hooks/chatCtx'
 import { SidePanel } from '@/components/layout/SidePanel'
+import { useDragRegion } from "@/hooks/useDragRegion"
 
 type AgentState = {
   sessionId: string | null
@@ -60,6 +61,7 @@ export function Agents() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const { refreshAgents: refreshChatAgents } = useChatContext()
+  const drag = useDragRegion()
   const [agents, setAgents] = useState<Agent[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
@@ -197,7 +199,7 @@ export function Agents() {
     <div className="flex h-full">
       {/* Left side: Agent list */}
       <SidePanel>
-        <div className="h-12 shrink-0 px-3 border-b border-border flex items-center justify-between">
+        <div className="h-12 shrink-0 px-3 border-b border-border flex items-center justify-between" {...drag}>
           <h2 className="font-semibold text-sm">{t.agents.title}</h2>
           <button
             data-testid="agent-create-btn"

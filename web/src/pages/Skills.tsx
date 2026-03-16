@@ -4,6 +4,7 @@ import {
   configureSkillEnv,
   installSkill,
   toggleSkill,
+  deleteSkill,
   getMarketplaceSkills,
   getRecommendedSkills,
   installRecommendedSkill,
@@ -38,6 +39,8 @@ import { Input } from '../components/ui/input'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
 import { SidePanel } from '@/components/layout/SidePanel'
+import { useDragRegion } from "@/hooks/useDragRegion"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 
 const sourceOrder: Skill['source'][] = ['workspace', 'builtin', 'user']
 
@@ -58,6 +61,7 @@ function EligibilityIcon({ skill }: { skill: Skill }) {
 
 export function Skills() {
   const { t } = useI18n()
+  const drag = useDragRegion()
   const [tab, setTab] = useState<TabType>('installed')
   const [skills, setSkills] = useState<Skill[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -71,6 +75,8 @@ export function Skills() {
   const [marketplaceStatus, setMarketplaceStatus] = useState<'idle' | 'loading' | 'loading-more' | 'error'>('idle')
   const [marketplaceError, setMarketplaceError] = useState('')
   const [marketplaceSort, setMarketplaceSort] = useState<MarketplaceSort>('trending')
+
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   // Unified search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -198,7 +204,7 @@ export function Skills() {
         <div className="flex flex-1 min-h-0">
           {/* Left panel: skill list */}
           <SidePanel>
-            <div className="h-12 shrink-0 px-3 border-b border-border flex items-center">
+            <div className="h-12 shrink-0 px-3 border-b border-border flex items-center" {...drag}>
               <h2 className="font-semibold text-sm">{t.skills.title}</h2>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-3">
@@ -263,21 +269,34 @@ export function Skills() {
                     </div>
                     <p className="text-sm text-muted-foreground">{selectedSkill.frontmatter.description}</p>
                   </div>
-                  <Button
-                    data-testid="skill-toggle-btn"
-                    variant={selectedSkill.enabled ? 'secondary' : 'default'}
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await toggleSkill(selectedSkill.name, !selectedSkill.enabled)
-                        loadSkills()
-                      } catch (error) {
-                        console.error('Failed to toggle skill:', error)
-                      }
-                    }}
-                  >
-                    {selectedSkill.enabled ? t.skills.disable : t.skills.enable}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      data-testid="skill-toggle-btn"
+                      variant={selectedSkill.enabled ? 'secondary' : 'default'}
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await toggleSkill(selectedSkill.name, !selectedSkill.enabled)
+                          loadSkills()
+                        } catch (error) {
+                          console.error('Failed to toggle skill:', error)
+                        }
+                      }}
+                    >
+                      {selectedSkill.enabled ? t.skills.disable : t.skills.enable}
+                    </Button>
+                    {selectedSkill.source !== 'workspace' && (
+                      <Button
+                        data-testid="skill-delete-btn"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-red-400"
+                        onClick={() => setDeleteTarget(selectedSkill.name)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Eligibility status */}
@@ -517,6 +536,34 @@ export function Skills() {
           </div>
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.skills.deleteSkill}</AlertDialogTitle>
+            <AlertDialogDescription>{t.skills.confirmDeleteSkill}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!deleteTarget) return
+                try {
+                  await deleteSkill(deleteTarget)
+                  setSelected(null)
+                  loadSkills()
+                } catch (error) {
+                  console.error('Failed to delete skill:', error)
+                }
+                setDeleteTarget(null)
+              }}
+            >
+              {t.common.delete}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

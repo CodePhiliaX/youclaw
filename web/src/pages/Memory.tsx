@@ -9,6 +9,7 @@ import { Save, Pencil, X, ChevronRight, Calendar, FileText, Globe, MessageSquare
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
 import { SidePanel } from '@/components/layout/SidePanel'
+import { useDragRegion } from "@/hooks/useDragRegion"
 
 type Agent = {
   id: string
@@ -38,6 +39,7 @@ type MemoryItem = {
 
 export function Memory() {
   const { t } = useI18n()
+  const drag = useDragRegion()
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedId, setSelectedId] = useState<string>(GLOBAL_ID)
   const [memoryContent, setMemoryContent] = useState('')
@@ -190,7 +192,7 @@ export function Memory() {
     <div className="flex h-full">
       {/* Left: Memory list */}
       <SidePanel>
-        <div className="h-12 shrink-0 px-3 border-b border-[var(--subtle-border)] flex items-center justify-between">
+        <div className="h-12 shrink-0 px-3 border-b border-[var(--subtle-border)] flex items-center justify-between" {...drag}>
           <h2 className="font-semibold text-sm">{t.memory.title}</h2>
         </div>
 

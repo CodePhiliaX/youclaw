@@ -1,9 +1,12 @@
 import { Minus, Square, X } from 'lucide-react'
+import { useDragRegion } from '@/hooks/useDragRegion'
 
 /**
- * Windows custom title bar: full-width drag region + minimize/maximize/close
+ * Windows custom title bar: drag region + minimize/maximize/close
  */
 export function WindowsTitleBar() {
+  const drag = useDragRegion()
+
   const handleMinimize = () => {
     import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
       getCurrentWindow().minimize()
@@ -28,15 +31,10 @@ export function WindowsTitleBar() {
   return (
     <div
       className="h-9 shrink-0 flex items-center select-none border-b border-[var(--subtle-border)]"
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      {...drag}
     >
-      {/* Drag region fills remaining space */}
       <div className="flex-1" />
-      {/* Window control buttons */}
-      <div
-        className="flex h-full shrink-0"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-      >
+      <div className="flex h-full shrink-0">
         <button type="button" onClick={handleMinimize} className={`${btnBase} hover:bg-muted`} aria-label="Minimize">
           <Minus className="h-3.5 w-3.5" />
         </button>

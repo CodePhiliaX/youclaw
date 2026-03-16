@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "shell:allow-execute",
     "shell:allow-stdin-write",
     "store:default",

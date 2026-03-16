@@ -13,9 +13,11 @@ import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
 import { SidePanel } from '@/components/layout/SidePanel'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useDragRegion } from "@/hooks/useDragRegion"
 
 export function Channels() {
   const { t } = useI18n()
+  const drag = useDragRegion()
   const [channels, setChannels] = useState<ChannelInstance[]>([])
   const [channelTypes, setChannelTypes] = useState<ChannelTypeInfo[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -44,7 +46,7 @@ export function Channels() {
     <div className="flex h-full">
       {/* Left: Channel list */}
       <SidePanel>
-        <div className="h-12 shrink-0 px-3 border-b border-border flex items-center justify-between">
+        <div className="h-12 shrink-0 px-3 border-b border-border flex items-center justify-between" {...drag}>
           <h2 className="font-semibold text-sm">{t.channels.title}</h2>
           <div className="flex items-center gap-1">
             <button

@@ -19,6 +19,7 @@ import { useSidebar } from "@/hooks/useSidebar";
 import { openExternal } from "@/api/transport";
 import { useAppStore } from "@/stores/app";
 import { usePlatform } from "@/hooks/usePlatform";
+import { useDragRegion } from "@/hooks/useDragRegion";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,7 +39,8 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
   const { isCollapsed, toggle } = useSidebar();
   const { t } = useI18n();
   const { user, isLoggedIn, authLoading, login, logout, cloudEnabled } = useAppStore();
-  const { isMac, isDesktop } = usePlatform();
+  const { isMac } = usePlatform();
+  const drag = useDragRegion();
 
   const navItems = [
     { to: "/", icon: SquarePen, label: t.nav.chat },
@@ -61,7 +63,6 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
         </div>
       );
     }
-    // Offline / not logged in: default avatar
     return (
       <div className={cn("rounded-full bg-muted flex items-center justify-center text-muted-foreground", sizeClass)}>
         <User className={size === "sm" ? "h-3 w-3" : "h-4 w-4"} />
@@ -69,7 +70,6 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
     );
   };
 
-  // Display name
   const displayName = isLoggedIn && user ? user.name : (cloudEnabled ? t.account.notLoggedIn : t.account.offlineMode);
   const displaySub = isLoggedIn && user ? "Pro Plan" : (cloudEnabled ? t.account.loginHint : t.account.offlineModeHint);
 
@@ -83,16 +83,12 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
           isCollapsed ? "w-[52px]" : "w-[220px]",
         )}
         aria-expanded={!isCollapsed}
-        style={isDesktop ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
       >
-        {/* macOS: pad top to clear traffic lights */}
-        {isMac && <div className="h-11 shrink-0" />}
+        {/* macOS: traffic light spacing — draggable */}
+        {isMac && <div className="h-11 shrink-0" {...drag} />}
 
         {/* Top action bar */}
-        <div
-          className={cn("flex items-center h-[52px] shrink-0", ROW_PX)}
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
+        <div className={cn("flex items-center h-[52px] shrink-0", ROW_PX)}>
           {isCollapsed ? (
             <button
               type="button"
@@ -126,10 +122,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
         </div>
 
         {/* Page navigation */}
-        <nav
-          className="space-y-0.5 px-1.5"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
+        <nav className="space-y-0.5 px-1.5">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -163,14 +156,11 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
           ))}
         </nav>
 
-        {/* Spacer — draggable area for window movement */}
-        <div className="flex-1" />
+        {/* Spacer — draggable for window movement */}
+        <div className="flex-1" {...drag} />
 
         {/* Bottom: user avatar popup menu */}
-        <div
-          className="border-t border-[var(--subtle-border)] py-2 px-1.5"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
+        <div className="border-t border-[var(--subtle-border)] py-2 px-1.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -198,7 +188,6 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
               sideOffset={8}
               className="w-[240px] rounded-xl p-2"
             >
-              {/* Top user info area */}
               <div className="flex flex-col items-center py-3 px-2">
                 <div className="mb-2">
                   <AvatarView size="md" />
@@ -209,7 +198,6 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
 
               <DropdownMenuSeparator />
 
-              {/* Cloud mode & not logged in: login button */}
               {cloudEnabled && !isLoggedIn && (
                 <>
                   <DropdownMenuItem onClick={() => login()} disabled={authLoading} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
@@ -220,25 +208,21 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
                 </>
               )}
 
-              {/* Settings */}
               <DropdownMenuItem onClick={() => onOpenSettings()} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
                 <Settings2 className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{t.settings.title}</span>
               </DropdownMenuItem>
 
-              {/* GitHub */}
               <DropdownMenuItem onClick={() => openExternal("https://github.com/CodePhiliaX/youClaw")} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
                 <Github className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">GitHub</span>
               </DropdownMenuItem>
 
-              {/* About */}
               <DropdownMenuItem onClick={() => onOpenSettings("about")} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{t.settings.about}</span>
               </DropdownMenuItem>
 
-              {/* Logout -- only shown when logged in */}
               {isLoggedIn && (
                 <>
                   <DropdownMenuSeparator />

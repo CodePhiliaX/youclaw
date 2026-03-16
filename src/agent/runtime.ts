@@ -129,11 +129,24 @@ export class AgentRuntime {
         logger.warn('No model config available. Agent features will not work. Please configure a model in Settings.')
       }
 
-      // Inject user auth token into SDK request headers
-      const authToken = getAuthToken()
-      if (authToken) {
+      // Handle auth headers based on provider
+      if (modelConfig?.provider === 'builtin') {
+        const authToken = getAuthToken()
+        if (!authToken) {
+          throw new Error('Not logged in: Please log in to use built-in models')
+        }
         process.env.ANTHROPIC_CUSTOM_HEADERS = `rdxtoken: ${authToken}`
+      } else {
+        // Custom model: clean up rdxtoken header to prevent leaking from previous builtin requests
+        delete process.env.ANTHROPIC_CUSTOM_HEADERS
       }
+
+      logger.debug({
+        agentId, chatId,
+        baseUrl: process.env.ANTHROPIC_BASE_URL || '(default)',
+        hasCustomHeaders: !!process.env.ANTHROPIC_CUSTOM_HEADERS,
+        category: 'agent',
+      }, 'SDK env config before query')
 
       const { fullText, sessionId } = await this.executeQuery(
         finalPrompt,
@@ -216,6 +229,8 @@ export class AgentRuntime {
 
       return `Error: ${userError}`
     } finally {
+      // Clean up custom headers to prevent leaking between requests
+      delete process.env.ANTHROPIC_CUSTOM_HEADERS
       this.emitProcessing(agentId, chatId, false)
     }
   }
@@ -506,8 +521,12 @@ export class AgentRuntime {
     if (/insufficient|credit|balance|quota|insufficient_credits/i.test(raw)) {
       return { message: 'Insufficient credits or API quota. Please check your account balance.', errorCode: ErrorCode.INSUFFICIENT_CREDITS }
     }
-    // API authentication failure
-    if (/unauthorized|authentication_error|invalid.*token|invalid.*key/i.test(raw)) {
+    // Built-in model auth (user not logged in or token expired)
+    if (/not logged in|please log in/i.test(raw)) {
+      return { message: 'Please log in to use built-in models.', errorCode: ErrorCode.AUTH_FAILED }
+    }
+    // API authentication failure (401, invalid key/token)
+    if (/unauthorized|authentication_error|invalid.*token|invalid.*key|\b401\b/i.test(raw)) {
       return { message: 'Model authentication failed. Please check your API Key in Settings → Models.', errorCode: ErrorCode.AUTH_FAILED }
     }
     // Rate limiting
