@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Bot,
@@ -17,8 +16,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { useSidebar } from "@/hooks/useSidebar";
-import { isTauri, openExternal } from "@/api/transport";
+import { openExternal } from "@/api/transport";
 import { useAppStore } from "@/stores/app";
+import { usePlatform } from "@/hooks/usePlatform";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,16 +38,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
   const { isCollapsed, toggle } = useSidebar();
   const { t } = useI18n();
   const { user, isLoggedIn, authLoading, login, logout, cloudEnabled } = useAppStore();
-  const [platform, setPlatform] = useState("");
-
-  useEffect(() => {
-    if (!isTauri) return;
-    import("@tauri-apps/api/core").then(({ invoke }) => {
-      invoke<string>("get_platform").then(setPlatform);
-    });
-  }, []);
-
-  const isMac = platform === "macos";
+  const { isMac, isDesktop } = usePlatform();
 
   const navItems = [
     { to: "/", icon: SquarePen, label: t.nav.chat },
@@ -92,14 +83,10 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
           isCollapsed ? "w-[52px]" : "w-[220px]",
         )}
         aria-expanded={!isCollapsed}
+        style={isDesktop ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
       >
-        {/* macOS traffic light spacing */}
-        {isMac && (
-          <div
-            className="h-7 shrink-0"
-            style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-          />
-        )}
+        {/* macOS: pad top to clear traffic lights */}
+        {isMac && <div className="h-11 shrink-0" />}
 
         {/* Top action bar */}
         <div
@@ -139,7 +126,10 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
         </div>
 
         {/* Page navigation */}
-        <nav className="space-y-0.5 px-1.5">
+        <nav
+          className="space-y-0.5 px-1.5"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -173,7 +163,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
           ))}
         </nav>
 
-        {/* Spacer */}
+        {/* Spacer — draggable area for window movement */}
         <div className="flex-1" />
 
         {/* Bottom: user avatar popup menu */}

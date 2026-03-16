@@ -4,6 +4,7 @@ import { WindowsTitleBar } from './WindowsTitleBar'
 import { ChatProvider } from '@/hooks/useChatContext'
 import { SettingsDialog, type SettingsTab } from '@/components/settings/SettingsDialog'
 import { isTauri } from '@/api/transport'
+import { PlatformContext } from '@/hooks/usePlatform'
 
 export function Shell({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -19,29 +20,34 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const isWin = platform === 'windows'
   const isMac = platform === 'macos'
+  const isDesktop = isTauri
+
+  const platformCtx = { platform, isMac, isWin, isDesktop }
 
   return (
-    <ChatProvider>
-      <div className="h-screen flex flex-col bg-background text-foreground">
-        {/* Windows: custom title bar spanning full width */}
-        {isWin && <WindowsTitleBar />}
-        <div className="flex-1 flex overflow-hidden">
-          <AppSidebar onOpenSettings={(tab) => { setSettingsTab(tab); setSettingsOpen(true) }} />
-          <main className="flex-1 overflow-hidden flex flex-col">
-            {/* macOS: drag region bar at top of main content */}
-            {isMac && (
-              <div
-                className="h-7 shrink-0"
-                style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-              />
-            )}
-            <div className="flex-1 overflow-hidden">
-              {children}
-            </div>
-          </main>
+    <PlatformContext.Provider value={platformCtx}>
+      <ChatProvider>
+        <div className="h-screen flex flex-col bg-background text-foreground">
+          {/* Windows: custom title bar spanning full width */}
+          {isWin && <WindowsTitleBar />}
+          <div className="flex-1 flex overflow-hidden">
+            <AppSidebar onOpenSettings={(tab) => { setSettingsTab(tab as SettingsTab); setSettingsOpen(true) }} />
+            <main className="flex-1 overflow-hidden flex flex-col">
+              {/* macOS: drag region at top of main content area */}
+              {isMac && (
+                <div
+                  className="h-11 shrink-0"
+                  style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+                />
+              )}
+              <div className="flex-1 overflow-hidden">
+                {children}
+              </div>
+            </main>
+          </div>
         </div>
-      </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
-    </ChatProvider>
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
+      </ChatProvider>
+    </PlatformContext.Provider>
   )
 }
