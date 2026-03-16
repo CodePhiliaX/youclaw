@@ -60,7 +60,7 @@ You have persistent memory files. Use Read/Write tools to manage them.
 
 You can create, pause, resume, and cancel scheduled tasks by writing JSON files.
 
-**Directory**: Write JSON files to \`./data/ipc/{your_agent_id}/tasks/\` (the directory will be created automatically if it doesn't exist).
+**Directory**: Write JSON files to \`{{ipcTasksDir}}\` (the directory will be created automatically if it doesn't exist).
 
 **File naming**: Use \`{timestamp}-{random}.json\` format, e.g., \`1710000000000-abc123.json\`
 
@@ -90,7 +90,7 @@ You can create, pause, resume, and cancel scheduled tasks by writing JSON files.
 \`\`\`
 
 ### Current tasks
-You can read \`./data/ipc/{your_agent_id}/current_tasks.json\` to see existing scheduled tasks.
+You can read \`{{ipcCurrentTasksPath}}\` to see existing scheduled tasks.
 
 **Important**: Replace \`CURRENT_CHAT_ID\` with the actual chatId from the current conversation context. The task result will be delivered to this chat.
 `

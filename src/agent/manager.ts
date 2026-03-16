@@ -65,6 +65,21 @@ export class AgentManager {
       writeFileSync(resolve(defaultDir, 'USER.md'), DEFAULT_USER_MD)
       writeFileSync(resolve(defaultDir, 'TOOLS.md'), DEFAULT_TOOLS_MD)
       writeFileSync(resolve(defaultDir, 'memory', 'MEMORY.md'), DEFAULT_MEMORY_MD)
+    } else {
+      // Sync AGENT.md template if it exists but doesn't contain placeholder syntax
+      // This ensures template updates (e.g., IPC path placeholders) propagate to existing agents
+      const agentMdPath = resolve(defaultDir, 'AGENT.md')
+      if (existsSync(agentMdPath)) {
+        try {
+          const currentContent = readFileSync(agentMdPath, 'utf-8')
+          if (!currentContent.includes('{{ipcTasksDir}}')) {
+            writeFileSync(agentMdPath, DEFAULT_AGENT_MD)
+            logger.info('Updated default agent AGENT.md with latest template')
+          }
+        } catch (err) {
+          logger.warn({ error: err instanceof Error ? err.message : String(err) }, 'Failed to sync AGENT.md template')
+        }
+      }
     }
 
     if (!existsSync(resolve(globalDir, 'memory', 'MEMORY.md'))) {
