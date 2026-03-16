@@ -1,8 +1,12 @@
+import { useState, useEffect, useCallback } from "react"
 import { useI18n } from "@/i18n"
 import { useAppStore } from "@/stores/app"
 import type { Theme } from "@/hooks/useTheme"
 import { Sun, Moon, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { isTauri, getTauriInvoke, updateCachedBaseUrl } from "@/api/transport"
 
 const themeOptions: { value: Theme; labelKey: "dark" | "light" | "system"; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
   { value: "light", labelKey: "light", icon: Sun },
@@ -21,6 +25,51 @@ export function GeneralPanel() {
   const setTheme = useAppStore((s) => s.setTheme)
   const locale = useAppStore((s) => s.locale)
   const setLocale = useAppStore((s) => s.setLocale)
+
+  // Port config state (Tauri only)
+  const [portValue, setPortValue] = useState("62601")
+  const [portSaved, setPortSaved] = useState(false)
+  const [portRestarting, setPortRestarting] = useState(false)
+
+  // Load preferred_port from Tauri Store on mount
+  useEffect(() => {
+    if (!isTauri) return
+    import('@tauri-apps/plugin-store').then(({ load }) => {
+      load('settings.json').then(async (store) => {
+        const preferred = await store.get<string>('preferred_port')
+        if (preferred) setPortValue(preferred)
+      })
+    }).catch(() => {})
+  }, [])
+
+  const handleSavePort = useCallback(async () => {
+    const port = parseInt(portValue, 10)
+    if (isNaN(port) || port < 1024 || port > 65535) return
+    try {
+      const invoke = getTauriInvoke()
+      await invoke('set_preferred_port', { port })
+      setPortSaved(true)
+      setTimeout(() => setPortSaved(false), 3000)
+    } catch (err) {
+      console.error('Failed to save port:', err)
+    }
+  }, [portValue])
+
+  const handleRestartSidecar = useCallback(async () => {
+    setPortRestarting(true)
+    try {
+      const invoke = getTauriInvoke()
+      await invoke('restart_sidecar')
+      const port = parseInt(portValue, 10)
+      if (!isNaN(port)) {
+        updateCachedBaseUrl(`http://localhost:${port}`)
+      }
+    } catch (err) {
+      console.error('Failed to restart sidecar:', err)
+    } finally {
+      setPortRestarting(false)
+    }
+  }, [portValue])
 
   return (
     <div className="space-y-8">
@@ -80,6 +129,44 @@ export function GeneralPanel() {
           ))}
         </div>
       </div>
+
+      {/* Server Port (Tauri only) */}
+      {isTauri && (
+        <div>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+            {t.settings.serverPort}
+          </h4>
+          <p className="text-xs text-muted-foreground mb-3">{t.settings.portHint}</p>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              min={1024}
+              max={65535}
+              value={portValue}
+              onChange={(e) => { setPortValue(e.target.value); setPortSaved(false) }}
+              className="w-32 rounded-xl"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              onClick={handleSavePort}
+              disabled={portSaved}
+            >
+              {portSaved ? t.settings.portSaved : t.settings.portSave}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              onClick={handleRestartSidecar}
+              disabled={portRestarting}
+            >
+              {portRestarting ? t.settings.portRestarting : t.settings.portRestartNow}
+            </Button>
+          </div>
+        </div>
+      )}
 
     </div>
   )

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { Shell } from './components/layout/Shell'
 import { Chat } from './pages/Chat'
@@ -6,6 +6,7 @@ import { Agents } from './pages/Agents'
 import { Memory } from './pages/Memory'
 import { Tasks } from './pages/Tasks'
 import { Login } from './pages/Login'
+import { PortConflictDialog } from './components/PortConflictDialog'
 import { useTheme } from './hooks/useTheme'
 import { useAppStore } from './stores/app'
 import { isTauri, updateCachedBaseUrl } from './api/transport'
@@ -24,6 +25,7 @@ export default function App() {
   const isLoggedIn = useAppStore((s) => s.isLoggedIn)
   const cloudEnabled = useAppStore((s) => s.cloudEnabled)
   const canPass = !cloudEnabled || isLoggedIn
+  const [portConflict, setPortConflict] = useState(false)
 
   // Persistently listen for sidecar-event (Tauri mode)
   useEffect(() => {
@@ -37,6 +39,8 @@ export default function App() {
           if (match) {
             updateCachedBaseUrl(`http://localhost:${match[1]}`)
           }
+        } else if (event.payload.status === 'port-conflict') {
+          setPortConflict(true)
         }
       }).then(fn => { cleanup = fn })
     })
@@ -56,6 +60,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to={canPass ? "/" : "/login"} replace />} />
       </Routes>
+      {isTauri && <PortConflictDialog open={portConflict} onResolved={() => setPortConflict(false)} />}
     </BrowserRouter>
   )
 }
