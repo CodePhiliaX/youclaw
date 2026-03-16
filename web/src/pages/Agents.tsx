@@ -789,12 +789,14 @@ function AgentSkillsSection({
     s.frontmatter.description.toLowerCase().includes(search.toLowerCase())
   )
 
-  const selectedSet = new Set(agentSkills ?? [])
+  const isWildcard = agentSkills?.includes('*')
+  const selectedSet = new Set(isWildcard ? allSkills.map(s => s.name) : (agentSkills ?? []))
   const allSelected = filteredSkills.length > 0 && filteredSkills.every(s => selectedSet.has(s.name))
   const someSelected = filteredSkills.some(s => selectedSet.has(s.name))
 
   const handleToggleSkill = async (skillName: string, checked: boolean) => {
-    const current = agentSkills ?? []
+    const isWildcard = agentSkills?.includes('*')
+    const current = isWildcard ? allSkills.map(s => s.name) : (agentSkills ?? [])
     const next = checked
       ? [...current, skillName]
       : current.filter(s => s !== skillName)
@@ -803,14 +805,17 @@ function AgentSkillsSection({
   }
 
   const handleToggleAll = async () => {
+    const isWildcard = agentSkills?.includes('*')
     if (allSelected) {
       // Deselect all visible
       const visible = new Set(filteredSkills.map(s => s.name))
-      const next = (agentSkills ?? []).filter(s => !visible.has(s))
+      const expanded = isWildcard ? allSkills.map(s => s.name) : (agentSkills ?? [])
+      const next = expanded.filter(s => !visible.has(s))
       await updateAgentConfig(agentId, { skills: next })
     } else {
       // Select all visible
-      const current = new Set(agentSkills ?? [])
+      const expanded = isWildcard ? allSkills.map(s => s.name) : (agentSkills ?? [])
+      const current = new Set(expanded)
       const next = [...current]
       for (const s of filteredSkills) {
         if (!current.has(s.name)) next.push(s.name)

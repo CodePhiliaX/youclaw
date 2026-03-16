@@ -11,6 +11,8 @@ memory:
   recentDays: 3
   archiveConversations: true
   maxLogEntryLength: 500
+skills:
+  - "*"
 `
 
 export const DEFAULT_SOUL_MD = `\

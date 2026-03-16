@@ -149,6 +149,7 @@ export function createAgentsRoutes(agentManager: AgentManager) {
     const config: Record<string, unknown> = {
       id,
       name: body.name,
+      skills: [],
     }
     if (body.model) {
       config.model = body.model
