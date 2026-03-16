@@ -103,7 +103,10 @@ export function Skills() {
   }
 
   const loadSkills = useCallback(() => {
-    getSkills().then(setSkills).catch(() => {})
+    getSkills().then((data) => {
+      setSkills(data)
+      window.dispatchEvent(new CustomEvent('skills-changed'))
+    }).catch(() => {})
   }, [])
 
   const loadMarketplace = useCallback(
@@ -508,10 +511,7 @@ export function Skills() {
                   <MarketplaceCard
                     key={skill.slug}
                     skill={skill}
-                    onChanged={() => {
-                      loadRecommended()
-                      loadSkills()
-                    }}
+                    onChanged={loadSkills}
                   />
                 ))}
               </div>
@@ -523,10 +523,7 @@ export function Skills() {
                   <MarketplaceCard
                     key={skill.slug}
                     skill={skill}
-                    onChanged={() => {
-                      loadMarketplace()
-                      loadSkills()
-                    }}
+                    onChanged={loadSkills}
                   />
                 ))}
               </div>
@@ -594,8 +591,9 @@ export function Skills() {
 }
 
 /** Marketplace card */
-function MarketplaceCard({ skill, onChanged }: { skill: MarketplaceSkill; onChanged: () => void }) {
+function MarketplaceCard({ skill: initialSkill, onChanged }: { skill: MarketplaceSkill; onChanged: () => void }) {
   const { t } = useI18n()
+  const [skill, setSkill] = useState(initialSkill)
   const [status, setStatus] = useState<'idle' | 'installing' | 'updating' | 'uninstalling' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -606,6 +604,7 @@ function MarketplaceCard({ skill, onChanged }: { skill: MarketplaceSkill; onChan
       const result = await installRecommendedSkill(skill.slug)
       if (result.ok) {
         setStatus('idle')
+        setSkill(s => ({ ...s, installed: true, hasUpdate: false }))
         onChanged()
       } else {
         setStatus('error')
@@ -624,6 +623,7 @@ function MarketplaceCard({ skill, onChanged }: { skill: MarketplaceSkill; onChan
       const result = await updateMarketplaceSkill(skill.slug)
       if (result.ok) {
         setStatus('idle')
+        setSkill(s => ({ ...s, hasUpdate: false, installedVersion: s.latestVersion ?? s.installedVersion }))
         onChanged()
       } else {
         setStatus('error')
@@ -642,6 +642,7 @@ function MarketplaceCard({ skill, onChanged }: { skill: MarketplaceSkill; onChan
       const result = await uninstallRecommendedSkill(skill.slug)
       if (result.ok) {
         setStatus('idle')
+        setSkill(s => ({ ...s, installed: false, hasUpdate: false, installedVersion: undefined }))
         onChanged()
       } else {
         setStatus('error')

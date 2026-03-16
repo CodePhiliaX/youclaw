@@ -103,6 +103,13 @@ export function Agents() {
     loadAgents()
     getBrowserProfiles().then(setBrowserProfiles).catch(() => {})
     getSkills().then(setAllSkills).catch(() => {})
+
+    // Refresh skills list when skills are changed from other pages
+    const handleSkillsChanged = () => {
+      getSkills().then(setAllSkills).catch(() => {})
+    }
+    window.addEventListener('skills-changed', handleSkillsChanged)
+    return () => window.removeEventListener('skills-changed', handleSkillsChanged)
   }, [loadAgents])
 
   // Load documents for the selected agent
@@ -130,6 +137,8 @@ export function Agents() {
         setAgentBrowserProfile(undefined)
         setAgentSkills(undefined)
       })
+    // Also refresh available skills list
+    getSkills().then(setAllSkills).catch(() => {})
   }, [selected])
 
   useEffect(() => {
