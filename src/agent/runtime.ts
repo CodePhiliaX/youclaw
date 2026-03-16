@@ -1,7 +1,8 @@
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, copyFileSync, mkdirSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { getEnv } from '../config/index.ts'
 import { getLogger } from '../logger/index.ts'
 import { getSession, saveSession } from '../db/index.ts'
@@ -16,14 +17,40 @@ import { getAuthToken } from '../routes/auth.ts'
 import type { AgentConfig, ProcessParams } from './types.ts'
 
 // Resolve claude-agent-sdk cli.js path
-// - Tauri bundled mode: read from RESOURCES_DIR
+// - Tauri bundled mode: copy from RESOURCES_DIR to DATA_DIR to avoid macOS quarantine,
+//   then use the copy. Signed app bundles have quarantine flags that block unsigned
+//   scripts (cli.js), and xattr -cr cannot remove them due to SIP protection.
 // - Dev mode: locate via require.resolve in node_modules
 function resolveCliPath(): string {
+  const logger = getLogger()
+
   // Tauri bundled mode: cli.js is in the resources directory
   const resourcesDir = process.env.RESOURCES_DIR
   if (resourcesDir) {
     const resourceCliPath = resolve(resourcesDir, '_up_/node_modules/@anthropic-ai/claude-agent-sdk/cli.js')
     if (existsSync(resourceCliPath)) {
+      // Copy to DATA_DIR to escape quarantine
+      const dataDir = process.env.DATA_DIR
+      if (dataDir) {
+        const sdkCacheDir = resolve(dataDir, 'sdk-cache')
+        const cachedCliPath = resolve(sdkCacheDir, 'cli.js')
+        try {
+          mkdirSync(sdkCacheDir, { recursive: true })
+          copyFileSync(resourceCliPath, cachedCliPath)
+          // macOS cp inherits quarantine from source — must remove it explicitly
+          if (process.platform === 'darwin') {
+            try {
+              execSync(`xattr -d com.apple.quarantine "${cachedCliPath}"`, { timeout: 3000 })
+            } catch {
+              // Ignore: may already be clean, or xattr not available
+            }
+          }
+          logger.info({ src: resourceCliPath, dst: cachedCliPath }, 'Copied SDK cli.js to data dir (quarantine bypass)')
+          return cachedCliPath
+        } catch (err) {
+          logger.warn({ error: String(err) }, 'Failed to copy cli.js to data dir, using original')
+        }
+      }
       return resourceCliPath
     }
   }
@@ -38,6 +65,86 @@ function resolveCliPath(): string {
     return resolve(process.cwd(), 'node_modules/@anthropic-ai/claude-agent-sdk/cli.js')
   }
 }
+
+/**
+ * Validate that cli.js can actually be executed.
+ * macOS quarantine silently blocks unsigned scripts — detect this early and log a clear error.
+ */
+function validateCliExecutable(cliPath: string): void {
+  const logger = getLogger()
+
+  if (!existsSync(cliPath)) {
+    logger.error({ cliPath, category: 'agent' }, 'SDK cli.js not found! Agent will not work.')
+    return
+  }
+
+  if (process.platform === 'darwin') {
+    try {
+      const xattrOutput = execSync(`xattr -l "${cliPath}"`, { timeout: 3000, encoding: 'utf-8' })
+      if (xattrOutput.includes('com.apple.quarantine')) {
+        logger.error({
+          cliPath,
+          category: 'agent',
+        }, 'SDK cli.js has macOS quarantine flag — subprocess will be blocked by Gatekeeper! Run: xattr -d com.apple.quarantine "' + cliPath + '"')
+      }
+    } catch {
+      // xattr command failed, skip check
+    }
+  }
+
+  // Try a quick spawn test
+  try {
+    execSync(`"${process.execPath}" "${cliPath}" --help`, { timeout: 5000, stdio: 'pipe' })
+    logger.info({ cliPath, category: 'agent' }, 'SDK cli.js validation passed')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error({ cliPath, error: msg.slice(0, 300), category: 'agent' }, 'SDK cli.js validation FAILED — subprocess cannot start. This is likely caused by macOS quarantine or missing runtime.')
+  }
+}
+
+/**
+ * Detect macOS system proxy and set HTTPS_PROXY/HTTP_PROXY env vars if not already set.
+ * Bun/Node subprocesses don't read macOS system proxy settings — only env vars.
+ * This runs once at import time.
+ */
+function detectSystemProxy(): void {
+  // Skip if env vars already set or not on macOS
+  if (process.env.HTTPS_PROXY || process.env.https_proxy || process.platform !== 'darwin') {
+    return
+  }
+  try {
+    // List all network services, then check each for a secure web proxy
+    const services = execSync('networksetup -listallnetworkservices', { timeout: 3000, encoding: 'utf-8' })
+    const serviceNames = services.split('\n').filter(line => line && !line.startsWith('An asterisk'))
+
+    for (const service of serviceNames) {
+      try {
+        const output = execSync(`networksetup -getsecurewebproxy "${service}"`, { timeout: 3000, encoding: 'utf-8' })
+        const enabled = /Enabled:\s*Yes/i.test(output)
+        if (!enabled) continue
+
+        const serverMatch = output.match(/Server:\s*(.+)/i)
+        const portMatch = output.match(/Port:\s*(\d+)/i)
+        if (serverMatch && portMatch) {
+          const proxyUrl = `http://${serverMatch[1]!.trim()}:${portMatch[1]!.trim()}`
+          process.env.HTTPS_PROXY = proxyUrl
+          process.env.HTTP_PROXY = proxyUrl
+          const logger = getLogger()
+          logger.info({ proxy: proxyUrl, service, category: 'agent' }, 'Detected macOS system proxy, set HTTPS_PROXY')
+          return
+        }
+      } catch {
+        // Skip services that fail
+      }
+    }
+  } catch {
+    // Ignore errors (networksetup not available, etc.)
+  }
+}
+
+// Startup checks (run once on module load)
+detectSystemProxy()
+validateCliExecutable(resolveCliPath())
 
 export class AgentRuntime {
   private config: AgentConfig
