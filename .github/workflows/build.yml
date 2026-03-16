@@ -505,6 +505,10 @@ jobs:
 
           # Upload latest.json to fixed path for updater
           ossutil cp latest.json "oss://${OSS_BUCKET}/youclaw/releases/latest.json" -f
+          # Remove Content-Encoding to prevent CDN from serving gzip-encoded response,
+          # which causes "error decoding response body" in Tauri updater
+          ossutil set-meta "oss://${OSS_BUCKET}/youclaw/releases/latest.json" \
+            "Content-Type:application/json" "Content-Encoding:" --update -f
 
           # Also upload to GitHub Release as fallback
           gh release upload "$TAG" latest.json -R "$REPO" --clobber

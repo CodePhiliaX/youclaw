@@ -83,7 +83,7 @@ export function BrowserProfiles() {
               </div>
             </div>
           ) : (
-            <div className="divide-y divide-border">
+            <div className="p-2 space-y-1">
               {profiles.map((profile) => (
                 <div
                   key={profile.id}
@@ -93,17 +93,25 @@ export function BrowserProfiles() {
                     setShowCreate(false)
                   }}
                   className={cn(
-                    'px-3 py-2.5 cursor-pointer transition-colors hover:bg-accent/30',
-                    selectedId === profile.id && 'bg-accent/50'
+                    'flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all',
+                    selectedId === profile.id
+                      ? 'bg-accent text-accent-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent/50'
                   )}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium truncate max-w-[200px]">
-                      {profile.name}
-                    </span>
+                  <div className={cn(
+                    'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
+                    selectedId === profile.id ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
+                  )}>
+                    <Globe className="h-4 w-4" />
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(profile.created_at).toLocaleString()}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate text-foreground">
+                      {profile.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(profile.created_at).toLocaleString()}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -180,14 +188,22 @@ function ProfileDetail({
 
   return (
     <div className="p-6 space-y-6" data-testid="browser-profile-detail">
-      <div className="flex items-start justify-between">
-        <h2 className="text-lg font-semibold" data-testid="browser-profile-name">{profile.name}</h2>
-        <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Globe className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold" data-testid="browser-profile-name">{profile.name}</h2>
+            <p className="text-sm text-muted-foreground font-mono mt-0.5">{profile.id}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <button
             data-testid="browser-launch-btn"
             onClick={onLaunch}
             disabled={isLaunching}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5" />
             {isLaunching ? t.browser.launching : t.browser.launch}
@@ -195,7 +211,7 @@ function ProfileDetail({
           <button
             data-testid="browser-delete-btn"
             onClick={onDelete}
-            className="p-2 rounded hover:bg-destructive/20 text-muted-foreground hover:text-red-400 transition-colors"
+            className="p-2 rounded-xl hover:bg-destructive/20 text-muted-foreground hover:text-red-400 transition-colors"
             title={t.common.delete}
           >
             <Trash2 className="h-4 w-4" />
@@ -204,19 +220,15 @@ function ProfileDetail({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="text-xs text-muted-foreground mb-0.5">{t.browser.profileId}</div>
-          <div className="text-sm font-mono text-xs">{profile.id}</div>
+        <div className="rounded-2xl border border-border p-4">
+          <div className="text-xs text-muted-foreground mb-1.5">{t.browser.created}</div>
+          <div className="text-sm font-semibold">{new Date(profile.created_at).toLocaleString()}</div>
         </div>
-        <div>
-          <div className="text-xs text-muted-foreground mb-0.5">{t.browser.created}</div>
-          <div className="text-sm">{new Date(profile.created_at).toLocaleString()}</div>
-        </div>
-        <div className="col-span-2">
-          <div className="text-xs text-muted-foreground mb-0.5">{t.browser.dataDir}</div>
-          <div className="text-sm font-mono text-xs flex items-center gap-1.5">
+        <div className="rounded-2xl border border-border p-4">
+          <div className="text-xs text-muted-foreground mb-1.5">{t.browser.dataDir}</div>
+          <div className="text-sm font-mono flex items-center gap-1.5">
             <FolderOpen className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-            browser-profiles/{profile.id}/
+            <span className="truncate">browser-profiles/{profile.id}/</span>
           </div>
         </div>
       </div>
@@ -225,9 +237,9 @@ function ProfileDetail({
         <div
           data-testid="browser-launch-message"
           className={cn(
-            'text-xs rounded p-2.5 border',
+            'text-xs rounded-xl p-3 border',
             launchMessage.type === 'success'
-              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              ? 'bg-green-500/10 border-green-500/30 text-green-500'
               : 'bg-red-500/10 border-red-500/30 text-red-400',
           )}
         >
@@ -235,8 +247,8 @@ function ProfileDetail({
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground bg-accent/20 rounded p-3 border border-border">
-        <p className="mb-1">Usage:</p>
+      <div className="text-xs text-muted-foreground bg-muted/50 rounded-2xl p-4 border border-border space-y-1">
+        <p className="font-medium text-foreground mb-2">Usage</p>
         <p>1. Click "Launch Browser" to open a headed browser window</p>
         <p>2. Manually log in to the required websites in the browser</p>
         <p>3. Close the browser; login state is saved automatically</p>
@@ -278,17 +290,17 @@ function CreateProfileForm({
 
   return (
     <div className="p-6">
-      <h2 className="text-lg font-semibold mb-4">{t.browser.createTitle}</h2>
-      <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
+      <h2 className="text-xl font-bold mb-6">{t.browser.createTitle}</h2>
+      <form onSubmit={handleSubmit} className="space-y-5 max-w-lg">
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">{t.browser.profileName}</label>
+          <label className="block text-xs font-medium mb-1.5">{t.browser.profileName}</label>
           <input
             type="text"
             data-testid="browser-input-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t.browser.profileNamePlaceholder}
-            className="w-full px-3 py-2 text-sm rounded-md bg-accent/30 border border-border focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
             autoFocus
           />
         </div>
@@ -300,7 +312,7 @@ function CreateProfileForm({
             type="submit"
             data-testid="browser-submit-btn"
             disabled={submitting || !name.trim()}
-            className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {submitting ? t.browser.creating : t.common.create}
           </button>
@@ -308,7 +320,7 @@ function CreateProfileForm({
             type="button"
             data-testid="browser-cancel-btn"
             onClick={onCancel}
-            className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:bg-accent transition-colors"
+            className="px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors"
           >
             {t.common.cancel}
           </button>

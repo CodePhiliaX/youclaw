@@ -186,32 +186,34 @@ export function Skills() {
   return (
     <div className="flex h-full flex-col">
       {/* Tab switcher */}
-      <div className="border-b border-border px-4 flex gap-0">
-        <button
-          data-testid="skills-installed-tab"
-          onClick={() => setTab('installed')}
-          className={cn(
-            'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
-            tab === 'installed'
-              ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {t.skills.installed}
-        </button>
-        <button
-          data-testid="skills-marketplace-tab"
-          onClick={() => setTab('marketplace')}
-          className={cn(
-            'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5',
-            tab === 'marketplace'
-              ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Store className="h-4 w-4" />
-          {t.skills.marketplace}
-        </button>
+      <div className="px-4 py-3 border-b border-border">
+        <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
+          <button
+            data-testid="skills-installed-tab"
+            onClick={() => setTab('installed')}
+            className={cn(
+              'px-4 py-1.5 text-sm font-medium rounded-lg transition-all',
+              tab === 'installed'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {t.skills.installed}
+          </button>
+          <button
+            data-testid="skills-marketplace-tab"
+            onClick={() => setTab('marketplace')}
+            className={cn(
+              'px-4 py-1.5 text-sm font-medium rounded-lg transition-all flex items-center gap-1.5',
+              tab === 'marketplace'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Store className="h-3.5 w-3.5" />
+            {t.skills.marketplace}
+          </button>
+        </div>
       </div>
 
       {/* Tab content */}
