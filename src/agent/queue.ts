@@ -120,6 +120,9 @@ export class AgentQueue {
     }
   }
 
+  // Default timeout: 5 minutes
+  private static readonly PROCESS_TIMEOUT_MS = 5 * 60 * 1000
+
   /**
    * Process a single queue item
    */
@@ -140,14 +143,21 @@ export class AgentQueue {
       // Update agent state
       managed.state.isProcessing = true
 
-      const result = await managed.runtime.process({
-        chatId: item.chatId,
-        prompt: item.prompt,
-        agentId: item.agentId,
-        requestedSkills: item.requestedSkills,
-        browserProfileId: item.browserProfileId,
-        attachments: item.attachments,
-      })
+      // Race against timeout to prevent stuck queue
+      const timeoutMs = AgentQueue.PROCESS_TIMEOUT_MS
+      const result = await Promise.race([
+        managed.runtime.process({
+          chatId: item.chatId,
+          prompt: item.prompt,
+          agentId: item.agentId,
+          requestedSkills: item.requestedSkills,
+          browserProfileId: item.browserProfileId,
+          attachments: item.attachments,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out after 5 minutes. The model may be unreachable.')), timeoutMs),
+        ),
+      ])
 
       // Update agent state
       managed.state.isProcessing = false

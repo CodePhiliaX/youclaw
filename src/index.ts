@@ -180,6 +180,7 @@ async function main() {
       fetch: app.fetch,
       port: env.PORT,
       hostname: '127.0.0.1',  // Listen on localhost only to avoid Windows firewall prompts
+      idleTimeout: 255,       // Max idle timeout (seconds) for SSE/long-running requests
     })
   } catch (err) {
     if (err instanceof Error && err.message.includes('address already in use')) {

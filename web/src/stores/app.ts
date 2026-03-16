@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { getItem, setItem } from "@/lib/storage"
 import { applyThemeToDOM, type Theme } from "@/hooks/useTheme"
-import { getAuthUser, getAuthStatus, getAuthLoginUrl, authLogout, getCreditBalance, getPayUrl, updateProfile as apiUpdateProfile, getCloudStatus, getSettings, updateSettings, saveAuthToken, type AuthUser } from "@/api/client"
+import { getAuthUser, getAuthStatus, getAuthLoginUrl, getCreditBalance, getPayUrl, updateProfile as apiUpdateProfile, getCloudStatus, getSettings, updateSettings, saveAuthToken, type AuthUser } from "@/api/client"
 import { isTauri } from "@/api/transport"
 import type { Locale } from "@/i18n/context"
 
@@ -180,11 +180,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   logout: async () => {
-    try {
-      await authLogout()
-    } catch {
-      // Clean up local state even if remote logout fails
-    }
+    // Only clear local token/state, do NOT call remote logout API
+    // to avoid invalidating tokens on other devices (web, desktop, etc.)
     set({ user: null, isLoggedIn: false, creditBalance: null })
   },
 

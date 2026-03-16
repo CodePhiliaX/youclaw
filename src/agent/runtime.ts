@@ -357,6 +357,7 @@ export class AgentRuntime {
     }
 
     // Stream-process SDK messages
+    logger.info({ agentId, chatId, category: 'agent' }, 'SDK query created, starting to consume messages')
     let firstResponseLogged = false
     let turnCount = 0
     try {
