@@ -41,9 +41,11 @@ async function main() {
   const skillsLoader = new SkillsLoader()
   logger.info({ count: skillsLoader.loadAllSkills().length }, 'Skills loaded')
 
+  let agentManagerRef: AgentManager | null = null
   const skillsWatcher = new SkillsWatcher(skillsLoader, {
     onReload: (skills) => {
       logger.info({ count: skills.length }, 'Skills hot-reloaded')
+      agentManagerRef?.syncAllAgentSkills()
     },
   })
   skillsWatcher.start()
@@ -86,6 +88,7 @@ async function main() {
     skillsLoader,
   )
   await agentManager.loadAgents()
+  agentManagerRef = agentManager
 
   // 11. Create AgentQueue
   const agentQueue = new AgentQueue(agentManager)

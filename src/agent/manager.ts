@@ -283,4 +283,22 @@ export class AgentManager {
   getAgentsMap(): Map<string, AgentInstance> {
     return this.agents
   }
+
+  /**
+   * Re-sync .claude/skills/ symlinks for all loaded agents.
+   * Called after skills hot-reload so new/removed skills are reflected.
+   */
+  syncAllAgentSkills(): void {
+    if (!this.skillsLoader) return
+    const logger = getLogger()
+    const paths = getPaths()
+    for (const managed of this.agents.values()) {
+      const agentDir = resolve(paths.agents, managed.config.id)
+      try {
+        this.skillsLoader.syncAgentClaudeSkills(managed.config, agentDir)
+      } catch (err) {
+        logger.warn({ agentId: managed.config.id, error: err instanceof Error ? err.message : String(err) }, 'Failed to sync .claude/skills/ on reload')
+      }
+    }
+  }
 }

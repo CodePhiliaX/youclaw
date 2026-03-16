@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
-  "productName": "You Claw",
+  "productName": "YouClaw",
   "version": "1.0.0",
   "identifier": "com.youclaw.app",
   "build": {
@@ -18,9 +18,7 @@
         "height": 900,
         "minWidth": 800,
         "minHeight": 600,
-        "decorations": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "decorations": true
       }
     ],
     "security": {
