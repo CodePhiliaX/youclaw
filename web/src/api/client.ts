@@ -521,6 +521,36 @@ export async function redeemInvitationCode(code: string) {
   })
 }
 
+// Referral API
+
+export interface ReferralCode {
+  id: number
+  code: string
+  credits: number
+  maxUses: number | null
+  usedCount: number
+  expiredAt: string | null
+  enabled: boolean
+}
+
+export interface ReferralStats {
+  totalInvited: number
+  totalCreditsEarned: number
+  recentInvitees: Array<{
+    displayName: string
+    avatar: string | null
+    createdAt: number
+  }>
+}
+
+export async function getReferralCode() {
+  return apiFetch<ReferralCode>('/api/invitation/referral_code')
+}
+
+export async function getReferralStats() {
+  return apiFetch<ReferralStats>('/api/invitation/referral_stats')
+}
+
 // ===== Credit API =====
 
 export interface CreditBalance {

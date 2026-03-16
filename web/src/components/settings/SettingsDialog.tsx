@@ -4,15 +4,16 @@ import { GeneralPanel } from "./GeneralPanel"
 import { ModelsPanel } from "./ModelsPanel"
 import { AccountPanel } from "./AccountPanel"
 import { AboutPanel } from "./AboutPanel"
+import { InvitationPanel } from "./InvitationPanel"
 import { Skills } from "@/pages/Skills"
 import { Channels } from "@/pages/Channels"
 import { BrowserProfiles } from "@/pages/BrowserProfiles"
-import { X, User, Palette, Cpu, Wrench, Radio, Globe, Info } from "lucide-react"
+import { X, User, Palette, Cpu, Wrench, Radio, Globe, Info, UserPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/i18n"
 import { useAppStore } from "@/stores/app"
 
-type Tab = "account" | "general" | "models" | "skills" | "channels" | "browser" | "about"
+type Tab = "account" | "general" | "models" | "skills" | "channels" | "browser" | "invitation" | "about"
 
 export type SettingsTab = Tab
 
@@ -41,6 +42,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
     { id: "skills", label: t.nav.skills, icon: Wrench },
     { id: "channels", label: t.nav.channels, icon: Radio },
     { id: "browser", label: t.nav.browser, icon: Globe },
+    { id: "invitation", label: t.invitation.title, icon: UserPlus, cloud: true },
     { id: "about", label: t.settings.about, icon: Info },
   ]
 
@@ -80,7 +82,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
         {/* Content area */}
         <div className={cn(
           "flex-1 overflow-hidden",
-          currentTab === "account" || currentTab === "general" || currentTab === "models" || currentTab === "about"
+          currentTab === "account" || currentTab === "general" || currentTab === "models" || currentTab === "invitation" || currentTab === "about"
             ? "p-8 overflow-y-auto"
             : ""
         )}>
@@ -90,6 +92,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
           {currentTab === "skills" && <Skills />}
           {currentTab === "channels" && <Channels />}
           {currentTab === "browser" && <BrowserProfiles />}
+          {currentTab === "invitation" && <InvitationPanel />}
           {currentTab === "about" && <AboutPanel />}
         </div>
       </DialogContent>

@@ -112,5 +112,75 @@ export function createCreditRoutes() {
     }
   })
 
+  // GET /invitation/referral_code — get current user's referral code
+  app.get('/invitation/referral_code', async (c) => {
+    const apiUrl = getEnv().YOUCLAW_API_URL
+    if (!apiUrl) {
+      return c.json({ error: 'Cloud service not configured' }, 501)
+    }
+    const token = getAuthToken()
+    if (!token) {
+      return c.json({ error: 'Not logged in' }, 401)
+    }
+
+    const logger = getLogger()
+    try {
+      const targetUrl = `${apiUrl}/api/invitation/referral_code`
+      logger.info({ targetUrl, category: 'invitation' }, 'Fetching referral code')
+
+      const res = await fetch(targetUrl, {
+        headers: { rdxtoken: token },
+      })
+
+      const text = await res.text()
+      logger.info({ status: res.status, body: text.substring(0, 500), category: 'invitation' }, 'Referral code response')
+
+      if (!res.ok) {
+        return c.json({ error: `Upstream error: ${res.status}`, detail: text.substring(0, 200) }, 500)
+      }
+
+      const data = JSON.parse(text) as { success?: boolean; data?: unknown }
+      return c.json(data.data ?? null)
+    } catch (err) {
+      logger.error({ error: String(err), category: 'invitation' }, 'Failed to fetch referral code')
+      return c.json({ error: 'Failed to fetch referral code', detail: String(err) }, 500)
+    }
+  })
+
+  // GET /invitation/referral_stats — get current user's referral statistics
+  app.get('/invitation/referral_stats', async (c) => {
+    const apiUrl = getEnv().YOUCLAW_API_URL
+    if (!apiUrl) {
+      return c.json({ error: 'Cloud service not configured' }, 501)
+    }
+    const token = getAuthToken()
+    if (!token) {
+      return c.json({ error: 'Not logged in' }, 401)
+    }
+
+    const logger = getLogger()
+    try {
+      const targetUrl = `${apiUrl}/api/invitation/referral_stats`
+      logger.info({ targetUrl, category: 'invitation' }, 'Fetching referral stats')
+
+      const res = await fetch(targetUrl, {
+        headers: { rdxtoken: token },
+      })
+
+      const text = await res.text()
+      logger.info({ status: res.status, body: text.substring(0, 500), category: 'invitation' }, 'Referral stats response')
+
+      if (!res.ok) {
+        return c.json({ error: `Upstream error: ${res.status}`, detail: text.substring(0, 200) }, 500)
+      }
+
+      const data = JSON.parse(text) as { success?: boolean; data?: unknown }
+      return c.json(data.data ?? {})
+    } catch (err) {
+      logger.error({ error: String(err), category: 'invitation' }, 'Failed to fetch referral stats')
+      return c.json({ error: 'Failed to fetch referral stats', detail: String(err) }, 500)
+    }
+  })
+
   return app
 }

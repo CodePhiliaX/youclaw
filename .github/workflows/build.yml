@@ -472,10 +472,10 @@ jobs:
                   --arg sig "$SIG" --arg url "$URL" \
                   '. + {"darwin-x86_64": {"signature": $sig, "url": $url}, "darwin-x86_64-app": {"signature": $sig, "url": $url}}')
                 ;;
-              *_x64-setup.nsis.zip.sig)
+              *_x64-setup.exe.sig)
                 PLATFORMS=$(echo "$PLATFORMS" | jq \
                   --arg sig "$SIG" \
-                  --arg url "${CDN_BASE}/You.Claw_${VERSION}_x64-setup.nsis.zip" \
+                  --arg url "${CDN_BASE}/You.Claw_${VERSION}_x64-setup.exe" \
                   '. + {"windows-x86_64": {"signature": $sig, "url": $url}, "windows-x86_64-nsis": {"signature": $sig, "url": $url}}')
                 ;;
               *_x64_en-US.msi.sig)
