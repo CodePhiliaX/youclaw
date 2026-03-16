@@ -219,6 +219,7 @@ jobs:
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           NSIS_ZIP="unsigned/You.Claw_${VERSION}_x64-setup.nsis.zip"
@@ -233,6 +234,11 @@ jobs:
             zip -r "../$(basename "$NSIS_ZIP")" .
             cd ../..
             rm -rf unsigned/nsis_tmp
+
+            # Regenerate .sig for the modified nsis.zip using Tauri CLI
+            npm install -g @tauri-apps/cli@latest
+            npx tauri signer sign "$NSIS_ZIP" --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+            echo "Regenerated signature for $(basename "$NSIS_ZIP")"
           fi
 
       - name: Upload signed artifacts to release
@@ -242,7 +248,7 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           REPO="${{ github.repository }}"
-          for f in unsigned/*.exe unsigned/*.nsis.zip; do
+          for f in unsigned/*.exe unsigned/*.nsis.zip unsigned/*.nsis.zip.sig; do
             [ ! -f "$f" ] && continue
             echo "Uploading: $(basename "$f")"
             gh release upload "$TAG" "$f" -R "$REPO" --clobber

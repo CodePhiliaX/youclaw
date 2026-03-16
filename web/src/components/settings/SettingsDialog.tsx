@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog"
 import { GeneralPanel } from "./GeneralPanel"
 import { ModelsPanel } from "./ModelsPanel"
@@ -14,15 +14,25 @@ import { useAppStore } from "@/stores/app"
 
 type Tab = "account" | "general" | "models" | "skills" | "channels" | "browser" | "about"
 
+export type SettingsTab = Tab
+
 interface SettingsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  initialTab?: Tab
 }
 
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
   const { t } = useI18n()
   const cloudEnabled = useAppStore((s) => s.cloudEnabled)
-  const [currentTab, setCurrentTab] = useState<Tab>(cloudEnabled ? "account" : "general")
+  const [currentTab, setCurrentTab] = useState<Tab>(initialTab ?? (cloudEnabled ? "account" : "general"))
+
+  // Sync with initialTab when dialog opens
+  useEffect(() => {
+    if (open && initialTab) {
+      setCurrentTab(initialTab)
+    }
+  }, [open, initialTab])
 
   const allTabs: { id: Tab; label: string; icon: React.ComponentType<{ size?: number }>; cloud?: boolean }[] = [
     { id: "account", label: t.account.title, icon: User, cloud: true },

@@ -2,11 +2,12 @@ import { type ReactNode, useState, useEffect } from 'react'
 import { AppSidebar } from './AppSidebar'
 import { WindowsTitleBar } from './WindowsTitleBar'
 import { ChatProvider } from '@/hooks/useChatContext'
-import { SettingsDialog } from '@/components/settings/SettingsDialog'
+import { SettingsDialog, type SettingsTab } from '@/components/settings/SettingsDialog'
 import { isTauri } from '@/api/transport'
 
 export function Shell({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>()
   const [platform, setPlatform] = useState('')
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export function Shell({ children }: { children: ReactNode }) {
         {/* Windows: custom title bar spanning full width */}
         {isWin && <WindowsTitleBar />}
         <div className="flex-1 flex overflow-hidden">
-          <AppSidebar onOpenSettings={() => setSettingsOpen(true)} />
+          <AppSidebar onOpenSettings={(tab) => { setSettingsTab(tab); setSettingsOpen(true) }} />
           <main className="flex-1 overflow-hidden flex flex-col">
             {/* macOS: drag region bar at top of main content */}
             {isMac && (
@@ -40,7 +41,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
     </ChatProvider>
   )
 }

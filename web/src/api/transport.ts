@@ -54,6 +54,20 @@ export function getBaseUrlSync(): string {
   return _cachedBaseUrl ?? 'http://localhost:62601'
 }
 
+/**
+ * Open a URL in the system default browser.
+ * Tauri mode: uses @tauri-apps/plugin-opener
+ * Web mode: falls back to window.open
+ */
+export async function openExternal(url: string): Promise<void> {
+  if (isTauri) {
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
+    await openUrl(url)
+  } else {
+    window.open(url, '_blank')
+  }
+}
+
 /** Called once at app startup, waits for sidecar ready event before rendering */
 export async function initBaseUrl(): Promise<void> {
   if (!isTauri) return

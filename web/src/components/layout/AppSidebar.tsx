@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { useSidebar } from "@/hooks/useSidebar";
-import { isTauri } from "@/api/transport";
+import { isTauri, openExternal } from "@/api/transport";
 import { useAppStore } from "@/stores/app";
 import {
   DropdownMenu,
@@ -31,7 +31,7 @@ import {
 const ROW_PX = "px-2";
 
 interface AppSidebarProps {
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: string) => void;
 }
 
 export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
@@ -231,25 +231,21 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
               )}
 
               {/* Settings */}
-              <DropdownMenuItem onClick={onOpenSettings} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
+              <DropdownMenuItem onClick={() => onOpenSettings()} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
                 <Settings2 className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{t.settings.title}</span>
               </DropdownMenuItem>
 
               {/* GitHub */}
-              <DropdownMenuItem asChild className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
-                <a href="https://github.com/CodePhiliaX/youClaw" target="_blank" rel="noopener noreferrer">
-                  <Github className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">GitHub</span>
-                </a>
+              <DropdownMenuItem onClick={() => openExternal("https://github.com/CodePhiliaX/youClaw")} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
+                <Github className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">GitHub</span>
               </DropdownMenuItem>
 
-              {/* Docs */}
-              <DropdownMenuItem asChild className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
-                <a href="https://youclaw.dev" target="_blank" rel="noopener noreferrer">
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{t.settings.about}</span>
-                </a>
+              {/* About */}
+              <DropdownMenuItem onClick={() => onOpenSettings("about")} className="gap-3 px-3 py-2.5 rounded-lg cursor-pointer">
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">{t.settings.about}</span>
               </DropdownMenuItem>
 
               {/* Logout -- only shown when logged in */}

@@ -257,9 +257,14 @@ pub fn run() {
                 }
             }
 
-            // Create system tray
-            let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            // Create system tray (i18n based on system locale)
+            let is_zh = sys_locale::get_locale()
+                .map(|l| l.starts_with("zh"))
+                .unwrap_or(false);
+            let show_label = if is_zh { "显示窗口" } else { "Show Window" };
+            let quit_label = if is_zh { "退出" } else { "Quit" };
+            let show_item = MenuItem::with_id(app, "show", show_label, true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
             // Load template icon for tray (auto-adapts to macOS dark/light mode)

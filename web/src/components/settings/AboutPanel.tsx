@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { isTauri } from "@/api/transport"
+import { isTauri, openExternal } from "@/api/transport"
 import { useI18n } from "@/i18n"
 import { Github, Globe, Cog } from "lucide-react"
 
@@ -152,17 +152,13 @@ export function AboutPanel() {
 
       {/* Social links */}
       <div className="flex gap-3">
-        <Button variant="outline" size="sm" className="gap-2 rounded-xl" asChild>
-          <a href="https://github.com/CodePhiliaX/youClaw" target="_blank" rel="noopener noreferrer">
-            <Github size={14} />
-            GitHub
-          </a>
+        <Button variant="outline" size="sm" className="gap-2 rounded-xl" onClick={() => openExternal("https://github.com/CodePhiliaX/youClaw")}>
+          <Github size={14} />
+          GitHub
         </Button>
-        <Button variant="outline" size="sm" className="gap-2 rounded-xl" asChild>
-          <a href="https://youclaw.dev" target="_blank" rel="noopener noreferrer">
-            <Globe size={14} />
-            Website
-          </a>
+        <Button variant="outline" size="sm" className="gap-2 rounded-xl" onClick={() => openExternal("https://youclaw.dev")}>
+          <Globe size={14} />
+          Website
         </Button>
       </div>
 
