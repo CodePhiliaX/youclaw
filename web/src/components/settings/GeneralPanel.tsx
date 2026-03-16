@@ -74,7 +74,8 @@ export function GeneralPanel() {
       updateCachedBaseUrl(`http://localhost:${port}`)
       setPortSaved(false)
     } catch (err) {
-      // Dev mode or restart failure: show hint to restart manually
+      // Dev mode or restart failure: update cache anyway, show hint to restart manually
+      updateCachedBaseUrl(`http://localhost:${port}`)
       setPortSaved(true)
       setPortMessage(t.settings.portWebHint)
     } finally {

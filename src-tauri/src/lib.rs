@@ -37,12 +37,6 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
     let mut env_vars: Vec<(String, String)> = vec![];
     env_vars.push(("PORT".into(), port.to_string()));
 
-    if let Ok(store) = app.store("settings.json") {
-        // Write port to store for frontend to read
-        let _ = store.set("port", serde_json::Value::String(port.to_string()));
-        let _ = store.save();
-    }
-
     // Set data directory
     if let Some(app_data) = app.path().app_data_dir().ok() {
         env_vars.push(("DATA_DIR".into(), app_data.to_string_lossy().to_string()));
@@ -384,9 +378,6 @@ pub fn run() {
                         })
                         .unwrap_or(62601);
 
-                    if let Ok(store) = app_handle.store("settings.json") {
-                        let _ = store.set("port", serde_json::Value::String(port.to_string()));
-                    }
                     log::info!("Dev mode: skipping sidecar, using bun dev server on port {}", port);
                 }
 
