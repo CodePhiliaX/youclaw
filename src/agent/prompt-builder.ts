@@ -32,6 +32,11 @@ export class PromptBuilder {
     const agentMemoryPath = resolve(agentMemoryDir, 'MEMORY.md')
     const globalMemoryPath = resolve(getPaths().agents, '_global', 'memory', 'MEMORY.md')
 
+    // IPC absolute paths (agent writes here, IPC Watcher reads from here)
+    const agentId = context?.agentId ?? 'default'
+    const ipcTasksDir = resolve(getPaths().data, 'ipc', agentId, 'tasks')
+    const ipcCurrentTasksPath = resolve(getPaths().data, 'ipc', agentId, 'current_tasks.json')
+
     // Load workspace MD files in order
     for (const filename of WORKSPACE_FILES) {
       let content = this.loadMdFile(workspaceDir, filename)
@@ -41,6 +46,8 @@ export class PromptBuilder {
           .replaceAll('{{agentMemoryDir}}', agentMemoryDir)
           .replaceAll('{{agentMemoryPath}}', agentMemoryPath)
           .replaceAll('{{globalMemoryPath}}', globalMemoryPath)
+          .replaceAll('{{ipcTasksDir}}', ipcTasksDir)
+          .replaceAll('{{ipcCurrentTasksPath}}', ipcCurrentTasksPath)
         parts.push(content)
       }
     }
@@ -86,7 +93,7 @@ export class PromptBuilder {
     // Inject current context (needed when agent creates scheduled tasks)
     if (context) {
       parts.push(
-        `\n## Current Context\n- Agent ID: ${context.agentId}\n- Chat ID: ${context.chatId}\n- IPC Directory: ./data/ipc/${context.agentId}/tasks/`,
+        `\n## Current Context\n- Agent ID: ${context.agentId}\n- Chat ID: ${context.chatId}\n- IPC Directory: ${ipcTasksDir}`,
       )
     }
 
