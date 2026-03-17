@@ -4,6 +4,8 @@ import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs'
 import { resolve } from 'node:path'
 import { getEnv } from '../config/index.ts'
 import { getPaths } from '../config/index.ts'
+import { logBroadcaster } from './broadcaster.ts'
+import type { PinoLogEntry } from './reader.ts'
 
 let _logger: pino.Logger | null = null
 
@@ -27,6 +29,18 @@ class DailyRotatingStream extends Writable {
       this.fileStream = createWriteStream(resolve(this.logsDir, `${today}.log`), { flags: 'a' })
     }
     this.fileStream!.write(chunk, encoding, callback)
+
+    // Broadcast log entry for SSE subscribers
+    try {
+      const text = chunk.toString()
+      for (const line of text.split('\n')) {
+        if (!line) continue
+        const entry = JSON.parse(line) as PinoLogEntry
+        logBroadcaster.emit(entry)
+      }
+    } catch {
+      // Non-JSON or parse errors are silently ignored
+    }
   }
 
   override _final(callback: (error?: Error | null) => void) {
