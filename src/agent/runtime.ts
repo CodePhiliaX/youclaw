@@ -227,6 +227,20 @@ export function ensureBunRuntime(): string | null {
 let _bunRuntimePath: string | null | undefined = undefined
 
 /**
+ * Return the directory containing the embedded Bun binary, or null if unavailable.
+ * Used by shell-env.ts to add embedded Bun to PATH as a fallback.
+ */
+export function getBunRuntimeDir(): string | null {
+  if (_bunRuntimePath) return dirname(_bunRuntimePath)
+  const dataDir = process.env.DATA_DIR
+  if (!dataDir) return null
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  const targetDir = resolve(dataDir, 'bun-runtime')
+  if (existsSync(resolve(targetDir, `bun${ext}`))) return targetDir
+  return null
+}
+
+/**
  * Find Node.js executable on Windows.
  * cli.js is a Node.js program — Bun's Node.js compat on Windows is insufficient.
  */

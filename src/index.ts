@@ -7,6 +7,7 @@ import { initDatabase, createTask, updateTask, deleteTask, getTasks, getTask } f
 import { EventBus } from './events/index.ts'
 import { AgentManager, AgentQueue, PromptBuilder, AgentCompiler, AgentRouter, HooksManager, SecretsManager } from './agent/index.ts'
 import { ensureBunRuntime } from './agent/runtime.ts'
+import { resetShellEnvCache } from './utils/shell-env.ts'
 import { MessageRouter, ChannelManager } from './channel/index.ts'
 import { SkillsLoader, SkillsWatcher, RegistryManager } from './skills/index.ts'
 import { MemoryManager, MemoryIndexer } from './memory/index.ts'
@@ -27,6 +28,7 @@ async function main() {
   const bunRuntimePath = ensureBunRuntime()
   if (bunRuntimePath) {
     logger.info({ path: bunRuntimePath }, 'Bun runtime ready (embedded)')
+    resetShellEnvCache()  // Ensure embedded Bun dir is picked up by getShellEnv()
   } else {
     logger.info('Using system Bun runtime')
   }
