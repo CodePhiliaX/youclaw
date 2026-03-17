@@ -127,7 +127,7 @@ async function downloadMinGit() {
     return
   }
 
-  const mingitBash = resolve(mingitDir, 'usr', 'bin', 'bash.exe')
+  const mingitBash = resolve(mingitDir, 'mingw64', 'bin', 'bash.exe')
 
   // Already extracted?
   const { existsSync } = await import('node:fs')
@@ -137,7 +137,8 @@ async function downloadMinGit() {
   }
 
   const version = '2.49.0'
-  const zipName = `MinGit-${version}-64-bit.zip`
+  // Use busybox variant — it includes bash.exe (standard MinGit does not)
+  const zipName = `MinGit-${version}-busybox-64-bit.zip`
   const url = `https://github.com/git-for-windows/git/releases/download/v${version}.windows.1/${zipName}`
   const zipPath = resolve(root, zipName)
 

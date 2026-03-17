@@ -217,7 +217,8 @@ jobs:
         shell: bash
         run: |
           MINGIT_VERSION="2.49.0"
-          MINGIT_URL="https://github.com/git-for-windows/git/releases/download/v${MINGIT_VERSION}.windows.1/MinGit-${MINGIT_VERSION}-64-bit.zip"
+          # Use busybox variant — it includes bash.exe (standard MinGit does not)
+          MINGIT_URL="https://github.com/git-for-windows/git/releases/download/v${MINGIT_VERSION}.windows.1/MinGit-${MINGIT_VERSION}-busybox-64-bit.zip"
           echo "Downloading MinGit ${MINGIT_VERSION}: ${MINGIT_URL}"
           curl -fsSL -o /tmp/mingit.zip "${MINGIT_URL}"
           mkdir -p src-tauri/resources/mingit

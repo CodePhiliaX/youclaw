@@ -98,15 +98,15 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
                     format!("{}\\_up_\\src-tauri\\resources\\mingit", res_str),
                 ];
                 for mingit_dir in &mingit_candidates {
-                    let bash_path = format!("{}\\usr\\bin\\bash.exe", mingit_dir);
+                    // MinGit busybox variant has bash.exe at mingw64/bin/bash.exe
+                    let bash_path = format!("{}\\mingw64\\bin\\bash.exe", mingit_dir);
                     if std::path::Path::new(&bash_path).exists() {
-                        log::info!("Bundled MinGit found at: {}", mingit_dir);
+                        log::info!("Bundled MinGit (busybox) found at: {}", mingit_dir);
                         env_vars.push(("CLAUDE_CODE_GIT_BASH_PATH".into(), bash_path));
                         // Add MinGit directories to PATH
                         let cmd_dir = format!("{}\\cmd", mingit_dir);
-                        let usr_bin_dir = format!("{}\\usr\\bin", mingit_dir);
                         let mingw64_bin_dir = format!("{}\\mingw64\\bin", mingit_dir);
-                        for dir in [&cmd_dir, &usr_bin_dir, &mingw64_bin_dir] {
+                        for dir in [&cmd_dir, &mingw64_bin_dir] {
                             if std::path::Path::new(dir).exists() && !extra_paths.contains(dir) {
                                 extra_paths.push(dir.clone());
                             }
