@@ -36,6 +36,7 @@ export async function readLogEntries(date: string, options: {
   search?: string
   offset?: number
   limit?: number
+  order?: 'asc' | 'desc'
 }): Promise<{ entries: PinoLogEntry[]; total: number; hasMore: boolean }> {
   const filePath = resolve(getPaths().logs, `${date}.log`)
   if (!existsSync(filePath)) return { entries: [], total: 0, hasMore: false }
@@ -47,6 +48,7 @@ export async function readLogEntries(date: string, options: {
   const search = options.search?.toLowerCase()
   const offset = options.offset ?? 0
   const limit = options.limit ?? 100
+  const order = options.order ?? 'desc'
 
   const filtered: PinoLogEntry[] = []
   for (const line of lines) {
@@ -62,6 +64,9 @@ export async function readLogEntries(date: string, options: {
       filtered.push(entry)
     } catch { /* skip non-JSON lines */ }
   }
+
+  // Reverse for desc order so offset=0 returns the newest entries
+  if (order === 'desc') filtered.reverse()
 
   const total = filtered.length
   const entries = filtered.slice(offset, offset + limit)
