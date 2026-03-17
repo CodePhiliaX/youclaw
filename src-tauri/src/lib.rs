@@ -162,6 +162,94 @@ fn launch_git_installer(installer_path: &str) -> Result<(), String> {
     }
 }
 
+fn extract_mingit(app: &AppHandle) -> Option<String> {
+    use std::path::Path;
+
+    // Determine data directory
+    let data_dir = app.path().app_data_dir().ok()
+        .map(|p| {
+            let mut s = p.to_string_lossy().to_string();
+            if s.starts_with("\\\\?\\") {
+                s = s[4..].to_string();
+            }
+            s
+        })
+        .unwrap_or_else(|| std::env::var("DATA_DIR").unwrap_or_else(|_| ".\\data".into()));
+
+    let mingit_dir = format!("{}\\mingit", data_dir);
+    let git_exe = format!("{}\\cmd\\git.exe", mingit_dir);
+
+    // Already extracted
+    if Path::new(&git_exe).exists() {
+        log::info!("MinGit already extracted at: {}", mingit_dir);
+        return Some(mingit_dir);
+    }
+
+    // Find mingit.zip in resources
+    let mut zip_candidates: Vec<String> = vec![];
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let mut res = resource_dir.to_string_lossy().to_string();
+        if res.starts_with("\\\\?\\") {
+            res = res[4..].to_string();
+        }
+        zip_candidates.push(format!("{}\\mingit\\mingit.zip", res));
+        zip_candidates.push(format!("{}\\resources\\mingit\\mingit.zip", res));
+        zip_candidates.push(format!("{}\\_up_\\src-tauri\\resources\\mingit\\mingit.zip", res));
+    }
+
+    let zip_path = zip_candidates.iter().find(|p| Path::new(p).exists())?;
+    log::info!("Found MinGit zip at: {}", zip_path);
+
+    // Create target directory
+    if let Err(e) = std::fs::create_dir_all(&mingit_dir) {
+        log::error!("Failed to create MinGit directory: {}", e);
+        return None;
+    }
+
+    // Extract using tar (built-in on Windows 10+)
+    let tar_result = std::process::Command::new("tar")
+        .args(["-xf", zip_path, "-C", &mingit_dir])
+        .output();
+
+    let extracted = match tar_result {
+        Ok(output) if output.status.success() => true,
+        _ => {
+            // Fallback: PowerShell Expand-Archive
+            log::info!("tar extraction failed, falling back to PowerShell Expand-Archive");
+            let ps_script = format!(
+                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                zip_path.replace('\'', "''"),
+                mingit_dir.replace('\'', "''"),
+            );
+            match std::process::Command::new("powershell")
+                .args(["-NoProfile", "-Command", &ps_script])
+                .output()
+            {
+                Ok(output) if output.status.success() => true,
+                Ok(output) => {
+                    log::error!(
+                        "PowerShell Expand-Archive failed: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                    false
+                }
+                Err(e) => {
+                    log::error!("Failed to run PowerShell: {}", e);
+                    false
+                }
+            }
+        }
+    };
+
+    if extracted && Path::new(&git_exe).exists() {
+        log::info!("MinGit extracted successfully to: {}", mingit_dir);
+        Some(mingit_dir)
+    } else {
+        log::warn!("MinGit extraction completed but git.exe not found at: {}", git_exe);
+        None
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn prompt_windows_git_install(app: &AppHandle) {
     let is_zh = sys_locale::get_locale()
@@ -290,7 +378,31 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
                 env_vars.push(("CLAUDE_CODE_GIT_BASH_PATH".into(), git_bash_path.clone()));
                 add_windows_git_paths(&mut extra_paths, &git_bash_path);
             } else {
-                log::warn!("Git Bash not found on Windows — claude-agent-sdk shell commands may fail");
+                log::warn!("Git Bash not found — attempting MinGit extraction fallback");
+                if let Some(mingit_dir) = extract_mingit(&app) {
+                    log::info!("MinGit extracted to: {}", mingit_dir);
+                    let mingit_path = std::path::Path::new(&mingit_dir);
+                    let cmd_dir = mingit_path.join("cmd");
+                    let bin_dir = mingit_path.join("bin");
+                    let usr_bin_dir = mingit_path.join("usr").join("bin");
+                    let mingw64_bin_dir = mingit_path.join("mingw64").join("bin");
+                    for dir in [&cmd_dir, &bin_dir, &usr_bin_dir, &mingw64_bin_dir] {
+                        if dir.exists() {
+                            let dir_str = dir.to_string_lossy().to_string();
+                            if !extra_paths.contains(&dir_str) {
+                                extra_paths.push(dir_str);
+                            }
+                        }
+                    }
+                    // Set bash path if available
+                    let bash_exe = usr_bin_dir.join("bash.exe");
+                    if bash_exe.exists() {
+                        let bash_str = bash_exe.to_string_lossy().to_string();
+                        env_vars.push(("CLAUDE_CODE_GIT_BASH_PATH".into(), bash_str));
+                    }
+                } else {
+                    log::warn!("MinGit extraction failed — claude-agent-sdk shell commands may fail");
+                }
             }
         } else {
             // Resolve nvm's actual node bin path (nvm does not create ~/.nvm/current)
@@ -581,8 +693,10 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 if find_windows_git_bash().is_none() {
-                    log::warn!("Git Bash not found during startup check");
-                    prompt_windows_git_install(&handle);
+                    log::warn!("Git Bash not found during startup check — trying MinGit extraction");
+                    if extract_mingit(&handle).is_none() {
+                        prompt_windows_git_install(&handle);
+                    }
                 }
             }
 

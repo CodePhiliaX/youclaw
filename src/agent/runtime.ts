@@ -314,6 +314,58 @@ function setWindowsGitBashPath(bashPath: string, source: string): void {
   safeLog('info', 'Git Bash ready for claude-agent-sdk on Windows', { source, bashPath })
 }
 
+/**
+ * Extract bundled MinGit zip to DATA_DIR/mingit and return the mingit directory path.
+ * Returns null if mingit.zip is not found or extraction fails.
+ */
+function extractMinGit(): string | null {
+  if (process.platform !== 'win32') return null
+
+  const dataDir = process.env.DATA_DIR || './data'
+  const mingitDir = resolve(dataDir, 'mingit')
+  const gitExe = resolve(mingitDir, 'cmd', 'git.exe')
+
+  // Already extracted — skip
+  if (existsSync(gitExe)) return mingitDir
+
+  // Locate mingit.zip in resources
+  const resourcesDir = process.env.RESOURCES_DIR || ''
+  const candidates = [
+    resolve(resourcesDir, 'mingit', 'mingit.zip'),
+    resolve(resourcesDir, '_up_', 'src-tauri', 'resources', 'mingit', 'mingit.zip'),
+    resolve(resourcesDir, 'resources', 'mingit', 'mingit.zip'),
+  ]
+  const zipPath = candidates.find((p) => existsSync(p))
+  if (!zipPath) return null
+
+  safeLog('info', 'Extracting MinGit from bundled zip', { zipPath, mingitDir })
+  mkdirSync(mingitDir, { recursive: true })
+
+  try {
+    // Windows 10+ ships with tar that supports zip
+    execSync(`tar -xf "${zipPath}" -C "${mingitDir}"`, { timeout: 60_000 })
+  } catch {
+    // Fallback: PowerShell Expand-Archive
+    try {
+      execSync(
+        `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath.replace(/'/g, "''")}' -DestinationPath '${mingitDir.replace(/'/g, "''")}' -Force"`,
+        { timeout: 60_000 },
+      )
+    } catch (e) {
+      safeLog('error', 'Failed to extract MinGit zip', { error: String(e) })
+      return null
+    }
+  }
+
+  if (existsSync(gitExe)) {
+    safeLog('info', 'MinGit extracted successfully', { mingitDir })
+    return mingitDir
+  }
+
+  safeLog('warn', 'MinGit extraction completed but git.exe not found at expected path', { expected: gitExe })
+  return null
+}
+
 function ensureWindowsGitBash(): string | null {
   if (process.platform !== 'win32') return null
 
@@ -323,7 +375,7 @@ function ensureWindowsGitBash(): string | null {
     return existing
   }
 
-  // Auto-detect system Git installation only (no bundled MinGit fallback)
+  // Auto-detect system Git installation
   const programFiles = process.env.ProgramFiles || 'C:\\Program Files'
   const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)'
   const localAppData = process.env.LOCALAPPDATA || ''
@@ -349,6 +401,33 @@ function ensureWindowsGitBash(): string | null {
     if (existsSync(candidate)) {
       setWindowsGitBashPath(candidate, 'system-git')
       return candidate
+    }
+  }
+
+  // Fallback: extract bundled MinGit and inject into PATH
+  const mingitDir = extractMinGit()
+  if (mingitDir) {
+    // Inject MinGit paths into PATH
+    appendPathEntries([
+      resolve(mingitDir, 'cmd'),
+      resolve(mingitDir, 'bin'),
+      resolve(mingitDir, 'usr', 'bin'),
+      resolve(mingitDir, 'mingw64', 'bin'),
+    ])
+
+    // Set CLAUDE_CODE_GIT_BASH_PATH if bash.exe exists in MinGit
+    const mingitBash = resolve(mingitDir, 'usr', 'bin', 'bash.exe')
+    if (existsSync(mingitBash)) {
+      process.env.CLAUDE_CODE_GIT_BASH_PATH = mingitBash
+      safeLog('info', 'MinGit bash.exe set as CLAUDE_CODE_GIT_BASH_PATH', { mingitBash })
+      return mingitBash
+    }
+
+    // MinGit may not have bash.exe but git.exe is available — still useful
+    const mingitGit = resolve(mingitDir, 'cmd', 'git.exe')
+    if (existsSync(mingitGit)) {
+      safeLog('info', 'MinGit git.exe injected into PATH (no bash.exe)', { mingitGit })
+      return null
     }
   }
 

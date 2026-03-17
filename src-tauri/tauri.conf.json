@@ -46,7 +46,8 @@
       "../prompts/**/*",
       "../node_modules/@anthropic-ai/claude-agent-sdk/cli.js",
       "../src-tauri/resources/bun-runtime/*",
-      "../src-tauri/resources/git-installer/*"
+      "../src-tauri/resources/git-installer/*",
+      "../src-tauri/resources/mingit/*"
     ],
     "macOS": {
       "minimumSystemVersion": "10.15"
