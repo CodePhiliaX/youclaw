@@ -101,9 +101,7 @@ fn add_windows_git_paths(extra_paths: &mut Vec<String>, bash_path: &str) {
 
 #[cfg(target_os = "windows")]
 fn find_bundled_git_installer(app: &AppHandle) -> Option<String> {
-    let installer_name = "Git-2.53.0.2-64-bit.exe";
-
-    let mut candidates: Vec<String> = vec![];
+    let mut installer_dirs: Vec<String> = vec![];
     if let Ok(resource_dir) = app.path().resource_dir() {
         let mut res = resource_dir.to_string_lossy().to_string();
         // Strip Windows extended-length path prefix (\\?\)
@@ -111,14 +109,34 @@ fn find_bundled_git_installer(app: &AppHandle) -> Option<String> {
             res = res[4..].to_string();
         }
 
-        candidates.push(format!("{}\\git-installer\\{}", res, installer_name));
-        candidates.push(format!("{}\\resources\\git-installer\\{}", res, installer_name));
-        candidates.push(format!("{}\\_up_\\src-tauri\\resources\\git-installer\\{}", res, installer_name));
+        installer_dirs.push(format!("{}\\git-installer", res));
+        installer_dirs.push(format!("{}\\resources\\git-installer", res));
+        installer_dirs.push(format!("{}\\_up_\\src-tauri\\resources\\git-installer", res));
     }
 
-    for candidate in candidates {
+    // Prefer fixed name first for deterministic behavior.
+    for dir in &installer_dirs {
+        let candidate = format!("{}\\Git-2.53.0.2-64-bit.exe", dir);
         if std::path::Path::new(&candidate).exists() {
             return Some(candidate);
+        }
+    }
+
+    // Fallback: pick any Git-*-64-bit.exe under git-installer.
+    for dir in installer_dirs {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                    continue;
+                }
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("Git-")
+                    && name.ends_with("-64-bit.exe")
+                    && std::path::Path::new(&entry.path()).exists()
+                {
+                    return Some(entry.path().to_string_lossy().to_string());
+                }
+            }
         }
     }
 
