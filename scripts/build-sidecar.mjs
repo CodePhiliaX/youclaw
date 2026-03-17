@@ -114,25 +114,29 @@ function copyBunRuntime() {
 
 copyBunRuntime()
 
-// Download MinGit for Windows (bundled so claude-agent-sdk works without system Git)
-// On non-Windows, just ensures the directory exists so Tauri resource glob doesn't fail
+// Download MinGit zip for Windows (bundled as-is so NSIS doesn't drop nested dirs)
+// On non-Windows, creates a placeholder so Tauri resource config doesn't error
 async function downloadMinGit() {
-  const mingitDir = resolve(root, 'src-tauri', 'resources', 'mingit')
-  mkdirSync(mingitDir, { recursive: true })
+  const resourcesDir = resolve(root, 'src-tauri', 'resources')
+  mkdirSync(resourcesDir, { recursive: true })
+  const zipDest = resolve(resourcesDir, 'mingit.zip')
 
   if (process.platform !== 'win32') {
-    // Ensure at least one file exists so Tauri resource glob doesn't error
-    writeFileSync(resolve(mingitDir, '.gitkeep'), '', 'utf-8')
+    // Create an empty placeholder zip so Tauri resource glob doesn't error
+    const { existsSync } = await import('node:fs')
+    if (!existsSync(zipDest)) {
+      // Minimal valid zip (empty archive)
+      const emptyZip = Buffer.from([0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+      const { writeFileSync: wfs } = await import('node:fs')
+      wfs(zipDest, emptyZip)
+    }
     console.log('Skipping MinGit download (not Windows)')
     return
   }
 
-  const mingitBash = resolve(mingitDir, 'usr', 'bin', 'bash.exe')
-
-  // Already extracted?
   const { existsSync } = await import('node:fs')
-  if (existsSync(mingitBash)) {
-    console.log('MinGit already present, skipping download')
+  if (existsSync(zipDest) && statSync(zipDest).size > 1000) {
+    console.log('MinGit zip already present, skipping download')
     return
   }
 
@@ -141,17 +145,10 @@ async function downloadMinGit() {
   // (busybox variant does NOT have bash.exe)
   const zipName = `MinGit-${version}-64-bit.zip`
   const url = `https://github.com/git-for-windows/git/releases/download/v${version}.windows.1/${zipName}`
-  const zipPath = resolve(root, zipName)
 
   console.log(`Downloading MinGit ${version}...`)
-  execSync(`curl -fsSL -o "${zipPath}" "${url}"`, { stdio: 'inherit' })
-
-  console.log(`Extracting MinGit to ${mingitDir}...`)
-  execSync(`powershell -Command "Expand-Archive -Force '${zipPath}' '${mingitDir}'"`, { stdio: 'inherit' })
-
-  // Cleanup zip
-  try { unlinkSync(zipPath) } catch {}
-  console.log('MinGit downloaded and extracted successfully')
+  execSync(`curl -fsSL -o "${zipDest}" "${url}"`, { stdio: 'inherit' })
+  console.log('MinGit zip downloaded successfully')
 }
 
 await downloadMinGit()

@@ -85,22 +85,51 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
             }
 
             // Auto-detect Git for Windows (needed for claude-agent-sdk shell commands)
-            // Priority 1: Bundled MinGit in resources directory
+            // Priority 1: Bundled MinGit — shipped as mingit.zip, extracted to DATA_DIR/mingit on first launch
             let mut git_bash_found = false;
-            if let Ok(resource_dir) = app.path().resource_dir() {
-                let mut res_str = resource_dir.to_string_lossy().to_string();
-                if res_str.starts_with("\\\\?\\") {
-                    res_str = res_str[4..].to_string();
-                }
-                let mingit_candidates = [
-                    format!("{}\\mingit", res_str),
-                ];
-                for mingit_dir in &mingit_candidates {
+            {
+                // Determine mingit extraction target directory
+                let mingit_dir = app.path().app_data_dir().ok()
+                    .map(|d| format!("{}\\mingit", d.to_string_lossy().to_string().trim_start_matches("\\\\?\\")));
+
+                if let Some(ref mingit_dir) = mingit_dir {
                     let bash_path = format!("{}\\usr\\bin\\bash.exe", mingit_dir);
+                    // Extract from bundled zip if not yet extracted
+                    if !std::path::Path::new(&bash_path).exists() {
+                        if let Ok(resource_dir) = app.path().resource_dir() {
+                            let mut res_str = resource_dir.to_string_lossy().to_string();
+                            if res_str.starts_with("\\\\?\\") {
+                                res_str = res_str[4..].to_string();
+                            }
+                            let zip_path = format!("{}\\mingit.zip", res_str);
+                            if std::path::Path::new(&zip_path).exists() {
+                                log::info!("Extracting bundled mingit.zip to {}", mingit_dir);
+                                let _ = std::fs::create_dir_all(mingit_dir);
+                                // Use PowerShell to extract (available on all Windows 10+)
+                                let ps_cmd = format!(
+                                    "Expand-Archive -Force -Path '{}' -DestinationPath '{}'",
+                                    zip_path, mingit_dir
+                                );
+                                match std::process::Command::new("powershell")
+                                    .args(["-NoProfile", "-Command", &ps_cmd])
+                                    .output()
+                                {
+                                    Ok(output) => {
+                                        if output.status.success() {
+                                            log::info!("MinGit extracted successfully");
+                                        } else {
+                                            log::error!("MinGit extraction failed: {}", String::from_utf8_lossy(&output.stderr));
+                                        }
+                                    }
+                                    Err(e) => log::error!("Failed to run PowerShell for MinGit extraction: {}", e),
+                                }
+                            }
+                        }
+                    }
+                    // Now check if bash.exe is available
                     if std::path::Path::new(&bash_path).exists() {
                         log::info!("Bundled MinGit found at: {}", mingit_dir);
                         env_vars.push(("CLAUDE_CODE_GIT_BASH_PATH".into(), bash_path));
-                        // Add MinGit directories to PATH
                         let cmd_dir = format!("{}\\cmd", mingit_dir);
                         let usr_bin_dir = format!("{}\\usr\\bin", mingit_dir);
                         let mingw64_bin_dir = format!("{}\\mingw64\\bin", mingit_dir);
@@ -110,7 +139,6 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
                             }
                         }
                         git_bash_found = true;
-                        break;
                     }
                 }
             }

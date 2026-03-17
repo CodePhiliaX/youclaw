@@ -643,22 +643,37 @@ export class AgentRuntime {
 
     // Auto-detect Git Bash on Windows (claude-agent-sdk requires it for shell commands)
     if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
-      // Priority 1: Bundled MinGit in resources directory
+      // Priority 1: Bundled MinGit — extracted from mingit.zip to DATA_DIR/mingit by Rust main process
+      const dataDir = process.env.DATA_DIR
       const resourcesDir = process.env.RESOURCES_DIR
-      if (resourcesDir) {
-        const mingitCandidates = [
-          resolve(resourcesDir, 'mingit', 'usr', 'bin', 'bash.exe'),
-        ]
-        logger.info({ resourcesDir, mingitCandidates, category: 'agent' }, 'Checking bundled MinGit candidates')
-        for (const candidate of mingitCandidates) {
-          if (existsSync(candidate)) {
-            logger.info({ path: candidate, category: 'agent' }, 'Bundled MinGit detected on Windows')
-            process.env.CLAUDE_CODE_GIT_BASH_PATH = candidate
-            break
+      if (dataDir) {
+        const mingitDir = resolve(dataDir, 'mingit')
+        const bashPath = resolve(mingitDir, 'usr', 'bin', 'bash.exe')
+
+        // If not yet extracted, try extracting from bundled zip
+        if (!existsSync(bashPath) && resourcesDir) {
+          const zipPath = resolve(resourcesDir, 'mingit.zip')
+          if (existsSync(zipPath)) {
+            logger.info({ zipPath, mingitDir, category: 'agent' }, 'Extracting bundled mingit.zip')
+            try {
+              mkdirSync(mingitDir, { recursive: true })
+              execSync(
+                `powershell -NoProfile -Command "Expand-Archive -Force -Path '${zipPath}' -DestinationPath '${mingitDir}'"`,
+                { timeout: 60_000 },
+              )
+              logger.info({ category: 'agent' }, 'MinGit extracted successfully')
+            } catch (e) {
+              logger.error({ err: e, category: 'agent' }, 'Failed to extract MinGit zip')
+            }
           }
         }
+
+        if (existsSync(bashPath)) {
+          logger.info({ path: bashPath, category: 'agent' }, 'Bundled MinGit detected on Windows')
+          process.env.CLAUDE_CODE_GIT_BASH_PATH = bashPath
+        }
       } else {
-        logger.warn({ category: 'agent' }, 'RESOURCES_DIR not set, cannot check bundled MinGit')
+        logger.warn({ category: 'agent' }, 'DATA_DIR not set, cannot check bundled MinGit')
       }
 
       // Priority 2: System Git installation

@@ -116,10 +116,10 @@ jobs:
           chmod 755 src-tauri/resources/bun-runtime/bun
           echo "Embedded Bun runtime: $(file src-tauri/resources/bun-runtime/bun)"
 
-      - name: Create empty mingit directory (Windows-only resource)
+      - name: Create placeholder mingit.zip (Windows-only resource)
         run: |
-          mkdir -p src-tauri/resources/mingit
-          touch src-tauri/resources/mingit/.gitkeep
+          mkdir -p src-tauri/resources
+          python3 -c "import zipfile; zipfile.ZipFile('src-tauri/resources/mingit.zip','w').close()"
 
       - name: Import macOS certificates
         uses: apple-actions/import-codesign-certs@v3
@@ -209,17 +209,15 @@ jobs:
           cp /tmp/bun-extract/bun-windows-x64/bun.exe src-tauri/resources/bun-runtime/bun.exe
           echo "Embedded Bun runtime: $(ls -la src-tauri/resources/bun-runtime/bun.exe)"
 
-      - name: Embed MinGit for Windows
+      - name: Download MinGit zip for bundling
         shell: bash
         run: |
           MINGIT_VERSION="2.49.0"
-          # Regular MinGit includes MSYS2 runtime with usr/bin/bash.exe
           MINGIT_URL="https://github.com/git-for-windows/git/releases/download/v${MINGIT_VERSION}.windows.1/MinGit-${MINGIT_VERSION}-64-bit.zip"
           echo "Downloading MinGit ${MINGIT_VERSION}: ${MINGIT_URL}"
-          curl -fsSL -o /tmp/mingit.zip "${MINGIT_URL}"
-          mkdir -p src-tauri/resources/mingit
-          unzip -o /tmp/mingit.zip -d src-tauri/resources/mingit
-          echo "MinGit extracted: $(ls src-tauri/resources/mingit/ | head -20)"
+          mkdir -p src-tauri/resources
+          curl -fsSL -o src-tauri/resources/mingit.zip "${MINGIT_URL}"
+          echo "MinGit zip size: $(stat --format=%s src-tauri/resources/mingit.zip) bytes"
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
