@@ -1,239 +1,155 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useCallback } from 'react'
 import { sendMessage, getMessages, abortChat } from '../api/client'
-import { useSSE } from './useSSE'
+import { useChatStore, onChatUpdate } from '../stores/chat'
+import { sseManager } from '../lib/sse-manager'
 import type { Attachment } from '../types/attachment'
+import type { ChatState, Message, ToolUseItem } from '../stores/chat'
 
-export type ToolUseItem = {
-  id: string
-  name: string
-  input?: string
-  status: 'running' | 'done'
+// Re-export types for consumers (chatCtx.ts imports these)
+export type { Message, ToolUseItem }
+
+/**
+ * Read active chat's state. Returns null when no chat is active (new chat screen).
+ */
+export function useActiveChatState(): ChatState | null {
+  const activeChatId = useChatStore((s) => s.activeChatId)
+  const chat = useChatStore((s) =>
+    activeChatId ? s.chats[activeChatId] ?? null : null,
+  )
+  return chat
 }
 
-export type Message = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: string
-  toolUse?: ToolUseItem[]
-  attachments?: Attachment[]
-  errorCode?: string
+/**
+ * Read a specific chat's isProcessing status (for sidebar indicators).
+ * Each component calling this only re-renders when its specific chatId changes.
+ */
+export function useChatProcessing(chatId: string): boolean {
+  return useChatStore((s) => s.chats[chatId]?.isProcessing ?? false)
 }
 
-export function useChat(agentId: string) {
-  const [chatId, setChatId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [streamingText, setStreamingText] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [pendingToolUse, setPendingToolUse] = useState<ToolUseItem[]>([])
-  const [chatStatus, setChatStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready')
-  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false)
+/**
+ * Chat actions. agentId is captured here so send() matches existing ChatContextType.
+ */
+export function useChatActions(agentId: string) {
+  const send = useCallback(
+    async (
+      prompt: string,
+      browserProfileId?: string,
+      attachments?: Attachment[],
+    ) => {
+      const store = useChatStore.getState()
+      const currentChatId = store.activeChatId
+      const effectiveChatId = currentChatId ?? `web:${crypto.randomUUID()}`
 
-  const pendingToolUseRef = useRef<ToolUseItem[]>([])
-  useEffect(() => { pendingToolUseRef.current = pendingToolUse }, [pendingToolUse])
+      // Initialize chat entry in store
+      store.initChat(effectiveChatId)
+      store.setActiveChatId(effectiveChatId)
 
-  // Track last SSE event time for timeout fallback
-  const lastEventTimeRef = useRef<number>(0)
-  // Flag that SSE has already handled the error, preventing send() catch from adding duplicate messages
-  const sseErrorHandledRef = useRef(false)
+      // Reset SSE error flag for this send
+      store.resetSseErrorHandled(effectiveChatId)
 
-  const { close: closeSSE } = useSSE(chatId, (event) => {
-    lastEventTimeRef.current = Date.now()
-    switch (event.type) {
-      case 'stream':
-        setStreamingText(prev => prev + (event.text ?? ''))
-        break
-      case 'tool_use':
-        setPendingToolUse(prev => {
-          const updated = prev.map(t => t.status === 'running' ? { ...t, status: 'done' as const } : t)
-          return [...updated, {
-            id: Date.now().toString(),
-            name: event.tool ?? 'unknown',
-            input: event.input,
-            status: 'running',
-          }]
-        })
-        break
-      case 'complete': {
-        const finalToolUse = pendingToolUseRef.current.map(t => ({ ...t, status: 'done' as const }))
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: event.fullText ?? '',
-          timestamp: new Date().toISOString(),
-          toolUse: finalToolUse.length > 0 ? finalToolUse : undefined,
-        }])
-        setStreamingText('')
-        setPendingToolUse([])
-        break
+      // Add user message
+      store.addUserMessage(effectiveChatId, {
+        id: Date.now().toString(),
+        role: 'user',
+        content: prompt,
+        timestamp: new Date().toISOString(),
+        attachments,
+      })
+
+      // Set processing
+      store.setProcessing(effectiveChatId, true)
+
+      // Connect SSE
+      sseManager.connect(effectiveChatId)
+
+      // Wait for EventSource connection if new chat
+      if (!currentChatId) {
+        await new Promise((r) => setTimeout(r, 100))
       }
-      case 'processing':
-        setIsProcessing(event.isProcessing ?? false)
-        break
-      case 'error':
-        sseErrorHandledRef.current = true
-        setChatStatus('error')
-        setTimeout(() => setChatStatus('ready'), 2000)
-        if (event.errorCode === 'INSUFFICIENT_CREDITS') {
-          setShowInsufficientCredits(true)
-          // Replace last assistant message (may contain upstream error from complete event)
-          // with a clean INSUFFICIENT_CREDITS marker
-          setMessages(prev => {
-            // Drop the last assistant message if it was just added from this turn
-            const last = prev[prev.length - 1]
-            const base = (last && last.role === 'assistant' && !last.errorCode)
-              ? prev.slice(0, -1)
-              : prev
-            return [...base, {
-              id: Date.now().toString(),
-              role: 'assistant' as const,
-              content: '',
-              timestamp: new Date().toISOString(),
-              errorCode: 'INSUFFICIENT_CREDITS',
-            }]
-          })
-        } else if (event.error) {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: `⚠️ ${event.error}`,
-            timestamp: new Date().toISOString(),
-          }])
-        }
-        setStreamingText('')
-        setIsProcessing(false)
-        break
-    }
-  })
 
-  // SSE fallback: proactively query backend when no event received for 8+ seconds while processing
-  const chatIdRef = useRef(chatId)
-  useEffect(() => { chatIdRef.current = chatId }, [chatId])
-
-  useEffect(() => {
-    if (!isProcessing) return
-    const timer = setInterval(async () => {
-      const cid = chatIdRef.current
-      if (!cid) return
-      // Over 8 seconds since last event, fetch proactively
-      if (Date.now() - lastEventTimeRef.current < 8000) return
       try {
-        const msgs = await getMessages(cid)
-        const lastMsg = msgs[msgs.length - 1]
-        if (lastMsg && lastMsg.is_bot_message) {
-          // Backend has bot reply, meaning complete event was lost, recover manually
-          setMessages(msgs.map(m => ({
-            id: m.id,
-            role: m.is_bot_message ? 'assistant' as const : 'user' as const,
-            content: m.content,
-            timestamp: m.timestamp,
-            attachments: (m as { attachments?: Attachment[] | null }).attachments ?? undefined,
-          })))
-          setStreamingText('')
-          setPendingToolUse([])
-          setIsProcessing(false)
+        await sendMessage(
+          agentId,
+          prompt,
+          effectiveChatId,
+          browserProfileId,
+          attachments,
+        )
+      } catch (err) {
+        // Check if SSE already handled error
+        const latest = useChatStore.getState().chats[effectiveChatId]
+        if (latest?.sseErrorHandled) {
+          return
         }
-      } catch {
-        // Query failed, ignore and retry next time
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        const isCredits =
+          /insufficient|credit|balance|quota/i.test(errorMsg)
+        const errorStore = useChatStore.getState()
+        if (isCredits) {
+          errorStore.setShowInsufficientCredits(effectiveChatId, true)
+          errorStore.handleError(effectiveChatId, '', 'INSUFFICIENT_CREDITS')
+        } else {
+          errorStore.handleError(effectiveChatId, errorMsg)
+        }
       }
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [isProcessing])
+    },
+    [agentId],
+  )
 
-  useEffect(() => {
-    if (chatStatus === 'error') return // Keep error status until setTimeout resets it
-    if (isProcessing && !streamingText) setChatStatus('submitted')
-    else if (isProcessing && streamingText) setChatStatus('streaming')
-    else setChatStatus('ready')
-  }, [isProcessing, streamingText, chatStatus])
+  const loadChat = useCallback(async (chatId: string) => {
+    const store = useChatStore.getState()
+    store.setActiveChatId(chatId)
 
-  const send = useCallback(async (prompt: string, browserProfileId?: string, attachments?: Attachment[]) => {
-    // Pre-generate chatId for new chats so SSE connects before sendMessage,
-    // avoiding race condition where error events fire before EventSource is ready
-    const effectiveChatId = chatId ?? `web:${crypto.randomUUID()}`
-    if (!chatId) {
-      setChatId(effectiveChatId)
-    }
+    // If chat already in store with messages, instant switch
+    const existing = store.chats[chatId]
+    if (existing && existing.messages.length > 0) return
 
-    // Add user message to the list
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: 'user',
-      content: prompt,
-      timestamp: new Date().toISOString(),
-      attachments,
-    }])
-    setIsProcessing(true)
-    setStreamingText('')
-    sseErrorHandledRef.current = false
-
-    // Wait for React render + EventSource connection before sending
-    if (!chatId) {
-      await new Promise(r => setTimeout(r, 100))
-    }
-
-    try {
-      await sendMessage(agentId, prompt, effectiveChatId, browserProfileId, attachments)
-    } catch (err) {
-      // SSE already handled the error, skip to avoid duplicate messages
-      if (sseErrorHandledRef.current) {
-        sseErrorHandledRef.current = false
-        return
-      }
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      const isCredits = /insufficient|credit|balance|quota/i.test(errorMsg)
-      if (isCredits) {
-        setShowInsufficientCredits(true)
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: '',
-          timestamp: new Date().toISOString(),
-          errorCode: 'INSUFFICIENT_CREDITS',
-        }])
-      } else {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: `⚠️ ${errorMsg}`,
-          timestamp: new Date().toISOString(),
-        }])
-      }
-      setIsProcessing(false)
-    }
-  }, [agentId, chatId])
-
-  const loadChat = useCallback(async (existingChatId: string) => {
-    const msgs = await getMessages(existingChatId)
+    // Otherwise fetch from backend
+    const msgs = await getMessages(chatId)
     if (msgs.length === 0) throw new Error('Chat not found or empty')
-    setChatId(existingChatId)
-    setMessages(msgs.map(m => ({
-      id: m.id,
-      role: m.is_bot_message ? 'assistant' as const : 'user' as const,
-      content: m.content,
-      timestamp: m.timestamp,
-      attachments: (m as { attachments?: Attachment[] | null }).attachments ?? undefined,
-    })))
+
+    store.initChat(chatId)
+    store.setMessages(
+      chatId,
+      msgs.map((m) => ({
+        id: m.id,
+        role: m.is_bot_message
+          ? ('assistant' as const)
+          : ('user' as const),
+        content: m.content,
+        timestamp: m.timestamp,
+        attachments:
+          (m as { attachments?: Attachment[] | null }).attachments ??
+          undefined,
+      })),
+    )
   }, [])
 
   const newChat = useCallback(() => {
-    setChatId(null)
-    setMessages([])
-    setStreamingText('')
-    setIsProcessing(false)
-    setPendingToolUse([])
+    useChatStore.getState().setActiveChatId(null)
   }, [])
 
   const stop = useCallback(() => {
-    // Fire-and-forget backend abort — UI responds immediately
-    if (chatId) {
-      abortChat(chatId).catch(() => {})
-    }
-    closeSSE()
-    setIsProcessing(false)
-    setStreamingText('')
-    setPendingToolUse([])
-  }, [chatId, closeSSE])
+    const store = useChatStore.getState()
+    const chatId = store.activeChatId
+    if (!chatId) return
 
-  return { chatId, messages, streamingText, isProcessing, pendingToolUse, chatStatus, send, loadChat, newChat, stop, showInsufficientCredits, setShowInsufficientCredits }
+    sseManager.disconnect(chatId)
+    store.setProcessing(chatId, false)
+    abortChat(chatId).catch(() => {})
+  }, [])
+
+  const setShowInsufficientCredits = useCallback((show: boolean) => {
+    const store = useChatStore.getState()
+    const chatId = store.activeChatId
+    if (chatId) {
+      store.setShowInsufficientCredits(chatId, show)
+    }
+  }, [])
+
+  return { send, loadChat, newChat, stop, setShowInsufficientCredits }
 }
+
+// Re-export onChatUpdate for ChatProvider
+export { onChatUpdate }
