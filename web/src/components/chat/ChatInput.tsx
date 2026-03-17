@@ -112,7 +112,7 @@ export function ChatInput() {
     <div className="bg-background px-5 py-3">
       <PromptInput
         onSubmit={handleSubmit}
-        accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv"
+        accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
         maxFiles={MAX_FILES}
         maxFileSize={10 * 1024 * 1024}
       >
