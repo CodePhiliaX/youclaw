@@ -144,7 +144,7 @@ export function ToolUseBlock({ items }: { items: ToolUseItem[] }) {
   if (items.length === 0) return null
 
   return (
-    <div className="space-y-0.5 my-1">
+    <div className="space-y-0.5 my-1 border-l-2 border-muted-foreground/25 pl-2.5">
       {items.map(item => {
         const meta = TOOL_META[item.name]
           ?? (item.name.startsWith('mcp__') ? getMcpMeta(item.name.split('__').pop() ?? '') : DEFAULT_META)
