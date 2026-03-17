@@ -88,7 +88,16 @@ body {
   min-height: 100vh;
 }
 
-/* Custom scrollbar for non-Mac platforms (Mac keeps native behavior) */
+/* Scrollbar color for all platforms (preserves native overlay behavior on macOS) */
+* {
+  scrollbar-color: oklch(0.5 0 0 / 0.3) transparent;
+}
+
+.dark * {
+  scrollbar-color: oklch(0.5 0 0 / 0.3) transparent;
+}
+
+/* Custom scrollbar for non-Mac platforms (Mac keeps native overlay behavior) */
 .custom-scrollbar ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -109,10 +118,10 @@ body {
 
 .custom-scrollbar.dark ::-webkit-scrollbar-thumb,
 .custom-scrollbar .dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.8 0 0 / 0.2);
+  background: oklch(0.5 0 0 / 0.25);
 }
 
 .custom-scrollbar.dark ::-webkit-scrollbar-thumb:hover,
 .custom-scrollbar .dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.8 0 0 / 0.4);
+  background: oklch(0.5 0 0 / 0.35);
 }

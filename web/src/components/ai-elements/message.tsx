@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { LinkSafetyModal } from "./link-safety-modal";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
@@ -321,6 +322,14 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code };
 
+const linkSafetyConfig = {
+  enabled: true,
+  renderModal: ({ isOpen, onClose, url }: { isOpen: boolean; onClose: () => void; url: string }) => {
+    if (!isOpen) return null;
+    return <LinkSafetyModal url={url} onClose={onClose} />;
+  },
+};
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -329,6 +338,7 @@ export const MessageResponse = memo(
         className
       )}
       plugins={streamdownPlugins}
+      linkSafety={linkSafetyConfig}
       {...props}
     />
   ),
