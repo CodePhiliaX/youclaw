@@ -170,6 +170,21 @@ export class AgentManager {
           workspaceDir: agentDir,
         }
 
+        if (this.skillsLoader) {
+          const normalizedSkills = this.skillsLoader.normalizeAgentSkillNames(config.skills)
+          if (normalizedSkills.changed) {
+            config.skills = normalizedSkills.skills
+            const nextYaml = {
+              ...parsed,
+              id: config.id,
+              name: config.name,
+              skills: normalizedSkills.skills,
+            }
+            writeFileSync(configPath, stringifyYaml(nextYaml))
+            logger.info({ agentId: config.id, skills: normalizedSkills.skills }, 'Normalized agent skill bindings')
+          }
+        }
+
         // Backward compatibility: auto-migrate legacy telegram.chatIds to bindings
         if (config.telegram?.chatIds && !config.bindings) {
           config.bindings = [{

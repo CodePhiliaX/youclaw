@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   getSkills,
   getSkillAgents,
@@ -156,6 +156,16 @@ export function Skills() {
     setDeleteAffectedAgents([])
   }, [])
 
+  const refreshMarketplace = useCallback(() => {
+    if (tab !== 'marketplace') return
+    loadMarketplace({ query: searchQuery })
+  }, [tab, loadMarketplace, searchQuery])
+
+  const handleMarketplaceChanged = useCallback(() => {
+    loadSkills()
+    refreshMarketplace()
+  }, [loadSkills, refreshMarketplace])
+
   // Debounce search input by 300ms
   const handleSearchChange = useCallback((value: string) => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
@@ -178,7 +188,11 @@ export function Skills() {
     .filter(g => g.skills.length > 0)
 
   const isSearching = searchQuery.trim().length > 0
-  const hasMarketplaceItems = marketplace.items.length > 0
+  const visibleMarketplaceItems = useMemo(
+    () => marketplace.items.filter((skill) => !skill.installed),
+    [marketplace.items],
+  )
+  const hasMarketplaceItems = visibleMarketplaceItems.length > 0
   const canLoadMore = isSearching && Boolean(marketplace.nextCursor)
 
   return (
@@ -510,7 +524,7 @@ export function Skills() {
             )}
 
             {/* Empty state */}
-            {marketplaceStatus !== 'loading' && marketplaceStatus !== 'error' && !hasMarketplaceItems && (
+            {marketplaceStatus !== 'loading' && marketplaceStatus !== 'error' && !hasMarketplaceItems && !canLoadMore && (
               <div className="text-center text-muted-foreground text-sm py-12">
                 <Store className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <p>{isSearching ? t.skills.noMarketplaceSkills : t.skills.noSkills}</p>
@@ -518,13 +532,13 @@ export function Skills() {
             )}
 
             {/* Results */}
-            {marketplaceStatus !== 'loading' && marketplace.items.length > 0 && (
+            {marketplaceStatus !== 'loading' && visibleMarketplaceItems.length > 0 && (
               <div className="grid gap-3">
-                {marketplace.items.map(skill => (
+                {visibleMarketplaceItems.map(skill => (
                   <MarketplaceCard
                     key={skill.slug}
                     skill={skill}
-                    onChanged={loadSkills}
+                    onChanged={handleMarketplaceChanged}
                   />
                 ))}
               </div>
