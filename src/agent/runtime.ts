@@ -823,14 +823,29 @@ export class AgentRuntime {
       category: 'agent',
     }, 'Full SDK query options and env snapshot')
 
-    // Append file path hints so the agent can read attached files via its tools
+    // Append file path hints so the agent can access attached files via its tools
     let finalUserPrompt = prompt
     if (attachments && attachments.length > 0) {
-      const fileList = attachments
-        .map((a) => `- ${a.filePath} (${a.mediaType}, ${a.filename})`)
-        .join('\n')
-      const suffix = `\n\nThe user attached the following files:\n${fileList}\nPlease read these files first before answering.`
-      finalUserPrompt = (prompt || '') + suffix
+      const imageFiles = attachments.filter((a) => a.mediaType.startsWith('image/'))
+      const otherFiles = attachments.filter((a) => !a.mediaType.startsWith('image/'))
+
+      const parts: string[] = []
+
+      if (imageFiles.length > 0) {
+        const list = imageFiles.map((a) => `- ${a.filePath} (${a.mediaType})`).join('\n')
+        parts.push(
+          `[Attached images]\n${list}\n` +
+          `IMPORTANT: You MUST use the understand_image tool (or similar image analysis tool) with the local file path to analyze these images. ` +
+          `Do NOT use the Read tool for image files — it cannot interpret image content.`
+        )
+      }
+
+      if (otherFiles.length > 0) {
+        const list = otherFiles.map((a) => `- ${a.filePath} (${a.mediaType}, ${a.filename})`).join('\n')
+        parts.push(`[Attached files]\n${list}\nPlease read these files first before answering.`)
+      }
+
+      finalUserPrompt = (finalUserPrompt || '') + '\n\n' + parts.join('\n\n')
     }
 
     const q = query({
