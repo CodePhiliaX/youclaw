@@ -12,6 +12,7 @@ import type { PromptBuilder } from './prompt-builder.ts'
 import type { AgentCompiler } from './compiler.ts'
 import type { HooksManager } from './hooks.ts'
 import { resolveMcpServers } from './mcp-utils.ts'
+import { preprocessAttachments } from './document-converter.ts'
 import { abortRegistry } from './abort-registry.ts'
 import { getActiveModelConfig } from '../settings/manager.ts'
 import { getAuthToken } from '../routes/auth.ts'
@@ -849,11 +850,17 @@ export class AgentRuntime {
       category: 'agent',
     }, 'Full SDK query options and env snapshot')
 
+    // Pre-convert binary documents (DOCX/XLSX/PPTX/PDF) to plain text
+    let processedAttachments = attachments
+    if (attachments && attachments.length > 0) {
+      processedAttachments = await preprocessAttachments(attachments)
+    }
+
     // Append file path hints so the agent can access attached files via its tools
     let finalUserPrompt = prompt
-    if (attachments && attachments.length > 0) {
-      const imageFiles = attachments.filter((a) => a.mediaType.startsWith('image/'))
-      const otherFiles = attachments.filter((a) => !a.mediaType.startsWith('image/'))
+    if (processedAttachments && processedAttachments.length > 0) {
+      const imageFiles = processedAttachments.filter((a) => a.mediaType.startsWith('image/'))
+      const otherFiles = processedAttachments.filter((a) => !a.mediaType.startsWith('image/'))
 
       const parts: string[] = []
 
