@@ -7,7 +7,7 @@ interface QueueItem {
   prompt: string
   requestedSkills?: string[]
   browserProfileId?: string
-  attachments?: Array<{ filename: string; mediaType: string; data: string; size: number }>
+  attachments?: Array<{ filename: string; mediaType: string; filePath: string }>
   resolve: (result: string) => void
   reject: (error: Error) => void
 }
@@ -34,7 +34,7 @@ export class AgentQueue {
   /**
    * Enqueue a message and return the agent's reply
    */
-  async enqueue(agentId: string, chatId: string, prompt: string, requestedSkills?: string[], browserProfileId?: string, attachments?: Array<{ filename: string; mediaType: string; data: string; size: number }>): Promise<string> {
+  async enqueue(agentId: string, chatId: string, prompt: string, requestedSkills?: string[], browserProfileId?: string, attachments?: Array<{ filename: string; mediaType: string; filePath: string }>): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const chatKey = `${agentId}:${chatId}`
       const queue = this.chatQueues.get(chatKey) ?? []

@@ -40,6 +40,7 @@ export interface MarketplaceSkill {
   summary: string
   score?: number
   installed: boolean
+  installedSkillName?: string
   installSource?: string
   installedVersion?: string
   latestVersion?: string | null
@@ -105,31 +106,6 @@ interface NormalizedMarketplaceQuery {
   nonSuspiciousOnly: boolean
 }
 
-interface ClawHubListSkill {
-  slug: string
-  displayName: string
-  summary?: string | null
-  tags?: Record<string, string>
-  stats?: unknown
-  createdAt?: number
-  updatedAt?: number
-  latestVersion?: {
-    version?: string
-    createdAt?: number
-    changelog?: string
-    license?: string | null
-  } | null
-  metadata?: {
-    os?: string[] | null
-    systems?: string[] | null
-  } | null
-}
-
-interface ClawHubListResponse {
-  items?: ClawHubListSkill[]
-  nextCursor?: string | null
-}
-
 interface ClawHubSearchResult {
   score?: number
   slug?: string
@@ -185,6 +161,7 @@ interface MarketplaceStats {
 
 interface InstalledSkillState {
   slug: string
+  installedSkillName?: string
   installSource?: string
   version?: string
 }
@@ -200,6 +177,8 @@ const MAX_ZIP_ENTRY_BYTES = 512 * 1024
 const MAX_MARKETPLACE_LIMIT = 50
 const DEFAULT_MARKETPLACE_LIMIT = 24
 const FALLBACK_CURSOR_PREFIX = 'fallback:'
+const SEARCH_CURSOR_PREFIX = 'search:'
+const SEARCH_CACHE_TTL = 60_000
 
 interface ZipEntry {
   archivePath: string
@@ -209,6 +188,7 @@ interface ZipEntry {
 
 export class RegistryManager {
   private recommended: RecommendedEntry[] = []
+  private searchCache: { query: string; allItems: MarketplaceSkill[]; fetchedAt: number } | null = null
 
   constructor(
     private skillsLoader: SkillsLoader,
@@ -247,33 +227,39 @@ export class RegistryManager {
     }
     const results = data.results ?? []
 
-    // Get locally installed slug set
-    const installedSlugs = this.getInstalledSlugs()
+    const installed = this.collectInstalledSkillStates()
 
     // Merge install state
-    return results.map((entry): RecommendedSkill => ({
-      slug: entry.slug,
-      displayName: entry.displayName,
-      summary: entry.summary,
-      score: entry.score,
-      latestVersion: entry.version ?? null,
-      updatedAt: entry.updatedAt ? Number(entry.updatedAt) || null : undefined,
-      installed: installedSlugs.has(entry.slug),
-      hasUpdate: false,
-      tags: [],
-      source: 'fallback',
-    }))
+    return results.map((entry): RecommendedSkill => {
+      const installedState = installed.get(entry.slug)
+      return {
+        slug: entry.slug,
+        displayName: entry.displayName,
+        summary: entry.summary,
+        score: entry.score,
+        installed: Boolean(installedState),
+        installedSkillName: installedState?.installedSkillName,
+        installSource: installedState?.installSource,
+        installedVersion: installedState?.version,
+        latestVersion: entry.version ?? null,
+        updatedAt: entry.updatedAt ? Number(entry.updatedAt) || null : undefined,
+        hasUpdate: false,
+        tags: [],
+        source: 'fallback',
+      }
+    })
   }
 
   async listMarketplace(query: MarketplaceQuery = {}): Promise<MarketplacePage> {
     const normalized = this.normalizeMarketplaceQuery(query)
     const installed = this.collectInstalledSkillStates()
 
+    if (!normalized.query) {
+      return this.listMarketplaceFallback(normalized, installed)
+    }
+
     try {
-      if (normalized.query) {
-        return await this.searchMarketplaceRemote(normalized, installed)
-      }
-      return await this.listMarketplaceRemote(normalized, installed)
+      return await this.searchMarketplaceRemote(normalized, installed)
     } catch (error) {
       const logger = getLogger()
       const message = error instanceof Error ? error.message : String(error)
@@ -367,62 +353,61 @@ export class RegistryManager {
     logger.info({ slug: normalizedSlug }, 'Skill uninstalled')
   }
 
-  private async listMarketplaceRemote(
+  private async searchMarketplaceRemote(
     query: NormalizedMarketplaceQuery,
     installed: Map<string, InstalledSkillState>,
   ): Promise<MarketplacePage> {
-    const url = new URL(this.resolveSkillsUrl())
-    url.searchParams.set('limit', String(query.limit))
-    url.searchParams.set('sort', query.sort)
-    if (query.cursor) {
-      url.searchParams.set('cursor', query.cursor)
-    }
-    if (query.nonSuspiciousOnly) {
-      url.searchParams.set('nonSuspiciousOnly', 'true')
+    const offset = this.parseSearchCursor(query.cursor)
+
+    // Fetch fresh results if no cache, query changed, or cache expired
+    if (
+      !this.searchCache ||
+      this.searchCache.query !== query.query ||
+      Date.now() - this.searchCache.fetchedAt > SEARCH_CACHE_TTL
+    ) {
+      const url = new URL(this.resolveSearchUrl())
+      url.searchParams.set('q', query.query)
+      url.searchParams.set('limit', String(MAX_MARKETPLACE_LIMIT))
+      if (query.highlightedOnly) {
+        url.searchParams.set('highlightedOnly', 'true')
+      }
+      if (query.nonSuspiciousOnly) {
+        url.searchParams.set('nonSuspiciousOnly', 'true')
+      }
+
+      const payload = await this.fetchJson<ClawHubSearchResponse>(url.toString())
+      const allItems = (payload.results ?? [])
+        .filter((item): item is Required<Pick<ClawHubSearchResult, 'slug' | 'displayName'>> & ClawHubSearchResult => {
+          return typeof item.slug === 'string' && item.slug.length > 0 && typeof item.displayName === 'string'
+        })
+        .map((item) => this.buildRemoteSearchSkill(item, installed.get(item.slug)))
+
+      this.searchCache = {
+        query: query.query,
+        allItems,
+        fetchedAt: Date.now(),
+      }
     }
 
-    const payload = await this.fetchJson<ClawHubListResponse>(url.toString())
-    const items = (payload.items ?? []).map((item) =>
-      this.buildRemoteListSkill(item, installed.get(item.slug)),
-    )
+    const sliced = this.searchCache.allItems.slice(offset, offset + query.limit)
+    const nextOffset = offset + query.limit
+    const nextCursor = nextOffset < this.searchCache.allItems.length ? `${SEARCH_CURSOR_PREFIX}${nextOffset}` : null
 
     return {
-      items,
-      nextCursor: payload.nextCursor ?? null,
+      items: sliced,
+      nextCursor,
       source: 'clawhub',
       query: query.query,
       sort: query.sort,
     }
   }
 
-  private async searchMarketplaceRemote(
-    query: NormalizedMarketplaceQuery,
-    installed: Map<string, InstalledSkillState>,
-  ): Promise<MarketplacePage> {
-    const url = new URL(this.resolveSearchUrl())
-    url.searchParams.set('q', query.query)
-    url.searchParams.set('limit', String(query.limit))
-    if (query.highlightedOnly) {
-      url.searchParams.set('highlightedOnly', 'true')
+  private parseSearchCursor(cursor: string | null): number {
+    if (!cursor || !cursor.startsWith(SEARCH_CURSOR_PREFIX)) {
+      return 0
     }
-    if (query.nonSuspiciousOnly) {
-      url.searchParams.set('nonSuspiciousOnly', 'true')
-    }
-
-    const payload = await this.fetchJson<ClawHubSearchResponse>(url.toString())
-    const items = (payload.results ?? [])
-      .filter((item): item is Required<Pick<ClawHubSearchResult, 'slug' | 'displayName'>> & ClawHubSearchResult => {
-        return typeof item.slug === 'string' && item.slug.length > 0 && typeof item.displayName === 'string'
-      })
-      .map((item) => this.buildRemoteSearchSkill(item, installed.get(item.slug)))
-
-    return {
-      items,
-      nextCursor: null,
-      source: 'clawhub',
-      query: query.query,
-      sort: query.sort,
-    }
+    const value = Number.parseInt(cursor.slice(SEARCH_CURSOR_PREFIX.length), 10)
+    return Number.isFinite(value) && value >= 0 ? value : 0
   }
 
   private listMarketplaceFallback(
@@ -475,6 +460,7 @@ export class RegistryManager {
       displayName: payload.skill.displayName,
       summary: payload.skill.summary ?? '',
       installed: Boolean(installedState),
+      installedSkillName: installedState?.installedSkillName,
       installSource: installedState?.installSource,
       installedVersion: installedState?.version,
       latestVersion,
@@ -503,34 +489,6 @@ export class RegistryManager {
     }
   }
 
-  private buildRemoteListSkill(
-    item: ClawHubListSkill,
-    installedState?: InstalledSkillState,
-  ): MarketplaceSkill {
-    const latestVersion = item.latestVersion?.version ?? this.resolveLatestVersion(item.tags)
-    const stats = this.normalizeStats(item.stats)
-    return {
-      slug: item.slug,
-      displayName: item.displayName,
-      summary: item.summary ?? '',
-      installed: Boolean(installedState),
-      installSource: installedState?.installSource,
-      installedVersion: installedState?.version,
-      latestVersion,
-      hasUpdate: Boolean(installedState?.version && latestVersion && installedState.version !== latestVersion),
-      createdAt: item.createdAt ?? null,
-      updatedAt: item.updatedAt ?? null,
-      downloads: stats.downloads,
-      stars: stats.stars,
-      installsCurrent: stats.installsCurrent,
-      installsAllTime: stats.installsAllTime,
-      tags: Object.keys(item.tags ?? {}),
-      category: this.resolveCategory(item.slug, Object.keys(item.tags ?? {})),
-      source: 'clawhub',
-      metadata: this.normalizeMetadata(item.metadata),
-    }
-  }
-
   private buildRemoteSearchSkill(
     item: Required<Pick<ClawHubSearchResult, 'slug' | 'displayName'>> & ClawHubSearchResult,
     installedState?: InstalledSkillState,
@@ -541,6 +499,7 @@ export class RegistryManager {
       displayName: item.displayName,
       summary: item.summary ?? '',
       installed: Boolean(installedState),
+      installedSkillName: installedState?.installedSkillName,
       installSource: installedState?.installSource,
       installedVersion: installedState?.version,
       latestVersion,
@@ -566,6 +525,7 @@ export class RegistryManager {
       displayName: entry.displayName,
       summary: entry.summary,
       installed: Boolean(installedState),
+      installedSkillName: installedState?.installedSkillName,
       installSource: installedState?.installSource,
       installedVersion: installedState?.version,
       latestVersion: null,
@@ -731,10 +691,6 @@ export class RegistryManager {
     return this.options.userSkillsDir ?? resolve(homedir(), '.youclaw', 'skills')
   }
 
-  private resolveSkillsUrl(): string {
-    return `${this.resolveApiBaseUrl()}/skills`
-  }
-
   private resolveSearchUrl(): string {
     return `${this.resolveApiBaseUrl()}/search`
   }
@@ -854,16 +810,6 @@ export class RegistryManager {
   private collectInstalledSkillStates(): Map<string, InstalledSkillState> {
     const installed = new Map<string, InstalledSkillState>()
 
-    for (const skill of this.skillsLoader.loadAllSkills()) {
-      if (skill.registryMeta?.source === CLAWHUB_SOURCE && skill.registryMeta.slug) {
-        installed.set(skill.registryMeta.slug, {
-          slug: skill.registryMeta.slug,
-          installSource: skill.registryMeta.source,
-          version: skill.registryMeta.version,
-        })
-      }
-    }
-
     const userSkillsDir = this.resolveUserSkillsDir()
     if (!existsSync(userSkillsDir)) {
       return installed
@@ -886,6 +832,7 @@ export class RegistryManager {
 
       installed.set(meta.slug, {
         slug: meta.slug,
+        installedSkillName: this.readInstalledSkillName(skillDir),
         installSource: meta.source,
         version: meta.version,
       })
@@ -928,6 +875,20 @@ export class RegistryManager {
     }
 
     return null
+  }
+
+  private readInstalledSkillName(skillDir: string): string | undefined {
+    const skillPath = resolve(skillDir, 'SKILL.md')
+    if (!existsSync(skillPath)) {
+      return undefined
+    }
+
+    try {
+      const content = readFileSync(skillPath, 'utf-8')
+      return parseFrontmatter(content).frontmatter.name
+    } catch {
+      return undefined
+    }
   }
 
   private unpackSkillArchive(zipData: Uint8Array): ZipEntry[] {
@@ -1024,31 +985,4 @@ export class RegistryManager {
     getLogger().debug({ count: this.recommended.length }, 'Recommendation list loaded')
   }
 
-  /** Get locally installed skill slug set */
-  private getInstalledSlugs(): Set<string> {
-    const allSkills = this.skillsLoader.loadAllSkills()
-    const installedSlugs = new Set<string>()
-
-    // Collect installed slugs via registryMeta
-    for (const skill of allSkills) {
-      if (skill.registryMeta?.slug) {
-        installedSlugs.add(skill.registryMeta.slug)
-      }
-    }
-
-    // Check user skills directory for slug directories
-    const userSkillsDir = this.resolveUserSkillsDir()
-    try {
-      const dirs = readdirSync(userSkillsDir)
-      for (const dir of dirs) {
-        if (!installedSlugs.has(dir) && existsSync(resolve(userSkillsDir, dir, 'SKILL.md'))) {
-          installedSlugs.add(dir)
-        }
-      }
-    } catch {
-      // ignore when directory doesn't exist
-    }
-
-    return installedSlugs
-  }
 }

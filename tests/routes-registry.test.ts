@@ -7,48 +7,29 @@ loadEnv()
 initLogger()
 
 describe('registry routes', () => {
-  test('GET /registry/recommended returns marketplace items', async () => {
+  test('GET /registry/recommended returns recommended list', async () => {
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({
-        items: [
-          {
-            slug: 'coding',
-            displayName: 'Coding',
-            summary: 'Code better',
-            installed: true,
-            installSource: 'clawhub',
-            installedVersion: '1.0.0',
-            latestVersion: '1.1.0',
-            hasUpdate: true,
-            tags: ['coding'],
-            source: 'clawhub',
-          },
-        ],
-        nextCursor: null,
-        source: 'clawhub',
-        query: '',
-        sort: 'trending',
-      }),
+      getRecommended: () => [
+        {
+          slug: 'coding',
+          displayName: 'Coding',
+          summary: 'Code better',
+          installed: true,
+          installedSkillName: 'coding-helper',
+          hasUpdate: false,
+          tags: [],
+          source: 'fallback',
+        },
+      ],
     } as any)
 
     const res = await app.request('/registry/recommended')
-    const body = await res.json() as Array<{ slug: string; installed: boolean; hasUpdate: boolean }>
+    const body = await res.json() as Array<{ slug: string; installedSkillName?: string }>
 
     expect(res.status).toBe(200)
-    expect(body).toEqual([
-      {
-        slug: 'coding',
-        displayName: 'Coding',
-        summary: 'Code better',
-        installed: true,
-        installSource: 'clawhub',
-        installedVersion: '1.0.0',
-        latestVersion: '1.1.0',
-        hasUpdate: true,
-        tags: ['coding'],
-        source: 'clawhub',
-      },
-    ])
+    expect(body).toHaveLength(1)
+    expect(body[0]?.slug).toBe('coding')
+    expect(body[0]?.installedSkillName).toBe('coding-helper')
   })
 
   test('GET /registry/marketplace returns a paged payload', async () => {

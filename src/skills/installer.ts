@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
 import { execSync } from 'node:child_process'
 import { getLogger } from '../logger/index.ts'
+import { getShellEnv } from '../utils/shell-env.ts'
 import type { Skill } from './types.ts'
 
 /**
@@ -36,7 +37,7 @@ export class SkillsInstaller {
 
     // Copy files
     try {
-      execSync(`cp -r "${sourcePath}/"* "${destPath}/"`, { encoding: 'utf-8', timeout: 30_000 })
+      execSync(`cp -r "${sourcePath}/"* "${destPath}/"`, { encoding: 'utf-8', timeout: 30_000, env: getShellEnv() })
     } catch (err) {
       // Clean up failed installation
       rmSync(destPath, { recursive: true, force: true })
@@ -58,7 +59,7 @@ export class SkillsInstaller {
 
     try {
       // Download using curl
-      execSync(`curl -sL "${url}" -o "${tmpDir}/SKILL.md"`, { encoding: 'utf-8', timeout: 30_000 })
+      execSync(`curl -sL "${url}" -o "${tmpDir}/SKILL.md"`, { encoding: 'utf-8', timeout: 30_000, env: getShellEnv() })
 
       // Read downloaded file and parse frontmatter for name
       const { parseFrontmatter } = await import('./frontmatter.ts')
@@ -73,7 +74,7 @@ export class SkillsInstaller {
 
       // Move to final location
       mkdirSync(destPath, { recursive: true })
-      execSync(`mv "${tmpDir}/SKILL.md" "${destPath}/SKILL.md"`, { encoding: 'utf-8' })
+      execSync(`mv "${tmpDir}/SKILL.md" "${destPath}/SKILL.md"`, { encoding: 'utf-8', env: getShellEnv() })
 
       logger.info({ skillName, url, destPath }, 'Skill installed from remote URL')
     } finally {
@@ -104,7 +105,7 @@ export class SkillsInstaller {
         if (frontmatter.teardown) {
           logger.info({ skillName, teardown: frontmatter.teardown }, 'Running teardown command')
           try {
-            execSync(frontmatter.teardown, { encoding: 'utf-8', timeout: 30_000 })
+            execSync(frontmatter.teardown, { encoding: 'utf-8', timeout: 30_000, env: getShellEnv() })
           } catch (err) {
             logger.warn({ skillName, error: err instanceof Error ? err.message : String(err) }, 'Teardown command failed')
           }

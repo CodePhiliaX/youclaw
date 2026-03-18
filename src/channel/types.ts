@@ -11,7 +11,7 @@ export interface InboundMessage {
   tags?: string[]         // routing tags from web frontend
   requestedSkills?: string[]  // explicitly requested skills
   browserProfileId?: string   // dynamically override agent.yaml browserProfile
-  attachments?: Array<{ filename: string; mediaType: string; data: string; size: number }>
+  attachments?: Array<{ filename: string; mediaType: string; filePath: string }>
 }
 
 export interface Channel {

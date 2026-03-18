@@ -2,6 +2,5 @@
 export interface Attachment {
   filename: string
   mediaType: string
-  data: string
-  size: number
+  filePath: string
 }

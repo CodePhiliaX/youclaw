@@ -4,14 +4,12 @@ import { useAppStore } from "@/stores/app"
 import { LogIn, Loader2, Calendar, MessageSquare, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { isTauri } from "@/api/transport"
-import { useDragRegion } from "@/hooks/useDragRegion"
 import logoUrl from "@/assets/logo.png"
 
 export function Login() {
   const { t, locale, setLocale } = useI18n()
   const { authLoading, login } = useAppStore()
   const [version, setVersion] = useState("")
-  const drag = useDragRegion()
 
   useEffect(() => {
     if (!isTauri) return
@@ -23,10 +21,9 @@ export function Login() {
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-background to-muted/30">
       <div className="flex-1 flex overflow-hidden">
-        {/* Left hero area - large screens only, draggable */}
+        {/* Left hero area - large screens only */}
         <section
           className="hidden lg:flex flex-1 flex-col p-12 relative border-r border-border/50 bg-gradient-to-br from-background via-primary/5 to-background"
-          {...drag}
         >
           {/* Decorative elements */}
           <div className="absolute top-20 right-10 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />

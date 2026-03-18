@@ -1,13 +1,5 @@
-import { execSync } from 'node:child_process'
 import type { SkillFrontmatter, EligibilityDetail, DependencyCheckResult, EnvCheckResult } from './types.ts'
-
-function which(cmd: string): string | null {
-  try {
-    return execSync(`which ${cmd}`, { encoding: 'utf-8' }).trim() || null
-  } catch {
-    return null
-  }
-}
+import { which } from '../utils/shell-env.ts'
 
 export interface EligibilityResult {
   eligible: boolean

@@ -25,10 +25,6 @@ function mapRegistryErrorStatus(message: string): ContentfulStatusCode {
 export function createRegistryRoutes(registryManager: RegistryManager) {
   const api = new Hono()
 
-  api.get('/registry/recommended', (c) => {
-    return c.json(registryManager.getRecommended())
-  })
-
   api.get('/registry/marketplace', async (c) => {
     const query = c.req.query('q') ?? ''
     const cursor = c.req.query('cursor') ?? null
@@ -60,6 +56,10 @@ export function createRegistryRoutes(registryManager: RegistryManager) {
       logger.error({ slug, error: message }, 'Failed to load marketplace skill detail')
       return c.json({ error: message }, mapRegistryErrorStatus(message))
     }
+  })
+
+  api.get('/registry/recommended', (c) => {
+    return c.json(registryManager.getRecommended())
   })
 
   // Search skills marketplace (with install status)

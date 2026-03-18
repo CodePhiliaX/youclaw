@@ -163,7 +163,7 @@ export function AboutPanel() {
       </div>
 
       <p className="text-[10px] text-muted-foreground uppercase tracking-widest pt-4">
-        &copy; 2025 You Claw AI. All rights reserved.
+        &copy; 2026 You Claw AI. All rights reserved.
       </p>
     </div>
   )

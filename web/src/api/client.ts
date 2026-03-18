@@ -14,6 +14,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   return res.json() as Promise<T>
 }
 
+// Check git availability
+export async function checkGit() {
+  return apiFetch<{ available: boolean; path: string | null }>('/api/git-check')
+}
+
 // Send message to agent
 export async function sendMessage(agentId: string, prompt: string, chatId?: string, browserProfileId?: string, attachments?: Attachment[]) {
   return apiFetch<{ chatId: string; status: string }>(`/api/agents/${agentId}/message`, {
@@ -196,6 +201,13 @@ export interface Skill {
   eligibilityDetail: EligibilityDetail
   enabled: boolean
   usable: boolean
+  registryMeta?: {
+    source: string
+    slug: string
+    installedAt: string
+    displayName?: string
+    version?: string
+  }
 }
 
 // Get all available skills
@@ -261,6 +273,7 @@ export interface MarketplaceSkill {
   displayName: string
   summary: string
   installed: boolean
+  installedSkillName?: string
   score?: number
   installSource?: string
   installedVersion?: string
@@ -301,13 +314,6 @@ export interface MarketplacePage {
   sort: MarketplaceSort
 }
 
-// Backwards compatibility alias
-export type RecommendedSkill = MarketplaceSkill
-
-export async function getRecommendedSkills() {
-  return apiFetch<MarketplaceSkill[]>('/api/registry/recommended')
-}
-
 export async function getMarketplaceSkills(params: {
   query?: string
   cursor?: string | null
@@ -321,6 +327,10 @@ export async function getMarketplaceSkills(params: {
   if (params.sort) search.set('sort', params.sort)
   const suffix = search.toString() ? `?${search}` : ''
   return apiFetch<MarketplacePage>(`/api/registry/marketplace${suffix}`)
+}
+
+export async function getRecommendedSkills() {
+  return apiFetch<MarketplaceSkill[]>('/api/registry/recommended')
 }
 
 export async function getMarketplaceSkill(slug: string) {
@@ -377,10 +387,31 @@ export async function deleteBrowserProfile(id: string) {
   })
 }
 
+export class BrowserLaunchError extends Error {
+  code?: string
+  installHint?: string
+  constructor(message: string, code?: string, installHint?: string) {
+    super(message)
+    this.code = code
+    this.installHint = installHint
+  }
+}
+
 export async function launchBrowserProfile(id: string) {
-  return apiFetch<{ ok: boolean; profileDir: string }>(`/api/browser-profiles/${encodeURIComponent(id)}/launch`, {
+  const base = await getBackendBaseUrl()
+  const res = await fetch(`${base}/api/browser-profiles/${encodeURIComponent(id)}/launch`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
   })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new BrowserLaunchError(
+      body?.error || `API error: ${res.status}`,
+      body?.code,
+      body?.installHint,
+    )
+  }
+  return res.json() as Promise<{ ok: boolean; profileDir: string }>
 }
 
 // ===== Scheduled Tasks API =====
@@ -545,16 +576,17 @@ export interface ReferralCode {
   usedCount: number
   expiredAt: string | null
   enabled: boolean
+  type: string
+  userId: number
+  createdAt: number
+  updatedAt: number
 }
 
 export interface ReferralStats {
-  totalInvited: number
-  totalCreditsEarned: number
-  recentInvitees: Array<{
-    displayName: string
-    avatar: string | null
-    createdAt: number
-  }>
+  invitedCount: number
+  totalCredits: number
+  code: string
+  maxCredits: number
 }
 
 export async function getReferralCode() {

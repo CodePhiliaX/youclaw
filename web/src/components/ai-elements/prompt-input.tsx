@@ -5,6 +5,7 @@ type FileUIPart = {
   filename: string;
   url: string;
   mediaType: string;
+  filePath?: string;
 };
 type SourceDocumentUIPart = {
   type: "source-document";
@@ -26,7 +27,7 @@ import type {
   RefObject,
 } from "react";
 
-import { isTauri } from "@/api/transport";
+import { isTauri, localAssetUrl } from "@/api/transport";
 import {
   Command,
   CommandEmpty,
@@ -90,24 +91,6 @@ import {
 // Helpers
 // ============================================================================
 
-const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
-  try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    // FileReader uses callback-based API, wrapping in Promise is necessary
-    // oxlint-disable-next-line eslint-plugin-promise(avoid-new)
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      // oxlint-disable-next-line eslint-plugin-unicorn(prefer-add-event-listener)
-      reader.onloadend = () => resolve(reader.result as string);
-      // oxlint-disable-next-line eslint-plugin-unicorn(prefer-add-event-listener)
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-};
 
 // ============================================================================
 // Tauri native file dialog helpers
@@ -182,12 +165,17 @@ function getMimeFromPath(path: string): string {
   return EXTENSION_TO_MIME[ext] ?? "application/octet-stream";
 }
 
+// Result from Tauri file dialog: lightweight metadata without file content
+interface TauriFileDialogResult {
+  file: File;
+  filePath: string;
+}
+
 async function openTauriFileDialog(
   accept: string | undefined,
   multiple: boolean | undefined,
-): Promise<File[]> {
+): Promise<TauriFileDialogResult[]> {
   const { open } = await import("@tauri-apps/plugin-dialog");
-  const { readFile } = await import("@tauri-apps/plugin-fs");
 
   const filters = mimeAcceptToDialogFilters(accept);
   const result = await open({
@@ -199,14 +187,15 @@ async function openTauriFileDialog(
   if (!result) return [];
   const paths = Array.isArray(result) ? result : [result];
 
-  const files: File[] = [];
+  const results: TauriFileDialogResult[] = [];
   for (const filePath of paths) {
-    const bytes = await readFile(filePath);
     const name = filePath.split(/[\\/]/).pop() ?? "file";
     const mime = getMimeFromPath(filePath);
-    files.push(new File([bytes], name, { type: mime }));
+    // Create an empty placeholder File (no content needed — agent reads via path)
+    const file = new File([], name, { type: mime });
+    results.push({ file, filePath });
   }
-  return files;
+  return results;
 }
 
 // ============================================================================
@@ -215,7 +204,7 @@ async function openTauriFileDialog(
 
 export interface AttachmentsContext {
   files: (FileUIPart & { id: string })[];
-  add: (files: File[] | FileList) => void;
+  add: (files: File[] | FileList, filePathMap?: Map<File, string>) => void;
   remove: (id: string) => void;
   clear: () => void;
   openFileDialog: () => void;
@@ -296,7 +285,7 @@ export const PromptInputProvider = ({
   // oxlint-disable-next-line eslint(no-empty-function)
   const openRef = useRef<() => void>(() => {});
 
-  const add = useCallback((files: File[] | FileList) => {
+  const add = useCallback((files: File[] | FileList, filePathMap?: Map<File, string>) => {
     const incoming = [...files];
     if (incoming.length === 0) {
       return;
@@ -304,13 +293,17 @@ export const PromptInputProvider = ({
 
     setAttachmentFiles((prev) => [
       ...prev,
-      ...incoming.map((file) => ({
-        filename: file.name,
-        id: nanoid(),
-        mediaType: file.type,
-        type: "file" as const,
-        url: URL.createObjectURL(file),
-      })),
+      ...incoming.map((file) => {
+        const fp = filePathMap?.get(file);
+        return {
+          filename: file.name,
+          id: nanoid(),
+          mediaType: file.type,
+          type: "file" as const,
+          url: fp ? `file://${fp}` : URL.createObjectURL(file),
+          filePath: fp,
+        };
+      }),
     ]);
   }, []);
 
@@ -561,7 +554,7 @@ export const PromptInput = ({
   );
 
   const addLocal = useCallback(
-    (fileList: File[] | FileList) => {
+    (fileList: File[] | FileList, filePathMap?: Map<File, string>) => {
       const incoming = [...fileList];
       const accepted = incoming.filter((f) => matchesAccept(f));
       if (incoming.length && accepted.length === 0) {
@@ -597,12 +590,14 @@ export const PromptInput = ({
         }
         const next: (FileUIPart & { id: string })[] = [];
         for (const file of capped) {
+          const fp = filePathMap?.get(file);
           next.push({
             filename: file.name,
             id: nanoid(),
             mediaType: file.type,
             type: "file",
-            url: URL.createObjectURL(file),
+            url: fp ? localAssetUrl(fp) : URL.createObjectURL(file),
+            filePath: fp,
           });
         }
         return [...prev, ...next];
@@ -625,7 +620,7 @@ export const PromptInput = ({
 
   // Wrapper that validates files before calling provider's add
   const addWithProviderValidation = useCallback(
-    (fileList: File[] | FileList) => {
+    (fileList: File[] | FileList, filePathMap?: Map<File, string>) => {
       const incoming = [...fileList];
       const accepted = incoming.filter((f) => matchesAccept(f));
       if (incoming.length && accepted.length === 0) {
@@ -661,7 +656,7 @@ export const PromptInput = ({
       }
 
       if (capped.length > 0) {
-        controller?.attachments.add(capped);
+        controller?.attachments.add(capped, filePathMap);
       }
     },
     [matchesAccept, maxFileSize, maxFiles, onError, files.length, controller],
@@ -692,8 +687,12 @@ export const PromptInput = ({
 
   const openFileDialogLocal = useCallback(() => {
     if (isTauri) {
-      openTauriFileDialog(accept, multiple).then((files) => {
-        if (files.length > 0) add(files);
+      openTauriFileDialog(accept, multiple).then((results) => {
+        if (results.length > 0) {
+          const files = results.map((r) => r.file);
+          const pathMap = new Map(results.map((r) => [r.file, r.filePath]));
+          add(files, pathMap);
+        }
       });
       return;
     }
@@ -857,19 +856,9 @@ export const PromptInput = ({
       }
 
       try {
-        // Convert blob URLs to data URLs asynchronously
-        const convertedFiles: FileUIPart[] = await Promise.all(
-          files.map(async ({ id: _id, ...item }) => {
-            if (item.url?.startsWith("blob:")) {
-              const dataUrl = await convertBlobUrlToDataUrl(item.url);
-              // If conversion failed, keep the original blob URL
-              return {
-                ...item,
-                url: dataUrl ?? item.url,
-              };
-            }
-            return item;
-          }),
+        // Pass files through as-is (filePath-based for Tauri, blob URL for web)
+        const convertedFiles: FileUIPart[] = files.map(
+          ({ id: _id, ...item }) => item,
         );
 
         const result = onSubmit({ files: convertedFiles, text }, event);
@@ -999,7 +988,7 @@ export const PromptInputTextarea = ({
         attachments.files.length > 0
       ) {
         e.preventDefault();
-        const lastAttachment = attachments.files.at(-1);
+        const lastAttachment = attachments.files[attachments.files.length - 1];
         if (lastAttachment) {
           attachments.remove(lastAttachment.id);
         }

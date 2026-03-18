@@ -9,6 +9,10 @@ const BACKEND_PORT = process.env.PORT || '62601'
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  build: {
+    // Tauri uses system WKWebView; macOS 10.15 ships Safari 13
+    target: ['es2020', 'safari13'],
+  },
   plugins: [
     react(),
     tailwindcss(),

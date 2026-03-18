@@ -1,29 +1,27 @@
 import { Hono } from 'hono'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod/v4'
-import { bodyLimit } from 'hono/body-limit'
 import { getMessages, getChats, deleteChat, updateChatFields } from '../db/index.ts'
 import type { AgentManager, AgentQueue } from '../agent/index.ts'
 import { abortRegistry } from '../agent/abort-registry.ts'
 import type { MessageRouter } from '../channel/index.ts'
 import type { InboundMessage } from '../channel/index.ts'
-import { ALLOWED_MEDIA_TYPES, MAX_FILE_SIZE, MAX_FILES } from '../types/attachment.ts'
+import { MAX_FILES } from '../types/attachment.ts'
 
 export function createMessagesRoutes(agentManager: AgentManager, agentQueue: AgentQueue, router: MessageRouter) {
   const messages = new Hono()
 
   // POST /api/agents/:id/message — send a message to an agent
-  messages.post('/agents/:id/message', bodyLimit({ maxSize: 75 * 1024 * 1024 }), async (c) => {
+  messages.post('/agents/:id/message', async (c) => {
     const agentId = c.req.param('id')
 
     const AttachmentSchema = z.object({
       filename: z.string(),
-      mediaType: z.enum(ALLOWED_MEDIA_TYPES),
-      data: z.string(),
-      size: z.number().max(MAX_FILE_SIZE),
+      mediaType: z.string(),
+      filePath: z.string(),
     })
     const BodySchema = z.object({
-      prompt: z.string().min(1),
+      prompt: z.string(),
       chatId: z.string().optional(),
       skills: z.array(z.string()).optional(),
       browserProfileId: z.string().optional(),
@@ -35,6 +33,10 @@ export function createMessagesRoutes(agentManager: AgentManager, agentQueue: Age
       return c.json({ error: 'Invalid request', details: parseResult.error.issues }, 400)
     }
     const body = parseResult.data
+
+    if (!body.prompt && (!body.attachments || body.attachments.length === 0)) {
+      return c.json({ error: 'Either prompt or attachments must be provided' }, 400)
+    }
 
     const managed = agentManager.getAgent(agentId)
     if (!managed) {

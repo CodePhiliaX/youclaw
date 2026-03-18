@@ -39,11 +39,13 @@ Download the `.exe` installer from [Releases](https://github.com/CodePhiliaX/you
 ## Features
 
 - **Multi-Agent Management** — Create and configure multiple AI agents via YAML, each with its own personality, memory, and skills
+- **Multi-Channel** — Connect agents to Telegram, DingTalk, Feishu (Lark), QQ, and WeCom
+- **Browser Automation** — Built-in agent-browser skill with Playwright for web interaction, scraping, and testing
 - **Scheduled Tasks** — Cron / interval / one-shot tasks with automatic retry and stuck detection
 - **Persistent Memory** — Per-agent memory system with conversation logs
-- **Skills System** — Compatible with OpenClaw SKILL.md format, 3-tier priority loading, hot reload
+- **Skills System** — Compatible with OpenClaw SKILL.md format, 3-tier priority loading, hot reload, skills marketplace
+- **Authentication** — Built-in auth system for cloud deployment
 - **Web UI** — React + shadcn/ui with SSE streaming, i18n (中文 / English)
-- **Telegram Channel** — Connect agents to Telegram bots
 - **Lightweight Desktop App** — Tauri 2 bundle ~27 MB (vs ~338 MB Electron), native system tray
 
 ## Tech Stack
@@ -55,31 +57,38 @@ Download the `.exe` installer from [Releases](https://github.com/CodePhiliaX/you
 | Backend | Hono + bun:sqlite + Pino |
 | Agent | `@anthropic-ai/claude-agent-sdk` |
 | Frontend | Vite + React + shadcn/ui + Tailwind CSS |
-| Telegram | grammY |
+| Channels | grammY (Telegram) · `dingtalk-stream` (DingTalk) · `@larksuiteoapi/node-sdk` (Feishu) · QQ · WeCom |
 | Scheduled Tasks | croner |
+| E2E Testing | Playwright |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Tauri 2 (Rust Shell)                │
-│   ┌──────────────┐    ┌───────────────────────┐ │
-│   │   WebView     │    │   Bun Sidecar         │ │
-│   │  Vite+React   │◄──►  Hono API Server      │ │
-│   │  shadcn/ui    │ HTTP│  Claude Agent SDK    │ │
-│   │               │ SSE │  bun:sqlite          │ │
-│   └──────────────┘    └───────────────────────┘ │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                Tauri 2 (Rust Shell)                   │
+│   ┌──────────────┐    ┌────────────────────────────┐ │
+│   │   WebView     │    │   Bun Sidecar              │ │
+│   │  Vite+React   │◄──►  Hono API Server           │ │
+│   │  shadcn/ui    │ HTTP│  Claude Agent SDK         │ │
+│   │               │ SSE │  bun:sqlite               │ │
+│   └──────────────┘    └────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
          │                        │
     Tauri Store              EventBus
-   (settings)          ┌────────┴────────┐
-                        │                 │
-                   Web / API         Telegram
+   (settings)          ┌────────┴────────────┐
+                        │                     │
+                   Web / API         Multi-Channel
+                              ┌───────┼───────┐
+                           Telegram DingTalk Feishu
+                              QQ    WeCom
+                                     │
+                              Browser Automation
+                               (Playwright)
 ```
 
 - **Desktop mode**: Tauri spawns a Bun sidecar process; WebView loads the frontend
 - **Web mode**: Vite frontend + Bun backend deployed independently
-- **Three-layer design**: Entry (Telegram/Web/API) → Core (Agent/Scheduler/Memory/Skills) → Storage (SQLite/filesystem)
+- **Three-layer design**: Entry (Telegram/DingTalk/Feishu/QQ/WeCom/Web/API) → Core (Agent/Scheduler/Memory/Skills) → Storage (SQLite/filesystem)
 
 ## Quick Start (Development)
 
@@ -114,7 +123,7 @@ bun dev
 bun dev:web
 ```
 
-Open http://localhost:5173 · API at http://localhost:3000
+Open http://localhost:5173 · API at http://localhost:62601
 
 ### Desktop Mode (Tauri)
 
@@ -141,6 +150,9 @@ bun typecheck        # TypeScript type check
 bun test             # Run tests
 bun build:sidecar    # Compile Bun sidecar binary
 bun build:tauri      # Build Tauri desktop app
+bun build:tauri:fast # Build without bundling (faster dev builds)
+bun test:e2e         # Run E2E tests (Playwright)
+bun test:e2e:ui      # Run E2E tests with UI
 ```
 
 ## Environment Variables
@@ -149,18 +161,39 @@ bun build:tauri      # Build Tauri desktop app
 |----------|----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key |
 | `ANTHROPIC_BASE_URL` | No | — | Custom API base URL |
-| `PORT` | No | `3000` | Backend server port |
+| `PORT` | No | `62601` | Backend server port |
 | `DATA_DIR` | No | `./data` | Data storage directory |
 | `AGENT_MODEL` | No | `claude-sonnet-4-6` | Default Claude model |
 | `LOG_LEVEL` | No | `info` | Log level |
 | `TELEGRAM_BOT_TOKEN` | No | — | Enable Telegram channel |
+| `DINGTALK_CLIENT_ID` | No | — | DingTalk app client ID |
+| `DINGTALK_SECRET` | No | — | DingTalk app secret |
+| `FEISHU_APP_ID` | No | — | Feishu (Lark) app ID |
+| `FEISHU_APP_SECRET` | No | — | Feishu (Lark) app secret |
+| `QQ_BOT_APP_ID` | No | — | QQ bot app ID |
+| `QQ_BOT_SECRET` | No | — | QQ bot secret |
+| `WECOM_CORP_ID` | No | — | WeCom corp ID |
+| `WECOM_CORP_SECRET` | No | — | WeCom corp secret |
+| `WECOM_AGENT_ID` | No | — | WeCom agent ID |
+| `WECOM_TOKEN` | No | — | WeCom callback token |
+| `WECOM_ENCODING_AES_KEY` | No | — | WeCom callback AES key |
+| `YOUCLAW_WEBSITE_URL` | No | — | Cloud service website URL |
+| `YOUCLAW_API_URL` | No | — | Cloud service API URL |
+| `MINIMAX_API_KEY` | No | — | MiniMax web search API key |
+| `MINIMAX_API_HOST` | No | — | MiniMax API host |
 
 ## Project Structure
 
 ```
 src/
 ├── agent/          # AgentManager, AgentRuntime, AgentQueue, PromptBuilder
-├── channel/        # MessageRouter, TelegramChannel
+├── channel/        # Multi-channel support
+│   ├── router.ts   # MessageRouter
+│   ├── telegram.ts # Telegram (grammY)
+│   ├── dingtalk.ts # DingTalk (dingtalk-stream)
+│   ├── feishu.ts   # Feishu / Lark (@larksuiteoapi/node-sdk)
+│   ├── qq.ts       # QQ
+│   └── wecom.ts    # WeCom
 ├── config/         # Environment validation, path constants
 ├── db/             # bun:sqlite init, CRUD operations
 ├── events/         # EventBus (stream/tool_use/complete/error)
@@ -174,7 +207,12 @@ src-tauri/
 ├── src/            # Rust main process (sidecar, window, tray, updater)
 agents/             # Agent configs (agent.yaml + SOUL.md + skills/)
 skills/             # Project-level skills (SKILL.md format)
-web/src/            # React frontend (pages, components, i18n)
+e2e/                # E2E tests (Playwright)
+web/src/
+├── pages/          # Chat, Agents, Skills, Memory, Tasks, Channels, BrowserProfiles, Logs, System, Login
+├── components/     # Layout + shadcn/ui
+├── api/            # HTTP client + transport
+├── i18n/           # i18n (Chinese / English)
 ```
 
 ## Contributing

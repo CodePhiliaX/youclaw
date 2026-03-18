@@ -1,5 +1,10 @@
 import { describe, test, expect } from 'bun:test'
 import { createSkillsRoutes } from '../src/routes/skills.ts'
+import { loadEnv } from '../src/config/index.ts'
+import { initLogger } from '../src/logger/index.ts'
+
+loadEnv()
+initLogger()
 
 const baseSkill = {
   name: 'pdf',
@@ -155,6 +160,125 @@ describe('skills routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: false }),
     })
+
+    expect(res.status).toBe(404)
+  })
+
+  test('POST /skills/reload returns count and reloadedAt', async () => {
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/reload', { method: 'POST' })
+    const body = await res.json() as { count: number; reloadedAt: number }
+
+    expect(res.status).toBe(200)
+    expect(body.count).toBe(1)
+    expect(typeof body.reloadedAt).toBe('number')
+  })
+
+  test('POST /skills/:name/toggle with invalid body returns 400', async () => {
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+        setSkillEnabled: (_name: string, _enabled: boolean) => baseSkill,
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/pdf/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: 'not-a-boolean' }),
+    })
+
+    expect(res.status).toBe(400)
+  })
+
+  test('POST /skills/install-from-path with invalid body returns 400', async () => {
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/install-from-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    expect(res.status).toBe(400)
+  })
+
+  test('POST /skills/install-from-url with invalid body returns 400', async () => {
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/install-from-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'not-a-valid-url' }),
+    })
+
+    expect(res.status).toBe(400)
+  })
+
+  test('DELETE /skills/:name returns 403 for workspace-level skill', async () => {
+    const workspaceSkill = { ...baseSkill, source: 'workspace' }
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [workspaceSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [workspaceSkill],
+        loadSkillsForAgent: () => [workspaceSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/pdf', { method: 'DELETE' })
+
+    expect(res.status).toBe(403)
+  })
+
+  test('DELETE /skills/:name returns 404 for nonexistent skill', async () => {
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/nonexistent', { method: 'DELETE' })
 
     expect(res.status).toBe(404)
   })

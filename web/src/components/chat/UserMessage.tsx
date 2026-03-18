@@ -10,6 +10,7 @@ import {
   AttachmentPreview,
   AttachmentInfo,
 } from "@/components/ai-elements/attachments";
+import { localAssetUrl } from "@/api/transport";
 import { useI18n } from "@/i18n";
 import { useAppStore } from "@/stores/app";
 import type { Message } from "@/hooks/useChat";
@@ -77,21 +78,30 @@ export function UserMessage({ message }: { message: Message }) {
           </div>
           {attachments.length > 0 && (
             <Attachments variant="grid" className="mt-2 ml-0">
-              {attachments.map((a, i) => (
-                <Attachment
-                  key={i}
-                  data={{
-                    id: String(i),
-                    type: "file" as const,
-                    filename: a.filename,
-                    mediaType: a.mediaType,
-                    url: `data:${a.mediaType};base64,${a.data}`,
-                  }}
-                >
-                  <AttachmentPreview />
-                  <AttachmentInfo />
-                </Attachment>
-              ))}
+              {attachments.map((a, i) => {
+                // Support both old format (data: base64) and new format (filePath)
+                const url =
+                  "filePath" in a && a.filePath
+                    ? localAssetUrl(a.filePath)
+                    : "data" in a && (a as { data?: string }).data
+                      ? `data:${a.mediaType};base64,${(a as { data: string }).data}`
+                      : "";
+                return (
+                  <Attachment
+                    key={i}
+                    data={{
+                      id: String(i),
+                      type: "file" as const,
+                      filename: a.filename,
+                      mediaType: a.mediaType,
+                      url,
+                    }}
+                  >
+                    <AttachmentPreview />
+                    <AttachmentInfo />
+                  </Attachment>
+                );
+              })}
             </Attachments>
           )}
         </div>

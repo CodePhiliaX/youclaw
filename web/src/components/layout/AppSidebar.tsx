@@ -168,19 +168,26 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
               <button
                 type="button"
                 className={cn(
-                  "flex items-center w-full rounded-xl transition-all duration-200 ease-[var(--ease-soft)] outline-none",
-                  isCollapsed ? "px-0.5 py-1 justify-center" : "gap-2.5 px-2.5 py-2.5 hover:bg-[var(--surface-hover)]",
+                  "flex items-center w-full h-9 rounded-[10px] whitespace-nowrap overflow-hidden outline-none",
+                  "transition-all duration-200 ease-[var(--ease-soft)]",
+                  isCollapsed ? "px-0.5" : "px-1",
+                  "text-muted-foreground hover:text-foreground hover:bg-[var(--surface-hover)]",
                 )}
               >
-                <AvatarView size={isCollapsed ? "sm" : "md"} />
-                {!isCollapsed && (
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-xs font-semibold truncate">{isLoggedIn && user ? user.name : (cloudEnabled ? t.account.login : t.account.offlineMode)}</p>
-                    {isLoggedIn && user && (
-                      <p className="text-[10px] text-muted-foreground truncate">Pro Plan</p>
-                    )}
-                  </div>
-                )}
+                <div className="w-9 h-9 shrink-0 flex items-center justify-center">
+                  <AvatarView size="md" />
+                </div>
+                <div
+                  className={cn(
+                    "flex-1 min-w-0 text-left ml-1.5 transition-opacity duration-200",
+                    isCollapsed ? "opacity-0" : "opacity-100",
+                  )}
+                >
+                  <p className="text-xs font-semibold truncate">{isLoggedIn && user ? user.name : (cloudEnabled ? t.account.login : t.account.offlineMode)}</p>
+                  {isLoggedIn && user && (
+                    <p className="text-[10px] text-muted-foreground truncate">Pro Plan</p>
+                  )}
+                </div>
               </button>
             </DropdownMenuTrigger>
 

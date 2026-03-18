@@ -89,17 +89,14 @@ export function ChatInput() {
       return;
     }
 
-    // Convert data URLs to Attachment objects
+    // Build Attachment objects from file paths
     const attachments = msg.files
-      .map((f) => {
-        const match = f.url.match(/^data:([^;]+);base64,(.+)$/s);
-        if (!match) return null;
-        const [, mediaType, data] = match;
-        const padding = (data.match(/=+$/) || [""])[0].length;
-        const size = Math.floor((data.length * 3) / 4) - padding;
-        return { filename: f.filename, mediaType, data, size };
-      })
-      .filter((a): a is NonNullable<typeof a> => a !== null);
+      .filter((f) => f.filePath)
+      .map((f) => ({
+        filename: f.filename,
+        mediaType: f.mediaType,
+        filePath: f.filePath!,
+      }));
 
     send(
       text,
@@ -112,7 +109,7 @@ export function ChatInput() {
     <div className="bg-background px-5 py-3">
       <PromptInput
         onSubmit={handleSubmit}
-        accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+        accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         maxFiles={MAX_FILES}
         maxFileSize={10 * 1024 * 1024}
       >

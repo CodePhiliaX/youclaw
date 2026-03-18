@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 // Local type definitions, replacing ai package dependency
-type FileUIPart = { type: "file"; filename: string; url: string; mediaType: string };
+type FileUIPart = { type: "file"; filename: string; url: string; mediaType: string; filePath?: string };
 type SourceDocumentUIPart = { type: "source-document"; sourceId: string; title: string; url?: string; filename?: string };
 import {
   FileTextIcon,

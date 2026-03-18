@@ -8,16 +8,119 @@ use tauri::{
 use tauri_plugin_log::{Target, TargetKind, TimezoneStrategy};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::StoreExt;
-use std::sync::Mutex;
+use std::sync::{Mutex, atomic::{AtomicU8, Ordering}};
 use std::time::Duration;
 
 /// Sidecar child process handle
 struct SidecarState(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
+/// Sidecar readiness state: 0 = pending, 1 = ready, 2 = error, 3 = port-conflict
+struct SidecarReadyState {
+    state: AtomicU8,
+    port: Mutex<u16>,
+    message: Mutex<String>,
+}
+
+impl SidecarReadyState {
+    fn new() -> Self {
+        Self {
+            state: AtomicU8::new(0),
+            port: Mutex::new(62601),
+            message: Mutex::new(String::new()),
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 struct SidecarEvent {
     status: String,
     message: String,
+}
+
+fn find_windows_git_bash() -> Option<String> {
+    use std::path::Path;
+
+    let mut candidates: Vec<String> = vec![];
+
+    if let Ok(path) = std::env::var("CLAUDE_CODE_GIT_BASH_PATH") {
+        candidates.push(path);
+    }
+
+    let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
+    let program_files = std::env::var("ProgramFiles")
+        .unwrap_or_else(|_| "C:\\Program Files".into());
+    let program_files_x86 = std::env::var("ProgramFiles(x86)")
+        .unwrap_or_else(|_| "C:\\Program Files (x86)".into());
+
+    candidates.extend([
+        format!("{}\\Git\\bin\\bash.exe", program_files),
+        format!("{}\\Git\\bin\\bash.exe", program_files_x86),
+        format!("{}\\Programs\\Git\\bin\\bash.exe", local_app_data),
+        format!("{}\\scoop\\apps\\git\\current\\bin\\bash.exe", user_profile),
+    ]);
+
+    #[cfg(target_os = "windows")]
+    let where_result = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        std::process::Command::new("where")
+            .arg("bash")
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+    };
+    #[cfg(not(target_os = "windows"))]
+    let where_result = std::process::Command::new("where").arg("bash").output();
+
+    if let Ok(output) = where_result {
+        if output.status.success() {
+            let content = String::from_utf8_lossy(&output.stdout);
+            for line in content.lines() {
+                let candidate = line.trim();
+                if !candidate.is_empty() {
+                    candidates.push(candidate.to_string());
+                }
+            }
+        }
+    }
+
+    for candidate in candidates {
+        if Path::new(&candidate).exists() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn add_windows_git_paths(extra_paths: &mut Vec<String>, bash_path: &str) {
+    use std::path::{Path, PathBuf};
+
+    fn push_if_exists(extra_paths: &mut Vec<String>, path: PathBuf) {
+        if path.exists() {
+            let path_str = path.to_string_lossy().to_string();
+            if !extra_paths.contains(&path_str) {
+                extra_paths.push(path_str);
+            }
+        }
+    }
+
+    let bash_path = Path::new(bash_path);
+    let Some(bash_dir) = bash_path.parent() else { return };
+
+    // For ...\\usr\\bin\\bash.exe -> git root is parent of usr
+    // For ...\\bin\\bash.exe -> git root is parent of bin
+    let git_root = if bash_dir.to_string_lossy().to_ascii_lowercase().ends_with("\\usr\\bin") {
+        bash_dir.parent().and_then(|usr| usr.parent())
+    } else {
+        bash_dir.parent()
+    };
+
+    let Some(git_root) = git_root else { return };
+    push_if_exists(extra_paths, git_root.join("bin"));
+    push_if_exists(extra_paths, git_root.join("cmd"));
+    push_if_exists(extra_paths, git_root.join("usr").join("bin"));
+    push_if_exists(extra_paths, git_root.join("mingw64").join("bin"));
 }
 
 /// Spawn the sidecar backend
@@ -83,47 +186,12 @@ fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
                     extra_paths.push(nodejs_dir);
                 }
             }
-
-            // Auto-detect Git for Windows (needed for bash tool)
-            let mut git_bash_found = false;
-            {
-                let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
-                let program_files = std::env::var("ProgramFiles")
-                    .unwrap_or_else(|_| "C:\\Program Files".into());
-                let program_files_x86 = std::env::var("ProgramFiles(x86)")
-                    .unwrap_or_else(|_| "C:\\Program Files (x86)".into());
-
-                let git_candidates = [
-                    format!("{}\\Git\\bin\\bash.exe", program_files),
-                    format!("{}\\Git\\bin\\bash.exe", program_files_x86),
-                    format!("{}\\Programs\\Git\\bin\\bash.exe", local_app_data),
-                ];
-
-                for candidate in &git_candidates {
-                    if std::path::Path::new(candidate).exists() {
-                        log::info!("Git Bash found at: {}", candidate);
-                        env_vars.push(("CLAUDE_CODE_GIT_BASH_PATH".into(), candidate.clone()));
-                        // Add Git's bin/ and usr/bin/ to PATH for unix utilities (cat, grep, etc.)
-                        if let Some(bin_dir) = std::path::Path::new(candidate).parent() {
-                            let bin_str = bin_dir.to_string_lossy().to_string();
-                            if !extra_paths.contains(&bin_str) {
-                                extra_paths.push(bin_str);
-                            }
-                            // usr/bin is sibling to bin/ under Git install root
-                            if let Some(git_root) = bin_dir.parent() {
-                                let usr_bin = format!("{}\\usr\\bin", git_root.to_string_lossy());
-                                if std::path::Path::new(&usr_bin).exists() && !extra_paths.contains(&usr_bin) {
-                                    extra_paths.push(usr_bin);
-                                }
-                            }
-                        }
-                        git_bash_found = true;
-                        break;
-                    }
-                }
-            }
-            if !git_bash_found {
-                log::warn!("Git Bash not found — bash tool may not work on Windows");
+            if let Some(git_bash_path) = find_windows_git_bash() {
+                log::info!("Git Bash found at: {}", git_bash_path);
+                env_vars.push(("CLAUDE_CODE_GIT_BASH_PATH".into(), git_bash_path.clone()));
+                add_windows_git_paths(&mut extra_paths, &git_bash_path);
+            } else {
+                log::warn!("Git Bash not found on Windows — shell commands may fail");
             }
         } else {
             // Resolve nvm's actual node bin path (nvm does not create ~/.nvm/current)
@@ -318,6 +386,21 @@ fn get_platform() -> String {
     std::env::consts::OS.to_string()
 }
 
+/// Query current sidecar status (for frontend to check on startup, avoiding race condition)
+#[tauri::command]
+fn get_sidecar_status(app: AppHandle) -> SidecarEvent {
+    let ready_state = app.state::<SidecarReadyState>();
+    let state = ready_state.state.load(Ordering::SeqCst);
+    let port = *ready_state.port.lock().unwrap();
+    let message = ready_state.message.lock().unwrap().clone();
+    match state {
+        1 => SidecarEvent { status: "ready".into(), message: format!("Backend ready on port {}", port) },
+        2 => SidecarEvent { status: "error".into(), message },
+        3 => SidecarEvent { status: "port-conflict".into(), message },
+        _ => SidecarEvent { status: "pending".into(), message: "Backend starting...".into() },
+    }
+}
+
 #[tauri::command]
 async fn set_preferred_port(app: AppHandle, port: u16) -> Result<(), String> {
     if port < 1024 {
@@ -338,10 +421,19 @@ async fn restart_sidecar(#[allow(unused)] app: AppHandle) -> Result<(), String> 
     }
     #[cfg(not(debug_assertions))]
     {
+        // Reset ready state to pending during restart
+        let ready_state = app.state::<SidecarReadyState>();
+        ready_state.state.store(0, Ordering::SeqCst);
+
         kill_sidecar(&app);
         tokio::time::sleep(Duration::from_millis(1000)).await;
         let port = spawn_sidecar(&app)?;
         wait_for_health(port, 30).await?;
+
+        let ready_state = app.state::<SidecarReadyState>();
+        *ready_state.port.lock().unwrap() = port;
+        ready_state.state.store(1, Ordering::SeqCst);
+
         let _ = app.emit("sidecar-event", SidecarEvent {
             status: "ready".into(),
             message: format!("Backend ready on port {}", port),
@@ -402,9 +494,11 @@ pub fn run() {
             }
         }))
         .manage(SidecarState(Mutex::new(None)))
+        .manage(SidecarReadyState::new())
         .invoke_handler(tauri::generate_handler![
             get_version,
             get_platform,
+            get_sidecar_status,
             set_preferred_port,
             restart_sidecar,
         ])
@@ -531,6 +625,11 @@ pub fn run() {
 
                 match wait_for_health(port, 60).await {
                     Ok(_) => {
+                        // Update ready state before emitting event (frontend can query this)
+                        let ready_state = app_handle.state::<SidecarReadyState>();
+                        *ready_state.port.lock().unwrap() = port;
+                        ready_state.state.store(1, Ordering::SeqCst);
+
                         let _ = app_handle.emit("sidecar-event", SidecarEvent {
                             status: "ready".into(),
                             message: format!("Backend ready on port {}", port),
@@ -538,6 +637,10 @@ pub fn run() {
                     }
                     Err(e) => {
                         log::error!("Health check failed: {}", e);
+                        let ready_state = app_handle.state::<SidecarReadyState>();
+                        *ready_state.message.lock().unwrap() = e.clone();
+                        ready_state.state.store(2, Ordering::SeqCst);
+
                         let _ = app_handle.emit("sidecar-event", SidecarEvent {
                             status: "error".into(),
                             message: e,
@@ -549,17 +652,9 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Hide to tray on close instead of quitting
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // macOS: exit fullscreen before hiding to avoid black screen on re-show
-                #[cfg(target_os = "macos")]
-                {
-                    if window.is_fullscreen().unwrap_or(false) {
-                        let _ = window.set_fullscreen(false);
-                    }
-                }
-                let _ = window.hide();
-                api.prevent_close();
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                kill_sidecar(window.app_handle());
+                // Let the window close normally — app will exit
             }
         })
         .build(tauri::generate_context!())

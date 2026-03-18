@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { getPaths } from '../config/index.ts'
 import { getLogger } from '../logger/index.ts'
 import { getBrowserProfile } from '../db/index.ts'
+import { detectChromePath } from '../utils/chrome.ts'
 import type { SkillsLoader } from '../skills/index.ts'
 import type { MemoryManager } from '../memory/index.ts'
 import type { AgentConfig } from './types.ts'
@@ -159,7 +160,26 @@ export class PromptBuilder {
     const profile = getBrowserProfile(profileId)
     if (!profile) return null
     const profileDir = resolve(getPaths().browserProfiles, profile.id)
-    return `## Browser Profile\n\nWhen using agent-browser, ALWAYS include \`--profile ${profileDir}\` to use the persistent browser profile "${profile.name}". Example:\n\n\`\`\`bash\nagent-browser --profile ${profileDir} open https://example.com\n\`\`\``
+
+    // Detect system Chrome executable
+    const chromePath = detectChromePath()
+    const execFlag = chromePath ? ` --executable-path "${chromePath}"` : ''
+
+    return [
+      `## Browser Profile`,
+      ``,
+      `You have a persistent browser profile "${profile.name}" bound to this chat.`,
+      `When using agent-browser, ALWAYS include these flags:`,
+      ``,
+      '```bash',
+      `agent-browser --session ${profile.id} --profile ${profileDir} --headed${execFlag} open https://example.com`,
+      '```',
+      ``,
+      `### Error Handling`,
+      `- If agent-browser fails because Chrome is not found, try \`agent-browser install chrome\` then retry once.`,
+      `- If headed mode still fails, drop \`--headed\` and use headless mode (keep --profile and --session).`,
+      `- Do NOT retry the same failing command more than 2 times. Inform the user if it cannot be resolved.`,
+    ].join('\n')
   }
 
 }

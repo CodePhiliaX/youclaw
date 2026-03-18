@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { ROOT_DIR } from '../config/index.ts'
+import { getShellEnv, resetShellEnvCache } from '../utils/shell-env.ts'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { getLogger } from '../logger/index.ts'
 import type { SkillsLoader } from '../skills/index.ts'
@@ -132,12 +133,15 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
       let stderr = ''
       let exitCode = 0
       try {
-        stdout = execSync(command, { encoding: 'utf-8', timeout: 120_000 })
+        stdout = execSync(command, { encoding: 'utf-8', timeout: 120_000, env: getShellEnv() })
       } catch (execErr: any) {
         stdout = execErr.stdout ?? ''
         stderr = execErr.stderr ?? ''
         exitCode = execErr.status ?? 1
       }
+
+      // Reset env cache so recheck picks up newly installed binaries
+      resetShellEnvCache()
 
       // Reload skills after installation
       skillsLoader.refresh()
