@@ -117,6 +117,9 @@ export class DocumentService {
       const data = await this.parseAttachment(sourceType, attachment.filePath)
       const text = data.text.trim()
       const chunks = this.buildChunks(docId, text, data.chunks)
+      if (!text || chunks.length === 0) {
+        throw new Error('No extractable text found in document')
+      }
       const document: ParsedDocument = {
         docId,
         chatId,

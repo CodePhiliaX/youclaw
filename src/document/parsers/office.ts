@@ -26,13 +26,20 @@ function stripHtml(html: string): string {
 
 export async function extractDocxText(filePath: string): Promise<ParsedDocumentContent> {
   const mammoth = await import('mammoth')
-  const result = await mammoth.convertToHtml({ path: filePath })
-  const text = normalizeText(stripHtml(result.value))
+  const rawResult = await mammoth.extractRawText({ path: filePath })
+  let text = normalizeText(rawResult.value)
+  let parser = 'mammoth-raw'
+
+  if (!text) {
+    const htmlResult = await mammoth.convertToHtml({ path: filePath })
+    text = normalizeText(stripHtml(htmlResult.value))
+    parser = 'mammoth-html'
+  }
 
   return {
     text,
     markdown: text,
-    parser: 'mammoth',
+    parser,
   }
 }
 

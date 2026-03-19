@@ -5,7 +5,7 @@ import { cleanTables, getDatabase } from './setup.ts'
 import { chunkText } from '../src/document/chunker.ts'
 import { documentService } from '../src/document/service.ts'
 import { buildParsedDocumentsPrompt } from '../src/agent/document-mcp.ts'
-import { extractXlsxText } from '../src/document/parsers/office.ts'
+import { extractDocxText, extractXlsxText } from '../src/document/parsers/office.ts'
 import { extractPdfText } from '../src/document/parsers/pdf.ts'
 
 function buildPdf(text: string): Buffer {
@@ -35,6 +35,66 @@ function buildPdf(text: string): Buffer {
 
   pdf += `trailer\n<< /Root 1 0 R /Size 6 >>\nstartxref\n${xrefOffset}\n%%EOF`
   return Buffer.from(pdf, 'utf8')
+}
+
+async function writeMinimalDocx(filePath: string, text: string): Promise<void> {
+  const { zipSync } = await import('fflate')
+  const files = {
+    '[Content_Types].xml': new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`),
+    '_rels/.rels': new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`),
+    'word/document.xml': new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>${text}</w:t></w:r></w:p>
+  </w:body>
+</w:document>`),
+  }
+
+  const zip = zipSync(files)
+  await Bun.write(filePath, zip)
+}
+
+async function writeTableDocx(filePath: string): Promise<void> {
+  const { zipSync } = await import('fflate')
+  const files = {
+    '[Content_Types].xml': new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`),
+    '_rels/.rels': new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`),
+    'word/document.xml': new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>试卷内容</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>选择题</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>填空题</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>问答题</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>判断题</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+  </w:body>
+</w:document>`),
+  }
+
+  const zip = zipSync(files)
+  await Bun.write(filePath, zip)
 }
 
 afterEach(() => {
@@ -97,6 +157,55 @@ describe('documentService', () => {
       expect(parsed.chunks[1]?.sheet).toBe('Details')
     } finally {
       unlinkSync(filePath)
+    }
+  })
+
+  test('extracts docx text and fails empty docx parsing clearly', async () => {
+    const docxPath = `/tmp/docx-${Date.now()}.docx`
+    const emptyDocxPath = `/tmp/docx-empty-${Date.now()}.docx`
+
+    try {
+      await writeMinimalDocx(docxPath, '模拟试卷四 选择题 填空题 问答题')
+      await writeMinimalDocx(emptyDocxPath, '')
+
+      const extracted = await extractDocxText(docxPath)
+      expect(extracted.text).toContain('模拟试卷四')
+
+      const parsed = await documentService.ingestAttachment('chat-docx', {
+        filename: 'mock.docx',
+        mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        filePath: docxPath,
+      })
+      expect(parsed.status).toBe('parsed')
+      expect(parsed.sourceType).toBe('docx')
+      expect(parsed.text).toContain('选择题')
+
+      const emptyParsed = await documentService.ingestAttachment('chat-docx', {
+        filename: 'empty.docx',
+        mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        filePath: emptyDocxPath,
+      })
+      expect(emptyParsed.status).toBe('failed')
+      expect(emptyParsed.error).toContain('No extractable text found')
+    } finally {
+      try { unlinkSync(docxPath) } catch {}
+      try { unlinkSync(emptyDocxPath) } catch {}
+    }
+  })
+
+  test('extracts table-heavy docx content through mammoth parser', async () => {
+    const filePath = `/tmp/docx-table-${Date.now()}.docx`
+
+    try {
+      await writeTableDocx(filePath)
+      const extracted = await extractDocxText(filePath)
+
+      expect(extracted.parser).toBe('mammoth-raw')
+      expect(extracted.text).toContain('试卷内容')
+      expect(extracted.text).toContain('选择题')
+      expect(extracted.text).toContain('判断题')
+    } finally {
+      try { unlinkSync(filePath) } catch {}
     }
   })
 
