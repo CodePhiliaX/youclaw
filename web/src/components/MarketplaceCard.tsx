@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { MarketplaceSkill, MarketplaceSkillDetail } from '../api/client'
 import { getMarketplaceSkill, installRecommendedSkill, uninstallRecommendedSkill, updateMarketplaceSkill } from '../api/client'
 import { Badge } from '../components/ui/badge'
@@ -17,12 +17,16 @@ export function MarketplaceCard({
   extraActions,
   hideInstalledBadge = false,
   statusBadges,
+  onOpenInstallDialog,
+  openInstallDialogDisabled = false,
 }: {
   skill: MarketplaceSkill
   onChanged: () => void
   extraActions?: ReactNode
   hideInstalledBadge?: boolean
   statusBadges?: ReactNode
+  onOpenInstallDialog?: () => void | Promise<void>
+  openInstallDialogDisabled?: boolean
 }) {
   const { t } = useI18n()
   const [status, setStatus] = useState<'idle' | 'installing' | 'updating' | 'uninstalling' | 'error'>('idle')
@@ -104,10 +108,56 @@ export function MarketplaceCard({
     }
   }
 
+  const canOpenInstallDialog = !skill.installed
+    && !openInstallDialogDisabled
+    && status !== 'installing'
+    && !loadingDetail
+    && (Boolean(onOpenInstallDialog) || !extraActions)
+
+  const triggerInstallDialog = () => {
+    if (!canOpenInstallDialog) return
+    if (onOpenInstallDialog) {
+      void onOpenInstallDialog()
+      return
+    }
+    void handleConfirmInstall()
+  }
+
+  const isNestedInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLDivElement) => {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    const interactiveTarget = target.closest('button, a, input, select, textarea, summary, [role="button"], [role="link"]')
+    return interactiveTarget !== null && interactiveTarget !== currentTarget
+  }
+
+  const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (isNestedInteractiveTarget(event.target, event.currentTarget)) {
+      return
+    }
+    triggerInstallDialog()
+  }
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      triggerInstallDialog()
+    }
+  }
+
   return (
     <div
       data-testid={`marketplace-card-${skill.slug}`}
-      className="rounded-xl border border-border p-4 transition-colors hover:bg-accent/20"
+      className={`rounded-xl border border-border p-4 transition-colors hover:bg-accent/20 ${
+        canOpenInstallDialog ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]' : ''
+      }`}
+      role={canOpenInstallDialog ? 'button' : undefined}
+      tabIndex={canOpenInstallDialog ? 0 : undefined}
+      onClick={canOpenInstallDialog ? handleCardClick : undefined}
+      onKeyDown={canOpenInstallDialog ? handleCardKeyDown : undefined}
     >
       <div className="flex gap-4">
         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">

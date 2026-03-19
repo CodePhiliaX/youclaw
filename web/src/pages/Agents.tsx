@@ -1124,6 +1124,12 @@ function AgentSkillsSection({
                   skill={skill}
                   onChanged={onUpdate}
                   hideInstalledBadge={marketplaceState === AgentMarketplaceSkillState.Bind}
+                  onOpenInstallDialog={
+                    marketplaceState === AgentMarketplaceSkillState.InstallAndBind
+                      ? () => handleConfirmInstallAndBind(skill)
+                      : undefined
+                  }
+                  openInstallDialogDisabled={loadingConfirmSlug === skill.slug || installingSlug === skill.slug}
                   statusBadges={
                     marketplaceState === AgentMarketplaceSkillState.Bind ? (
                       <Badge variant="secondary">
