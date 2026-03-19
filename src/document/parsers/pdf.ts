@@ -2,9 +2,8 @@ import type { ParsedDocumentContent } from './types.ts'
 
 // pdfjs-dist references DOMMatrix at module load time (canvas rendering code).
 // Polyfill it before importing so the sidecar does not crash on startup.
-if (typeof globalThis.DOMMatrix === 'undefined') {
-  // @ts-ignore
-  globalThis.DOMMatrix = class DOMMatrix {
+if (typeof (globalThis as Record<string, unknown>).DOMMatrix === 'undefined') {
+  (globalThis as Record<string, unknown>).DOMMatrix = class DOMMatrix {
     constructor(_init?: unknown) {}
     invertSelf() { return this }
     multiplySelf() { return this }
