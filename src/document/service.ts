@@ -6,7 +6,9 @@ import { getPaths } from '../config/index.ts'
 import { getDatabase } from '../db/index.ts'
 import { getLogger } from '../logger/index.ts'
 import { chunkText } from './chunker.ts'
+import { extractDocxText, extractPptxText, extractXlsxText } from './parsers/office.ts'
 import { extractPdfText } from './parsers/pdf.ts'
+import type { ParsedChunkInput, ParsedDocumentContent } from './parsers/types.ts'
 import type { DocumentChunk, DocumentSearchHit, DocumentSourceType, ParsedDocument } from './types.ts'
 
 interface StoredDocumentRow {
@@ -79,11 +81,15 @@ function scoreChunk(content: string, query: string): number {
 }
 
 export class DocumentService {
-  async ingestPdfAttachment(chatId: string, attachment: Attachment): Promise<ParsedDocument> {
+  isSupportedAttachment(attachment: Attachment): boolean {
+    return this.inferSourceType(attachment) !== null
+  }
+
+  async ingestAttachment(chatId: string, attachment: Attachment): Promise<ParsedDocument> {
     const logger = getLogger()
     const sourceType = this.inferSourceType(attachment)
-    if (sourceType !== 'pdf') {
-      throw new Error(`Unsupported source type for PDF ingestion: ${attachment.filename}`)
+    if (!sourceType) {
+      throw new Error(`Unsupported document type: ${attachment.filename}`)
     }
 
     const fileHash = computeFileHash(attachment.filePath)
@@ -103,27 +109,29 @@ export class DocumentService {
       docId,
       file: attachment.filePath,
       filename: attachment.filename,
+      sourceType,
       category: 'document',
-    }, 'Parsing PDF attachment into document store')
+    }, 'Parsing attachment into document store')
 
     try {
-      const buffer = readFileSync(attachment.filePath)
-      const data = await extractPdfText(buffer)
+      const data = await this.parseAttachment(sourceType, attachment.filePath)
       const text = data.text.trim()
-      const chunks = chunkText(text, { documentId: docId })
+      const chunks = this.buildChunks(docId, text, data.chunks)
       const document: ParsedDocument = {
         docId,
         chatId,
         sourcePath: attachment.filePath,
-        sourceType: 'pdf',
+        sourceType,
         status: 'parsed',
-        markdown: text,
+        markdown: data.markdown ?? text,
         text,
         chunks,
         meta: {
           filename: attachment.filename,
-          parser: 'pdfjs-dist',
+          parser: data.parser,
           pageCount: data.pageCount,
+          sheetNames: data.sheetNames,
+          slideCount: data.slideCount,
         },
         createdAt: now,
         updatedAt: now,
@@ -136,12 +144,12 @@ export class DocumentService {
         docId,
         chatId,
         sourcePath: attachment.filePath,
-        sourceType: 'pdf',
+        sourceType,
         status: 'failed',
         chunks: [],
         meta: {
           filename: attachment.filename,
-          parser: 'pdfjs-dist',
+          parser: `${sourceType}-parser`,
         },
         error: message,
         createdAt: now,
@@ -153,11 +161,16 @@ export class DocumentService {
         docId,
         file: attachment.filePath,
         filename: attachment.filename,
+        sourceType,
         error: message,
         category: 'document',
-      }, 'PDF attachment parsing failed')
+      }, 'Attachment parsing failed')
       return failedDoc
     }
+  }
+
+  async ingestPdfAttachment(chatId: string, attachment: Attachment): Promise<ParsedDocument> {
+    return this.ingestAttachment(chatId, attachment)
   }
 
   searchDocument(chatId: string, query: string, documentId?: string, limit = 5): DocumentSearchHit[] {
@@ -281,6 +294,37 @@ export class DocumentService {
     if (ext === '.xlsx') return 'xlsx'
     if (ext === '.pptx') return 'pptx'
     return null
+  }
+
+  private async parseAttachment(sourceType: DocumentSourceType, filePath: string): Promise<ParsedDocumentContent> {
+    switch (sourceType) {
+      case 'pdf':
+        return extractPdfText(readFileSync(filePath))
+      case 'docx':
+        return extractDocxText(filePath)
+      case 'xlsx':
+        return extractXlsxText(filePath)
+      case 'pptx':
+        return extractPptxText(filePath)
+    }
+  }
+
+  private buildChunks(documentId: string, text: string, chunks?: ParsedChunkInput[]): DocumentChunk[] {
+    if (!chunks || chunks.length === 0) {
+      return chunkText(text, { documentId })
+    }
+
+    return chunks.map((chunk, index) => ({
+      id: `${documentId}:chunk:${chunk.ordinal ?? index}`,
+      documentId,
+      ordinal: chunk.ordinal ?? index,
+      title: chunk.title,
+      content: chunk.content,
+      page: chunk.page,
+      sheet: chunk.sheet,
+      slide: chunk.slide,
+      metadata: chunk.metadata,
+    }))
   }
 
   private bindDocumentToChat(documentId: string, chatId: string): void {

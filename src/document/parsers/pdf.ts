@@ -1,10 +1,6 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
-
-interface ParsedPdfResult {
-  text: string
-  pageCount: number
-}
+import type { ParsedDocumentContent } from './types.ts'
 
 interface TextItemLike {
   str: string
@@ -56,7 +52,7 @@ async function extractPageText(page: PDFPageProxy): Promise<string> {
   return normalizePageText(text)
 }
 
-export async function extractPdfText(data: Buffer | Uint8Array): Promise<ParsedPdfResult> {
+export async function extractPdfText(data: Buffer | Uint8Array): Promise<ParsedDocumentContent> {
   const bytes = Buffer.isBuffer(data)
     ? new Uint8Array(data)
     : data instanceof Uint8Array
@@ -86,6 +82,8 @@ export async function extractPdfText(data: Buffer | Uint8Array): Promise<ParsedP
 
     return {
       text: pages.join('\n\n'),
+      markdown: pages.join('\n\n'),
+      parser: 'pdfjs-dist',
       pageCount: doc.numPages,
     }
   } finally {

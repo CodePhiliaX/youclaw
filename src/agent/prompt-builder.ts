@@ -96,7 +96,7 @@ export class PromptBuilder {
     parts.push(
       `## Document Handling Rule\n` +
       `When parsed document ids are available, you MUST use the \`mcp__document__search_document\` and \`mcp__document__read_document_chunk\` tools first.\n` +
-      `Do NOT use the \`Read\` tool on the original PDF when a parsed document is available.\n` +
+      `Do NOT use the \`Read\` tool on the original document file when a parsed document is available.\n` +
       `If document parsing fails, be explicit about the failure instead of pretending the document was read.`
     )
 

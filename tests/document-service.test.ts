@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { unlinkSync } from 'node:fs'
 import './setup.ts'
 import { cleanTables, getDatabase } from './setup.ts'
 import { chunkText } from '../src/document/chunker.ts'
 import { documentService } from '../src/document/service.ts'
 import { buildParsedDocumentsPrompt } from '../src/agent/document-mcp.ts'
+import { extractXlsxText } from '../src/document/parsers/office.ts'
 import { extractPdfText } from '../src/document/parsers/pdf.ts'
 
 function buildPdf(text: string): Buffer {
@@ -56,6 +58,46 @@ describe('documentService', () => {
 
     expect(parsed.pageCount).toBe(1)
     expect(parsed.text).toContain('Hello PDF')
+  })
+
+  test('ingests xlsx attachments into structured document chunks', async () => {
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['Metric', 'Value'],
+      ['Revenue', '42%'],
+    ])
+    const detailsSheet = XLSX.utils.aoa_to_sheet([
+      ['Region', 'Status'],
+      ['APAC', 'Growing quickly'],
+    ])
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+    XLSX.utils.book_append_sheet(workbook, detailsSheet, 'Details')
+
+    const filePath = `/tmp/report-${Date.now()}.xlsx`
+    XLSX.writeFile(workbook, filePath)
+
+    try {
+      const textOnly = await extractXlsxText(filePath)
+      expect(textOnly.sheetNames).toEqual(['Summary', 'Details'])
+      expect(textOnly.text).toContain('Sheet: Summary')
+      expect(textOnly.text).toContain('Growing quickly')
+
+      const parsed = await documentService.ingestAttachment('chat-xlsx', {
+        filename: 'report.xlsx',
+        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filePath,
+      })
+
+      expect(parsed.status).toBe('parsed')
+      expect(parsed.sourceType).toBe('xlsx')
+      expect(parsed.meta.sheetNames).toEqual(['Summary', 'Details'])
+      expect(parsed.chunks).toHaveLength(2)
+      expect(parsed.chunks[0]?.sheet).toBe('Summary')
+      expect(parsed.chunks[1]?.sheet).toBe('Details')
+    } finally {
+      unlinkSync(filePath)
+    }
   })
 
   test('searches parsed chunks within the same chat and reads chunk content', () => {

@@ -869,8 +869,9 @@ export class AgentRuntime {
       category: 'agent',
     }, 'Full SDK query options and env snapshot')
 
-    // Parse PDF attachments into the document store before query so the agent
-    // can use stable document tools instead of reading raw local file paths.
+    // Parse supported office/PDF attachments into the document store before
+    // query so the agent can use stable document tools instead of reading raw
+    // local file paths.
     const { parsedDocuments, remainingAttachments } = await ingestDocumentAttachments(
       chatId,
       attachments,

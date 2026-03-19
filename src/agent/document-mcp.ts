@@ -5,8 +5,8 @@ import type { Attachment } from '../types/attachment.ts'
 import { documentService } from '../document/service.ts'
 import { getLogger } from '../logger/index.ts'
 
-function isPdfAttachment(attachment: Attachment): boolean {
-  return attachment.mediaType === 'application/pdf' || attachment.filename.toLowerCase().endsWith('.pdf')
+function isDocumentAttachment(attachment: Attachment): boolean {
+  return documentService.isSupportedAttachment(attachment)
 }
 
 export async function ingestDocumentAttachments(
@@ -22,7 +22,7 @@ export async function ingestDocumentAttachments(
   const remainingAttachments: Attachment[] = []
 
   for (const attachment of attachments) {
-    if (!isPdfAttachment(attachment)) {
+    if (!isDocumentAttachment(attachment)) {
       remainingAttachments.push(attachment)
       continue
     }
@@ -32,7 +32,7 @@ export async function ingestDocumentAttachments(
       filename: attachment.filename,
       status: 'parsing',
     })
-    const parsed = await documentService.ingestPdfAttachment(chatId, attachment)
+    const parsed = await documentService.ingestAttachment(chatId, attachment)
     onDocumentStatus?.({
       documentId: parsed.docId,
       filename: parsed.meta.filename,
@@ -64,7 +64,7 @@ export function buildParsedDocumentsPrompt(parsedDocuments: Array<{ docId: strin
     parts.push(
       `[Parsed documents]\n${list}\n` +
       'Use `mcp__document__search_document` to find relevant chunks in these parsed documents, then use ' +
-      '`mcp__document__read_document_chunk` to read the best chunk(s). Do not use `Read` on the original PDF when a parsed document is available.'
+      '`mcp__document__read_document_chunk` to read the best chunk(s). Do not use `Read` on the original file when a parsed document is available.'
     )
   }
 
@@ -74,7 +74,7 @@ export function buildParsedDocumentsPrompt(parsedDocuments: Array<{ docId: strin
       .join('\n')
     parts.push(
       `[Document parse failed]\n${list}\n` +
-      'These PDFs could not be parsed into structured chunks. Tell the user parsing failed instead of pretending the document was read successfully.'
+      'These documents could not be parsed into structured chunks. Tell the user parsing failed instead of pretending the document was read successfully.'
     )
   }
 
@@ -87,15 +87,54 @@ export function createDocumentMcpServer(chatId: string) {
     version: '1.0.0',
     tools: [
       tool(
+        'parse_document',
+        'Parse a local document file (PDF, DOCX, XLSX, or PPTX) into the document store and return a document id.',
+        {
+          file_path: z.string().describe('Absolute path to the local document file'),
+          media_type: z.string().optional().describe('Optional media type when filename extension is missing or ambiguous'),
+        },
+        async (args) => {
+          const logger = getLogger()
+          try {
+            const parsed = await documentService.ingestAttachment(chatId, {
+              filename: basename(args.file_path),
+              mediaType: args.media_type ?? 'application/octet-stream',
+              filePath: args.file_path,
+            })
+            if (parsed.status !== 'parsed') {
+              return {
+                content: [{ type: 'text' as const, text: `Failed to parse document: ${parsed.error ?? 'unknown error'}` }],
+                isError: true,
+              }
+            }
+            return {
+              content: [{
+                type: 'text' as const,
+                text: JSON.stringify({
+                  document_id: parsed.docId,
+                  filename: parsed.meta.filename,
+                  source_type: parsed.sourceType,
+                  chunk_count: parsed.chunks.length,
+                }, null, 2),
+              }],
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            logger.error({ error: msg, file_path: args.file_path, category: 'document' }, 'parse_document tool failed')
+            return { content: [{ type: 'text' as const, text: `Failed to parse document: ${msg}` }], isError: true }
+          }
+        },
+      ),
+      tool(
         'parse_pdf',
-        'Parse a local PDF file into a structured document in the document store and return a document id.',
+        'Legacy alias for parse_document restricted to PDF files.',
         {
           file_path: z.string().describe('Absolute path to the local PDF file'),
         },
         async (args) => {
           const logger = getLogger()
           try {
-            const parsed = await documentService.ingestPdfAttachment(chatId, {
+            const parsed = await documentService.ingestAttachment(chatId, {
               filename: basename(args.file_path),
               mediaType: 'application/pdf',
               filePath: args.file_path,
@@ -112,6 +151,7 @@ export function createDocumentMcpServer(chatId: string) {
                 text: JSON.stringify({
                   document_id: parsed.docId,
                   filename: parsed.meta.filename,
+                  source_type: parsed.sourceType,
                   chunk_count: parsed.chunks.length,
                 }, null, 2),
               }],
