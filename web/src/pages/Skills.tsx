@@ -1,70 +1,52 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  getSkills,
-  getSkillAgents,
-  configureSkillEnv,
-  installSkill,
-  toggleSkill,
   deleteSkill,
   getMarketplaceSkills,
+  getMySkills,
   getRecommendedSkills,
-} from '../api/client'
-import type { Skill, MarketplacePage, MarketplaceSort } from '../api/client'
+  getSkillAgents,
+  getSkills,
+  toggleSkill,
+  type ManagedSkill,
+  type MarketplacePage,
+  type MarketplaceSort,
+  type Skill,
+} from '@/api/client'
+import { AlertTriangle, Store } from 'lucide-react'
+import { SkillEditor } from '@/components/skills/SkillEditor'
+import { InstalledSkillsView } from '@/components/skills/InstalledSkillsView'
+import { MarketplaceView } from '@/components/skills/MarketplaceView'
+import { compareByNewestThenName, type InstalledSkillListItem } from '@/components/skills/skills-view-types'
 import {
-  Puzzle,
-  CheckCircle,
-  AlertTriangle,
-  XCircle,
-  FolderOpen,
-  Globe,
-  Cpu,
-  Terminal,
-  Key,
-  Wrench,
-  Download,
-  Copy,
-  Check,
-  Loader2,
-  Store,
-  Trash2,
-  Search,
-  Sparkles,
-  RefreshCw,
-} from 'lucide-react'
-import { Badge } from '../components/ui/badge'
-import { Button } from '../components/ui/button'
-import { Input } from '../components/ui/input'
-import { cn } from '../lib/utils'
-import { useI18n } from '../i18n'
-import { MarketplaceCard } from '@/components/MarketplaceCard'
-import { MarketplaceDisclaimer } from '@/components/MarketplaceDisclaimer'
-import { SidePanel } from '@/components/layout/SidePanel'
-import { useDragRegion } from "@/hooks/useDragRegion"
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
-
-const sourceOrder: Skill['source'][] = ['workspace', 'builtin', 'user']
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 type TabType = 'installed' | 'marketplace'
-
-function EligibilityIcon({ skill }: { skill: Skill }) {
-  if (!skill.enabled) {
-    return <XCircle className="h-4 w-4 text-muted-foreground" />
-  }
-  if (skill.usable) {
-    return <CheckCircle className="h-4 w-4 text-green-400" />
-  }
-  if (skill.eligible) {
-    return <AlertTriangle className="h-4 w-4 text-yellow-400" />
-  }
-  return <XCircle className="h-4 w-4 text-red-400" />
-}
+type BuilderState =
+  | { entity: 'skill'; mode: 'create' }
+  | { entity: 'skill'; mode: 'edit'; skillName: string }
 
 export function Skills() {
   const { t } = useI18n()
-  const drag = useDragRegion()
   const [tab, setTab] = useState<TabType>('installed')
+  const [builderState, setBuilderState] = useState<BuilderState | null>(null)
+
   const [skills, setSkills] = useState<Skill[]>([])
+  const [mySkills, setMySkills] = useState<ManagedSkill[]>([])
+
   const [selected, setSelected] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleteAffectedAgents, setDeleteAffectedAgents] = useState<Array<{ id: string; name: string }>>([])
+
   const [marketplace, setMarketplace] = useState<MarketplacePage>({
     items: [],
     nextCursor: null,
@@ -76,34 +58,37 @@ export function Skills() {
   const [marketplaceError, setMarketplaceError] = useState('')
   const [marketplaceAppendError, setMarketplaceAppendError] = useState('')
   const [marketplaceSort, setMarketplaceSort] = useState<MarketplaceSort>('trending')
-
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const [deleteAffectedAgents, setDeleteAffectedAgents] = useState<Array<{ id: string; name: string }>>([])
-
-  useEffect(() => {
-    if (!deleteTarget) return
-    getSkillAgents(deleteTarget)
-      .then(res => setDeleteAffectedAgents(res.agents))
-      .catch(() => setDeleteAffectedAgents([]))
-  }, [deleteTarget])
-
-  // Unified search state
   const [searchQuery, setSearchQuery] = useState('')
+
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const marketplaceScrollRef = useRef<HTMLDivElement | null>(null)
   const marketplaceLoadMoreRef = useRef<HTMLDivElement | null>(null)
   const marketplacePendingCursorRef = useRef<string | null>(null)
+  const listScrollRef = useRef<HTMLDivElement | null>(null)
+  const listScrollTopRef = useRef(0)
 
-  const sourceLabels: Record<Skill['source'], string> = {
+  const sourceLabels = useMemo<Record<Skill['source'], string>>(() => ({
     workspace: t.skills.workspace,
-    builtin: t.skills.project,
+    builtin: t.skills.builtin,
     user: t.skills.user,
-  }
+  }), [t.skills.builtin, t.skills.user, t.skills.workspace])
+
+  const externalSourceLabels = useMemo<Record<NonNullable<Skill['externalSource']>, string>>(() => ({
+    marketplace: t.skills.sourceMarketplace,
+    imported: t.skills.sourceImported,
+    manual: t.skills.sourceManual,
+  }), [t.skills.sourceImported, t.skills.sourceManual, t.skills.sourceMarketplace])
 
   const loadSkills = useCallback(() => {
     getSkills().then((data) => {
       setSkills(data)
       window.dispatchEvent(new CustomEvent('skills-changed'))
+    }).catch(() => {})
+  }, [])
+
+  const loadMySkills = useCallback(() => {
+    getMySkills().then((data) => {
+      setMySkills(data)
     }).catch(() => {})
   }, [])
 
@@ -160,67 +145,102 @@ export function Skills() {
           setMarketplaceAppendError(error instanceof Error ? error.message : t.skills.marketplaceLoadFailed)
         })
     },
-    [marketplace.nextCursor, searchQuery, marketplaceSort, t.skills.marketplaceLoadFailed],
+    [marketplace.nextCursor, marketplaceSort, searchQuery, t.skills.marketplaceLoadFailed],
   )
 
-  useEffect(() => { loadSkills() }, [loadSkills])
+  useEffect(() => {
+    loadSkills()
+    loadMySkills()
+  }, [loadMySkills, loadSkills])
+
   useEffect(() => {
     if (tab !== 'marketplace') return
     const timer = window.setTimeout(() => {
       loadMarketplace({ query: searchQuery })
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [tab, searchQuery, marketplaceSort, loadMarketplace])
+  }, [loadMarketplace, marketplaceSort, searchQuery, tab])
 
-  const closeDeleteDialog = useCallback(() => {
-    setDeleteTarget(null)
-    setDeleteAffectedAgents([])
-  }, [])
-
-  const refreshMarketplace = useCallback(() => {
-    if (tab !== 'marketplace') return
-    loadMarketplace({ query: searchQuery })
-  }, [tab, loadMarketplace, searchQuery])
-
-  const handleMarketplaceChanged = useCallback(() => {
-    loadSkills()
-    refreshMarketplace()
-  }, [loadSkills, refreshMarketplace])
-
-  // Debounce search input by 300ms
-  const handleSearchChange = useCallback((value: string) => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = setTimeout(() => setSearchQuery(value), 300)
-  }, [])
-
-  // Cleanup timer
   useEffect(() => {
-    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+    if (!deleteTarget) return
+    getSkillAgents(deleteTarget)
+      .then((res) => setDeleteAffectedAgents(res.agents))
+      .catch(() => setDeleteAffectedAgents([]))
+  }, [deleteTarget])
+
+  useEffect(() => () => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
   }, [])
 
-  const selectedSkill = skills.find(s => s.name === selected)
+  const selectedSkill = skills.find((skill) => skill.name === selected)
+  const editableSkills = mySkills.filter((skill) => skill.editable)
+  const editableSkillNames = useMemo(() => new Set(editableSkills.map((skill) => skill.name)), [editableSkills])
 
-  // Group installed skills by source
-  const grouped = sourceOrder
-    .map(source => ({
-      source,
-      skills: skills.filter(s => s.source === source),
-    }))
-    .filter(g => g.skills.length > 0)
+  const customSkillItems = useMemo<InstalledSkillListItem[]>(() => (
+    [...editableSkills]
+      .sort(compareByNewestThenName)
+      .map((skill) => ({
+        kind: 'editable',
+        name: skill.name,
+        description: skill.description || t.skills.skillDescriptionFallback,
+        sourceLabel: t.skills.sourceCustom,
+        skill,
+        sortTimestamp: skill.sortTimestamp,
+      }))
+  ), [editableSkills, t.skills.skillDescriptionFallback, t.skills.sourceCustom])
 
-  const isSearching = searchQuery.trim().length > 0
-  const visibleMarketplaceItems = useMemo(
-    () => marketplace.items.filter((skill) => !skill.installed),
-    [marketplace.items],
-  )
-  const hasMarketplaceItems = visibleMarketplaceItems.length > 0
-  const canLoadMore = isSearching && Boolean(marketplace.nextCursor)
+  const externalSkillItems = useMemo<InstalledSkillListItem[]>(() => (
+    skills
+      .filter((skill) => (
+        skill.catalogGroup === 'user'
+        && skill.userSkillKind === 'external'
+        && !editableSkillNames.has(skill.name)
+      ))
+      .sort(compareByNewestThenName)
+      .map((skill) => ({
+        kind: 'installed',
+        name: skill.name,
+        description: skill.frontmatter.description || t.skills.skillDescriptionFallback,
+        sourceLabel: skill.externalSource ? externalSourceLabels[skill.externalSource] : t.skills.user,
+        skill,
+        sortTimestamp: skill.sortTimestamp,
+      }))
+  ), [editableSkillNames, externalSourceLabels, skills, t.skills.skillDescriptionFallback, t.skills.user])
+
+  const builtinSkillItems = useMemo<InstalledSkillListItem[]>(() => (
+    skills
+      .filter((skill) => skill.catalogGroup === 'builtin' && !editableSkillNames.has(skill.name))
+      .sort(compareByNewestThenName)
+      .map((skill) => ({
+        kind: 'installed',
+        name: skill.name,
+        description: skill.frontmatter.description || t.skills.skillDescriptionFallback,
+        sourceLabel: sourceLabels[skill.source],
+        skill,
+        sortTimestamp: skill.sortTimestamp,
+      }))
+  ), [editableSkillNames, skills, sourceLabels, t.skills.skillDescriptionFallback])
+
+  const canLoadMore = searchQuery.trim().length > 0 && Boolean(marketplace.nextCursor)
   const canAutoLoadMore = canLoadMore && !marketplaceAppendError
+
+  const openSkillBuilder = useCallback((skillName: string) => {
+    listScrollTopRef.current = listScrollRef.current?.scrollTop ?? 0
+    setBuilderState({ entity: 'skill', mode: 'edit', skillName })
+  }, [])
 
   const handleMarketplaceLoadMore = useCallback(() => {
     if (!canAutoLoadMore || marketplaceStatus !== 'idle') return
     loadMarketplace({ append: true })
-  }, [canAutoLoadMore, marketplaceStatus, loadMarketplace])
+  }, [canAutoLoadMore, loadMarketplace, marketplaceStatus])
+
+  const handleMarketplaceChanged = useCallback(() => {
+    loadSkills()
+    loadMySkills()
+    if (tab === 'marketplace') {
+      loadMarketplace({ query: searchQuery })
+    }
+  }, [loadMarketplace, loadMySkills, loadSkills, searchQuery, tab])
 
   useEffect(() => {
     const container = marketplaceScrollRef.current
@@ -244,383 +264,129 @@ export function Skills() {
     return () => observer.disconnect()
   }, [canAutoLoadMore, handleMarketplaceLoadMore])
 
+  useEffect(() => {
+    if (builderState || tab !== 'installed') return
+    const container = listScrollRef.current
+    if (!container) return
+    const restore = window.requestAnimationFrame(() => {
+      container.scrollTop = listScrollTopRef.current
+    })
+    return () => window.cancelAnimationFrame(restore)
+  }, [builderState, tab])
+
+  const handleSearchChange = useCallback((value: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => setSearchQuery(value), 300)
+  }, [])
+
+  const closeDeleteDialog = useCallback(() => {
+    setDeleteTarget(null)
+    setDeleteAffectedAgents([])
+  }, [])
+
   return (
     <div className="flex h-full flex-col">
-      {/* Tab switcher */}
-      <div className="px-4 py-3 border-b border-border">
-        <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
-          <button
-            data-testid="skills-installed-tab"
-            onClick={() => setTab('installed')}
-            className={cn(
-              'px-4 py-1.5 text-sm font-medium rounded-lg transition-all',
-              tab === 'installed'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.skills.installed}
-          </button>
-          <button
-            data-testid="skills-marketplace-tab"
-            onClick={() => setTab('marketplace')}
-            className={cn(
-              'px-4 py-1.5 text-sm font-medium rounded-lg transition-all flex items-center gap-1.5',
-              tab === 'marketplace'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Store className="h-3.5 w-3.5" />
-            {t.skills.marketplace}
-          </button>
-        </div>
-      </div>
-
-      {/* Tab content */}
-      {tab === 'installed' ? (
-        <div className="flex flex-1 min-h-0">
-          {/* Left panel: skill list */}
-          <SidePanel>
-            <div className="h-12 shrink-0 px-3 border-b border-border flex items-center" {...drag}>
-              <h2 className="font-semibold text-sm">{t.skills.title}</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-3">
-              {grouped.length === 0 && (
-                <div className="text-center text-muted-foreground text-sm py-8">
-                  {t.skills.noSkills}
-                </div>
-              )}
-              {grouped.map(group => (
-                <div key={group.source}>
-                  <div className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    {sourceLabels[group.source]}
-                  </div>
-                  <div className="space-y-0.5">
-                    {group.skills.map(skill => (
-                      <button
-                        key={skill.name}
-                        data-testid="skill-item"
-                        onClick={() => setSelected(skill.name)}
-                        className={cn(
-                          'flex items-center gap-3 w-full px-3 py-2 text-sm rounded-md text-left transition-colors',
-                          selected === skill.name ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50'
-                        )}
-                      >
-                        <div className={cn(
-                          'w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium shrink-0',
-                          !skill.enabled ? 'bg-muted text-muted-foreground' : skill.usable ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                        )}>
-                          <Puzzle className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="truncate font-medium">{skill.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{skill.frontmatter.description}</div>
-                        </div>
-                        <EligibilityIcon skill={skill} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SidePanel>
-
-          {/* Right panel: skill details */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            {selectedSkill ? (
-              <div className="max-w-2xl space-y-6">
-                {/* Header */}
-                <div className="flex items-center gap-4">
-                  <div className={cn(
-                    'w-12 h-12 rounded-full flex items-center justify-center',
-                    !selectedSkill.enabled ? 'bg-muted' : selectedSkill.usable ? 'bg-green-500/10' : 'bg-red-500/10'
-                  )}>
-                    <Puzzle className="h-6 w-6" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h1 className="text-xl font-semibold">{selectedSkill.name}</h1>
-                      <Badge variant={selectedSkill.source === 'workspace' ? 'default' : 'secondary'}>
-                        {sourceLabels[selectedSkill.source]}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{selectedSkill.frontmatter.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      data-testid="skill-toggle-btn"
-                      variant={selectedSkill.enabled ? 'secondary' : 'default'}
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await toggleSkill(selectedSkill.name, !selectedSkill.enabled)
-                          loadSkills()
-                        } catch (error) {
-                          console.error('Failed to toggle skill:', error)
-                        }
-                      }}
-                    >
-                      {selectedSkill.enabled ? t.skills.disable : t.skills.enable}
-                    </Button>
-                    {selectedSkill.source !== 'workspace' && (
-                      <Button
-                        data-testid="skill-delete-btn"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-red-400"
-                        onClick={() => setDeleteTarget(selectedSkill.name)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Eligibility status */}
-                <div className="rounded-md border border-border p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    {!selectedSkill.enabled ? (
-                      <>
-                        <XCircle className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">{t.skills.disabled}</span>
-                      </>
-                    ) : selectedSkill.usable ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 text-green-400" />
-                        <span className="text-green-400">{t.skills.usable}</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="h-4 w-4 text-yellow-400" />
-                        <span className="text-yellow-400">{t.skills.enabledNotReady}</span>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Environment variable configuration */}
-                  {selectedSkill.eligibilityDetail?.env.results.length > 0 && (
-                    <div className="space-y-2">
-                      {selectedSkill.eligibilityDetail.env.results.map(r => (
-                        <EnvConfigRow key={r.name} envName={r.name} configured={r.found} onSaved={loadSkills} />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Missing dependencies with install commands */}
-                  {selectedSkill.eligibilityDetail?.dependencies.passed === false && selectedSkill.frontmatter.install && Object.keys(selectedSkill.frontmatter.install).length > 0 && (
-                    <div className="pt-2 border-t border-border/50 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                          <Download className="h-3.5 w-3.5" />
-                          {t.skills.install}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={loadSkills}
-                          className="h-6 px-2 text-xs text-muted-foreground"
-                        >
-                          <RefreshCw className="h-3 w-3 mr-1" />
-                          {t.skills.recheckDeps}
-                        </Button>
-                      </div>
-                      {Object.entries(selectedSkill.frontmatter.install).map(([method, command]) => (
-                        <InstallButton key={method} method={method} command={command} skillName={selectedSkill.name} onInstalled={loadSkills} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Metadata */}
-                <div className="grid gap-4">
-                  {selectedSkill.frontmatter.version && (
-                    <InfoRow label={t.skills.version} value={selectedSkill.frontmatter.version} />
-                  )}
-                  <InfoRow label={t.skills.path} value={
-                    <span className="flex items-center gap-1 font-mono text-xs">
-                      <FolderOpen className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{selectedSkill.path}</span>
-                    </span>
-                  } />
-                  {selectedSkill.frontmatter.os && selectedSkill.frontmatter.os.length > 0 && (
-                    <InfoRow label={t.skills.os} value={
-                      <span className="flex items-center gap-1.5">
-                        <Globe className="h-3 w-3 shrink-0" />
-                        {selectedSkill.frontmatter.os.map(os => (
-                          <Badge key={os} variant="outline" className="text-xs">{os}</Badge>
-                        ))}
-                      </span>
-                    } />
-                  )}
-                  {selectedSkill.frontmatter.dependencies && selectedSkill.frontmatter.dependencies.length > 0 && (
-                    <InfoRow label={t.skills.dependencies} value={
-                      <span className="flex items-center gap-1.5 flex-wrap">
-                        <Terminal className="h-3 w-3 shrink-0" />
-                        {selectedSkill.frontmatter.dependencies.map(dep => (
-                          <Badge key={dep} variant="outline" className="text-xs font-mono">{dep}</Badge>
-                        ))}
-                      </span>
-                    } />
-                  )}
-                  {selectedSkill.frontmatter.env && selectedSkill.frontmatter.env.length > 0 && (
-                    <InfoRow label={t.skills.envVars} value={
-                      <span className="flex items-center gap-1.5 flex-wrap">
-                        <Key className="h-3 w-3 shrink-0" />
-                        {selectedSkill.frontmatter.env.map(env => (
-                          <Badge key={env} variant="outline" className="text-xs font-mono">{env}</Badge>
-                        ))}
-                      </span>
-                    } />
-                  )}
-                  {selectedSkill.frontmatter.tools && selectedSkill.frontmatter.tools.length > 0 && (
-                    <InfoRow label={t.skills.tools} value={
-                      <span className="flex items-center gap-1.5 flex-wrap">
-                        <Wrench className="h-3 w-3 shrink-0" />
-                        {selectedSkill.frontmatter.tools.map(tool => (
-                          <Badge key={tool} variant="outline" className="text-xs">{tool}</Badge>
-                        ))}
-                      </span>
-                    } />
-                  )}
-                </div>
-
-                {/* Content */}
-                {selectedSkill.content && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <Cpu className="h-4 w-4" />
-                      {t.skills.content}
-                    </h3>
-                    <pre className="rounded-md border border-border bg-muted/30 p-4 text-sm overflow-x-auto whitespace-pre-wrap font-mono">
-                      {selectedSkill.content}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <div className="text-center">
-                  <Puzzle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>{t.skills.selectSkill}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {builderState ? (
+        <SkillEditor
+          mode={builderState.mode}
+          skillName={builderState.mode === 'edit' ? builderState.skillName : null}
+          onBack={() => {
+            setBuilderState(null)
+            setTab('installed')
+          }}
+          onSkillSelected={(skillName) => {
+            setSelected(null)
+            if (skillName) {
+              setBuilderState({ entity: 'skill', mode: 'edit', skillName })
+            } else {
+              setBuilderState(null)
+            }
+          }}
+          onSkillsChanged={() => {
+            void loadMySkills()
+            void loadSkills()
+          }}
+        />
       ) : (
-        /* Marketplace tab */
-        <div ref={marketplaceScrollRef} className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl mx-auto space-y-6">
-            {/* Single search bar */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  data-testid="marketplace-search-input"
-                  defaultValue={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  placeholder={t.skills.marketplaceSearchPlaceholder}
-                  className="pl-9"
-                />
-              </div>
-              {isSearching && (
-                <>
-                  <select
-                    data-testid="marketplace-sort-select"
-                    value={marketplaceSort}
-                    onChange={(e) => setMarketplaceSort(e.target.value as MarketplaceSort)}
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="trending">{t.skills.marketplaceSortTrending}</option>
-                    <option value="updated">{t.skills.marketplaceSortUpdated}</option>
-                    <option value="downloads">{t.skills.marketplaceSortDownloads}</option>
-                    <option value="stars">{t.skills.marketplaceSortStars}</option>
-                    <option value="installsCurrent">{t.skills.marketplaceSortInstalls}</option>
-                    <option value="installsAllTime">{t.skills.marketplaceSortInstallsAllTime}</option>
-                  </select>
-                  <Badge variant="outline" className="gap-1 shrink-0">
-                    <Sparkles className="h-3 w-3" />
-                    {marketplace.source === 'clawhub' ? t.skills.marketplaceSourceRemote : t.skills.marketplaceSourceFallback}
-                  </Badge>
-                </>
-              )}
-            </div>
-
-            <MarketplaceDisclaimer />
-
-            {/* Section header */}
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-medium">
-                {isSearching ? t.skills.searchMarketplace : t.skills.recommended}
-              </h3>
-            </div>
-
-            {/* Loading state */}
-            {marketplaceStatus === 'loading' && (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            )}
-
-            {/* Error state */}
-            {marketplaceStatus === 'error' && (
-              <div className="text-center text-muted-foreground text-sm py-12">
-                <Store className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p>{marketplaceError || t.skills.marketplaceLoadFailed}</p>
-              </div>
-            )}
-
-            {/* Empty state */}
-            {marketplaceStatus !== 'loading' && marketplaceStatus !== 'error' && !hasMarketplaceItems && !canLoadMore && (
-              <div className="text-center text-muted-foreground text-sm py-12">
-                <Store className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p>{isSearching ? t.skills.noMarketplaceSkills : t.skills.noSkills}</p>
-              </div>
-            )}
-
-            {/* Results */}
-            {marketplaceStatus !== 'loading' && visibleMarketplaceItems.length > 0 && (
-              <div className="grid gap-3">
-                {visibleMarketplaceItems.map(skill => (
-                  <MarketplaceCard
-                    key={skill.slug}
-                    skill={skill}
-                    onChanged={handleMarketplaceChanged}
-                  />
-                ))}
-              </div>
-            )}
-
-            {canLoadMore && (
-              <div className="space-y-3">
-                <div ref={marketplaceLoadMoreRef} className="h-1" aria-hidden="true" />
-                {marketplaceStatus === 'loading-more' && (
-                  <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{t.common.loading}</span>
-                  </div>
+        <>
+          <div className="border-b border-border px-4 py-3">
+            <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
+              <button
+                data-testid="skills-installed-tab"
+                onClick={() => setTab('installed')}
+                className={cn(
+                  'rounded-lg px-4 py-1.5 text-sm font-medium transition-all',
+                  tab === 'installed'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
-                {marketplaceAppendError && (
-                  <div className="flex flex-col items-center gap-2 py-2 text-sm text-muted-foreground">
-                    <p>{marketplaceAppendError}</p>
-                    <Button
-                      data-testid="marketplace-load-more-retry"
-                      variant="secondary"
-                      onClick={() => {
-                        setMarketplaceAppendError('')
-                        loadMarketplace({ append: true })
-                      }}
-                    >
-                      {t.common.retry}
-                    </Button>
-                  </div>
+              >
+                {t.skills.installed}
+              </button>
+              <button
+                data-testid="skills-marketplace-tab"
+                onClick={() => setTab('marketplace')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-all',
+                  tab === 'marketplace'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
-              </div>
-            )}
+              >
+                <Store className="h-3.5 w-3.5" />
+                {t.skills.marketplace}
+              </button>
+            </div>
           </div>
-        </div>
+
+          {tab === 'installed' && (
+            <InstalledSkillsView
+              builtinSkillItems={builtinSkillItems}
+              externalSkillItems={externalSkillItems}
+              customSkillItems={customSkillItems}
+              selectedSkill={selectedSkill}
+              selected={selected}
+              setSelected={setSelected}
+              onEditSkill={openSkillBuilder}
+              onCreateSkill={() => {
+                listScrollTopRef.current = listScrollRef.current?.scrollTop ?? 0
+                setSelected(null)
+                setBuilderState({ entity: 'skill', mode: 'create' })
+              }}
+              onToggleSkill={async (skillName, enabled) => {
+                await toggleSkill(skillName, enabled)
+                loadSkills()
+              }}
+              onDeleteSkill={(skillName) => setDeleteTarget(skillName)}
+              onReloadSkills={loadSkills}
+              listRef={listScrollRef}
+              onListScroll={(top) => {
+                listScrollTopRef.current = top
+              }}
+            />
+          )}
+
+          {tab === 'marketplace' && (
+            <MarketplaceView
+              marketplace={marketplace}
+              marketplaceStatus={marketplaceStatus}
+              marketplaceError={marketplaceError}
+              marketplaceAppendError={marketplaceAppendError}
+              marketplaceSort={marketplaceSort}
+              setMarketplaceSort={setMarketplaceSort}
+              searchQuery={searchQuery}
+              handleSearchChange={handleSearchChange}
+              onChanged={handleMarketplaceChanged}
+              onLoadMore={handleMarketplaceLoadMore}
+              onRetryLoadMore={() => {
+                setMarketplaceAppendError('')
+                loadMarketplace({ append: true })
+              }}
+              marketplaceScrollRef={marketplaceScrollRef}
+              marketplaceLoadMoreRef={marketplaceLoadMoreRef}
+            />
+          )}
+        </>
       )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && closeDeleteDialog()}>
@@ -630,13 +396,13 @@ export function Skills() {
             <AlertDialogDescription>{t.skills.confirmDeleteSkill}</AlertDialogDescription>
           </AlertDialogHeader>
           {deleteAffectedAgents.length > 0 && (
-            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 space-y-1">
+            <div className="space-y-1 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
               <div className="flex items-center gap-2 text-sm font-medium text-yellow-500">
                 <AlertTriangle className="h-4 w-4" />
                 <span>{t.skills.deleteAffectsAgents}</span>
               </div>
-              <ul className="list-disc list-inside text-sm text-muted-foreground">
-                {deleteAffectedAgents.map(agent => (
+              <ul className="list-inside list-disc text-sm text-muted-foreground">
+                {deleteAffectedAgents.map((agent) => (
                   <li key={agent.id}>{agent.name}</li>
                 ))}
               </ul>
@@ -663,155 +429,6 @@ export function Skills() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  )
-}
-
-/** Environment variable row */
-function EnvConfigRow({ envName, configured, onSaved }: { envName: string; configured: boolean; onSaved: () => void }) {
-  const { t } = useI18n()
-  const [editing, setEditing] = useState(!configured)
-  const [value, setValue] = useState('')
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-
-  const handleSave = async () => {
-    if (!value.trim()) return
-    setStatus('saving')
-    try {
-      await configureSkillEnv(envName, value.trim())
-      setStatus('saved')
-      setEditing(false)
-      setValue('')
-      onSaved()
-    } catch {
-      setStatus('error')
-    }
-  }
-
-  if (!editing) {
-    return (
-      <div className="flex items-center gap-2">
-        <Key className="h-3.5 w-3.5 text-green-400 shrink-0" />
-        <code className="text-xs font-mono shrink-0">{envName}</code>
-        <span className="flex-1 text-xs text-muted-foreground font-mono">--------</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => { setEditing(true); setStatus('idle') }}
-          className="h-7 px-2 text-xs"
-        >
-          {t.common.edit}
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <Key className={cn("h-3.5 w-3.5 shrink-0", configured ? "text-green-400" : "text-yellow-400")} />
-      <code className="text-xs font-mono shrink-0">{envName}</code>
-      <Input
-        type="password"
-        placeholder={t.skills.envPlaceholder}
-        value={value}
-        onChange={(e) => { setValue(e.target.value); setStatus('idle') }}
-        onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
-        className="h-7 text-xs flex-1"
-        disabled={status === 'saving'}
-        autoFocus
-      />
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={handleSave}
-        disabled={!value.trim() || status === 'saving'}
-        className="h-7 px-2 text-xs"
-      >
-        {status === 'saving' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-        {status === 'saving' ? t.skills.savingEnv : t.skills.configureEnv}
-      </Button>
-      {configured && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => { setEditing(false); setValue(''); setStatus('idle') }}
-          className="h-7 px-2 text-xs"
-        >
-          {t.common.cancel}
-        </Button>
-      )}
-    </div>
-  )
-}
-
-/** Install command row */
-function InstallButton({ method, command, skillName, onInstalled }: { method: string; command: string; skillName: string; onInstalled: () => void }) {
-  const { t } = useI18n()
-  const [copied, setCopied] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'installing' | 'success' | 'error'>('idle')
-  const [errorMsg, setErrorMsg] = useState('')
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(command).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-
-  const handleInstall = async () => {
-    setStatus('installing')
-    setErrorMsg('')
-    try {
-      const result = await installSkill(skillName, method)
-      if (result.ok) {
-        setStatus('success')
-        onInstalled()
-      } else {
-        setStatus('error')
-        setErrorMsg(result.stderr || `Exit code: ${result.exitCode}`)
-      }
-    } catch {
-      setStatus('error')
-      setErrorMsg('Request failed')
-    }
-  }
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="text-xs shrink-0">{method}</Badge>
-        <code className="flex-1 text-xs font-mono bg-muted/50 px-2 py-1.5 rounded truncate">{command}</code>
-        <button
-          onClick={handleCopy}
-          className="shrink-0 p-1.5 rounded-md hover:bg-accent transition-colors"
-          title="Copy command"
-        >
-          {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
-        </button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={handleInstall}
-          disabled={status === 'installing' || status === 'success'}
-          className="h-7 px-2 text-xs"
-        >
-          {status === 'installing' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-          {status === 'success' && <Check className="h-3 w-3 text-green-400 mr-1" />}
-          {status === 'success' ? t.skills.installSuccess : status === 'installing' ? t.skills.installing : t.skills.install}
-        </Button>
-      </div>
-      {status === 'error' && errorMsg && (
-        <pre className="text-xs text-red-400 bg-red-500/10 rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap">{errorMsg}</pre>
-      )}
-    </div>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-border/50">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm max-w-[65%] text-right">{value}</span>
     </div>
   )
 }

@@ -1,4 +1,7 @@
 import { describe, test, expect } from 'bun:test'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve } from 'node:path'
 import { SkillsInstaller } from '../src/skills/installer.ts'
 import type { Skill } from '../src/skills/types.ts'
 
@@ -21,6 +24,8 @@ function createSkill(overrides: Partial<Skill> = {}): Skill {
       env: { passed: true, results: [] },
     },
     loadedAt: Date.now(),
+    enabled: true,
+    usable: true,
     ...overrides,
   }
 }
@@ -119,14 +124,41 @@ describe('SkillsInstaller.checkCompatibility', () => {
   })
 })
 
+describe('SkillsInstaller local metadata', () => {
+  test('writes fixed install metadata for imported skills', async () => {
+    const installer = new SkillsInstaller()
+    const root = mkdtempSync(resolve(tmpdir(), 'youclaw-installer-'))
+    const sourceDir = resolve(root, 'source-skill')
+    const targetDir = resolve(root, 'target')
+
+    try {
+      mkdirSync(sourceDir, { recursive: true })
+      mkdirSync(targetDir, { recursive: true })
+      writeFileSync(resolve(sourceDir, 'SKILL.md'), '---\nname: source-skill\ndescription: Source\n---\nbody\n')
+
+      await installer.installFromLocal(sourceDir, targetDir)
+
+      const metaPath = resolve(targetDir, 'source-skill', '.youclaw-skill.json')
+      expect(existsSync(metaPath)).toBe(true)
+      const meta = JSON.parse(readFileSync(metaPath, 'utf-8')) as { managed: boolean; origin: string }
+      expect(meta.managed).toBe(false)
+      expect(meta.origin).toBe('imported')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 // SkillsLoader.getAgentSkillsView tests
 import './setup-light.ts'
+import { initDatabase } from '../src/db/index.ts'
 import { SkillsLoader } from '../src/skills/loader.ts'
 
+initDatabase()
+
 describe('SkillsLoader.getAgentSkillsView', () => {
-  test('returns all available skills when no skills field is specified', () => {
+  test('returns all available skills but no enabled bindings when no skills field is specified', () => {
     const loader = new SkillsLoader()
-    // All skills returned by loadAllSkills are available
     const allSkills = loader.loadAllSkills()
 
     const view = loader.getAgentSkillsView({
@@ -136,13 +168,9 @@ describe('SkillsLoader.getAgentSkillsView', () => {
       workspaceDir: '/tmp',
     } as any)
 
-    // available and enabled should both contain all skills
     expect(view.available).toEqual(allSkills)
-    expect(view.enabled).toEqual(allSkills)
-    // eligible contains only those from enabled where eligible=true
-    for (const s of view.eligible) {
-      expect(s.eligible).toBe(true)
-    }
+    expect(view.enabled).toEqual([])
+    expect(view.eligible).toEqual([])
   })
 
   test('enabled only contains specified skills when skills field is present', () => {

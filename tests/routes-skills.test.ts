@@ -1,10 +1,24 @@
-import { describe, test, expect } from 'bun:test'
-import { createSkillsRoutes } from '../src/routes/skills.ts'
+import { afterEach, describe, test, expect } from 'bun:test'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve } from 'node:path'
+import { stringify as stringifyYaml } from 'yaml'
+import { createSkillsRoutes, serializeManagedSkillDetail } from '../src/routes/skills.ts'
 import { loadEnv } from '../src/config/index.ts'
 import { initLogger } from '../src/logger/index.ts'
+import type { SkillProjectDetail } from '../src/skills/project-service.ts'
 
 loadEnv()
 initLogger()
+
+const tempDirs: string[] = []
+
+afterEach(() => {
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop()
+    if (dir) rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 const baseSkill = {
   name: 'pdf',
@@ -302,4 +316,92 @@ describe('skills routes', () => {
     expect(body[0]?.enabled).toBe(true)
     expect(body[0]?.usable).toBe(true)
   })
+
+  test('removed template endpoints return 404', async () => {
+    const fixture = createRoutesFixture()
+    const app = createSkillsRoutes(fixture.loader as any, fixture.agentManager as any, {
+      skillsDir: fixture.skillsDir,
+    })
+
+    expect((await app.request('/templates')).status).toBe(404)
+    expect((await app.request('/templates/release-template')).status).toBe(404)
+    expect((await app.request('/skills/templates')).status).toBe(404)
+    expect((await app.request('/skills/templates/workflow')).status).toBe(404)
+    expect((await app.request('/skill-templates')).status).toBe(404)
+    expect((await app.request('/skill-templates/workflow')).status).toBe(404)
+  })
 })
+
+describe('managed skill serialization', () => {
+  test('serializes authoring detail under skill key', () => {
+    const detail: SkillProjectDetail = {
+      project: {
+        name: 'release-helper',
+        rootDir: '/tmp/release-helper',
+        entryFile: 'SKILL.md',
+        path: '/tmp/release-helper/SKILL.md',
+        source: 'user',
+        editable: true,
+        managed: true,
+        origin: 'user',
+        createdAt: '2026-03-19T00:00:00.000Z',
+        updatedAt: '2026-03-19T00:00:00.000Z',
+        hasPublished: true,
+        hasDraft: false,
+        description: 'Ship builds',
+        boundAgentIds: ['default'],
+      },
+      publishedDraft: null,
+      draft: null,
+      draftMeta: null,
+      bindingStates: [{ id: 'default', name: 'Default', state: 'bound' }],
+    }
+
+    const serialized = serializeManagedSkillDetail(detail)
+
+    expect(serialized.skill.name).toBe('release-helper')
+    expect(serialized.skill.catalogGroup).toBe('user')
+    expect(serialized.skill.userSkillKind).toBe('custom')
+    expect(serialized.skill.sortTimestamp).toBe('2026-03-19T00:00:00.000Z')
+    expect(serialized.bindingStates[0]?.state).toBe('bound')
+    expect('project' in serialized).toBe(false)
+  })
+})
+
+function createRoutesFixture() {
+  const root = mkdtempSync(resolve(tmpdir(), 'youclaw-routes-template-'))
+  tempDirs.push(root)
+  const skillsDir = resolve(root, 'skills')
+  const agentDir = resolve(root, 'agents', 'default')
+
+  mkdirSync(skillsDir, { recursive: true })
+  mkdirSync(agentDir, { recursive: true })
+
+  writeFileSync(resolve(agentDir, 'agent.yaml'), stringifyYaml({
+    id: 'default',
+    name: 'Default',
+    skills: [],
+  }))
+
+  const loader = {
+    loadAllSkills: () => [],
+    getCacheStats: () => ({}),
+    getConfig: () => ({}),
+    refresh: () => [],
+    loadSkillsForAgent: () => [],
+    getAgentSkillsView: () => ({ available: [], enabled: [], eligible: [] }),
+    setSkillEnabled: () => null,
+    deleteSkill: () => ({ ok: true }),
+  }
+
+  const agentManager = {
+    getAgents: () => [],
+    getAgent: (_id: string) => ({
+      config: { id: 'default', name: 'Default', workspaceDir: agentDir, skills: [] },
+      workspaceDir: agentDir,
+    }),
+    reloadAgents: async () => {},
+  }
+
+  return { root, skillsDir, agentDir, loader, agentManager }
+}

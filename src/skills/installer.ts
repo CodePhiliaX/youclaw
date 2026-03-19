@@ -1,9 +1,12 @@
-import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
 import { execSync } from 'node:child_process'
 import { getLogger } from '../logger/index.ts'
 import { getShellEnv } from '../utils/shell-env.ts'
-import type { Skill } from './types.ts'
+import type { Skill, SkillProjectMeta } from './types.ts'
+
+const PROJECT_META_FILENAME = '.youclaw-skill.json'
+const SCHEMA_VERSION = 1
 
 /**
  * SkillsInstaller: manages skill installation and uninstallation.
@@ -38,6 +41,7 @@ export class SkillsInstaller {
     // Copy files
     try {
       execSync(`cp -r "${sourcePath}/"* "${destPath}/"`, { encoding: 'utf-8', timeout: 30_000, env: getShellEnv() })
+      this.writeInstallMeta(destPath, 'imported')
     } catch (err) {
       // Clean up failed installation
       rmSync(destPath, { recursive: true, force: true })
@@ -75,6 +79,7 @@ export class SkillsInstaller {
       // Move to final location
       mkdirSync(destPath, { recursive: true })
       execSync(`mv "${tmpDir}/SKILL.md" "${destPath}/SKILL.md"`, { encoding: 'utf-8', env: getShellEnv() })
+      this.writeInstallMeta(destPath, 'manual')
 
       logger.info({ skillName, url, destPath }, 'Skill installed from remote URL')
     } finally {
@@ -146,5 +151,18 @@ export class SkillsInstaller {
     }
 
     return { ok: issues.length === 0, issues }
+  }
+
+  private writeInstallMeta(skillDir: string, origin: SkillProjectMeta['origin']): void {
+    const now = new Date().toISOString()
+    const meta: SkillProjectMeta = {
+      schemaVersion: SCHEMA_VERSION,
+      managed: false,
+      origin,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    writeFileSync(resolve(skillDir, PROJECT_META_FILENAME), JSON.stringify(meta, null, 2), 'utf-8')
   }
 }

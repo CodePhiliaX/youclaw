@@ -181,7 +181,15 @@ export interface SkillFrontmatter {
   dependencies?: string[]
   env?: string[]
   tools?: string[]
+  tags?: string[]
+  globs?: string[]
+  priority?: 'critical' | 'normal' | 'low'
   install?: Record<string, string>
+  requires?: string[]
+  conflicts?: string[]
+  setup?: string
+  teardown?: string
+  source?: string
 }
 
 export interface EligibilityDetail {
@@ -193,6 +201,10 @@ export interface EligibilityDetail {
 export interface Skill {
   name: string
   source: 'workspace' | 'builtin' | 'user'
+  catalogGroup: 'builtin' | 'user'
+  userSkillKind?: 'external' | 'custom'
+  externalSource?: 'marketplace' | 'imported' | 'manual'
+  sortTimestamp?: string
   frontmatter: SkillFrontmatter
   content: string
   path: string
@@ -208,6 +220,63 @@ export interface Skill {
     displayName?: string
     version?: string
   }
+}
+
+export interface SkillAuthoringDraft {
+  frontmatter: SkillFrontmatter
+  content: string
+  rawMarkdown: string
+}
+
+export interface SkillDraftMeta {
+  schemaVersion: number
+  updatedAt: string
+  basedOnPublishedUpdatedAt?: string
+  isValid: boolean
+  lastEditorMode: 'form' | 'source'
+}
+
+export interface SkillValidationMessage {
+  field?: string
+  message: string
+}
+
+export interface SkillValidationResult {
+  normalizedName: string
+  errors: SkillValidationMessage[]
+  warnings: SkillValidationMessage[]
+  generatedMarkdown: string
+  draft: SkillAuthoringDraft | null
+}
+
+export interface ManagedSkill {
+  name: string
+  rootDir: string
+  entryFile: string
+  path: string
+  source: 'workspace' | 'builtin' | 'user'
+  catalogGroup: 'builtin' | 'user'
+  userSkillKind?: 'external' | 'custom'
+  externalSource?: 'marketplace' | 'imported' | 'manual'
+  sortTimestamp?: string
+  editable: boolean
+  managed: boolean
+  origin: 'user' | 'imported' | 'marketplace' | 'manual' | 'duplicated' | 'builtin'
+  createdAt?: string
+  updatedAt?: string
+  hasPublished: boolean
+  hasDraft: boolean
+  draftUpdatedAt?: string
+  description?: string
+  boundAgentIds: string[]
+}
+
+export interface ManagedSkillDetail {
+  skill: ManagedSkill
+  publishedDraft: SkillAuthoringDraft | null
+  draft: SkillAuthoringDraft | null
+  draftMeta: SkillDraftMeta | null
+  bindingStates: Array<{ id: string; name: string; state: 'bound' | 'bound_via_wildcard' | 'unbound' }>
 }
 
 // Get all available skills
@@ -255,6 +324,100 @@ export async function toggleSkill(name: string, enabled: boolean) {
   return apiFetch<Skill>(`/api/skills/${encodeURIComponent(name)}/toggle`, {
     method: 'POST',
     body: JSON.stringify({ enabled }),
+  })
+}
+
+export async function getMySkills() {
+  return apiFetch<ManagedSkill[]>('/api/skills/mine')
+}
+
+export async function createSkill(data: { name: string; description: string; locale?: 'en' | 'zh' }) {
+  return apiFetch<ManagedSkillDetail>('/api/skills', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getEditableSkill(name: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/draft`)
+}
+
+export async function getSkillDraft(name: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/draft`)
+}
+
+export async function saveSkillDraft(name: string, data: {
+  mode: 'form' | 'source'
+  draft?: Partial<SkillAuthoringDraft>
+  rawMarkdown?: string
+}) {
+  return apiFetch<ManagedSkillDetail & { validation: SkillValidationResult }>(
+    `/api/skills/${encodeURIComponent(name)}/draft`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    },
+  )
+}
+
+export async function validateSkillDraft(name: string, data: {
+  mode: 'form' | 'source'
+  draft?: Partial<SkillAuthoringDraft>
+  rawMarkdown?: string
+}) {
+  return apiFetch<SkillValidationResult>(`/api/skills/${encodeURIComponent(name)}/validate`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function publishSkill(name: string, data?: { bindingAgentIds?: string[] }) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/publish`, {
+    method: 'POST',
+    body: JSON.stringify(data ?? {}),
+  })
+}
+
+export async function discardSkillDraft(name: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/draft`, {
+    method: 'DELETE',
+  })
+}
+
+export async function duplicateSkill(name: string, nextName?: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/duplicate`, {
+    method: 'POST',
+    body: JSON.stringify(nextName ? { name: nextName } : {}),
+  })
+}
+
+export async function deleteManagedSkill(name: string) {
+  return apiFetch<{ ok: true; affectedAgents: Array<{ id: string; name: string }> }>(
+    `/api/skills/${encodeURIComponent(name)}/manage`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function getSkillBindingStates(name: string) {
+  return apiFetch<Array<{ id: string; name: string; state: 'bound' | 'bound_via_wildcard' | 'unbound' }>>(
+    `/api/skills/${encodeURIComponent(name)}/agents`,
+  )
+}
+
+export async function bindSkillToAgent(name: string, agentId: string) {
+  return apiFetch<{ ok: true; state: 'bound' | 'bound_via_wildcard' }>(
+    `/api/skills/${encodeURIComponent(name)}/bind`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ agentId }),
+    },
+  )
+}
+
+export async function unbindSkillFromAgent(name: string, agentId: string) {
+  return apiFetch<{ ok: true }>(`/api/skills/${encodeURIComponent(name)}/unbind`, {
+    method: 'POST',
+    body: JSON.stringify({ agentId }),
   })
 }
 

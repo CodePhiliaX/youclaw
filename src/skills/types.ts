@@ -72,6 +72,72 @@ export interface SkillRegistryMeta {
   version?: string
 }
 
+export type SkillCatalogGroup = 'builtin' | 'user'
+export type UserSkillKind = 'external' | 'custom'
+export type ExternalSkillSource = 'marketplace' | 'imported' | 'manual'
+
+export interface SkillCatalogInfo {
+  catalogGroup: SkillCatalogGroup
+  userSkillKind?: UserSkillKind
+  externalSource?: ExternalSkillSource
+  sortTimestamp?: string
+}
+
+export type SkillProjectOrigin = 'user' | 'imported' | 'marketplace' | 'manual' | 'duplicated' | 'builtin'
+
+export interface SkillProjectMeta {
+  schemaVersion: number
+  managed: boolean
+  origin: SkillProjectOrigin
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SkillDraftMeta {
+  schemaVersion: number
+  updatedAt: string
+  basedOnPublishedUpdatedAt?: string
+  isValid: boolean
+  lastEditorMode: 'form' | 'source'
+}
+
+export interface SkillValidationMessage {
+  field?: string
+  message: string
+}
+
+export interface SkillValidationResult {
+  normalizedName: string
+  errors: SkillValidationMessage[]
+  warnings: SkillValidationMessage[]
+  generatedMarkdown: string
+  draft: SkillAuthoringDraft | null
+}
+
+export interface SkillAuthoringDraft {
+  frontmatter: SkillFrontmatter
+  content: string
+  rawMarkdown: string
+}
+
+export interface SkillProject {
+  name: string
+  rootDir: string
+  entryFile: string
+  path: string
+  source: Skill['source']
+  editable: boolean
+  managed: boolean
+  origin: SkillProjectOrigin
+  createdAt?: string
+  updatedAt?: string
+  hasPublished: boolean
+  hasDraft: boolean
+  draftUpdatedAt?: string
+  description?: string
+  boundAgentIds: string[]
+}
+
 /** Skills configuration */
 export interface SkillsConfig {
   maxSkillCount: number       // Maximum number of skills

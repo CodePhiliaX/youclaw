@@ -4,6 +4,28 @@ export { SkillsInstaller } from './installer.ts'
 export { RegistryManager } from './registry.ts'
 export { scanWorkspaceFiles, matchSkillGlobs } from './globs.ts'
 export { parseSkillInvocations } from './invoke.ts'
+export { SkillProjectService, normalizeSkillName, parseSkillMarkdown, stringifySkillMarkdown } from './project-service.ts'
+export { compareByNewestThenName, resolveManagedSkillCatalogInfo } from './catalog.ts'
 export type { ParsedMessage } from './invoke.ts'
-export type { Skill, SkillFrontmatter, SkillPriority, EligibilityDetail, DependencyCheckResult, EnvCheckResult, SkillsConfig, AgentSkillsView, SkillRegistryMeta } from './types.ts'
+export type {
+  Skill,
+  SkillFrontmatter,
+  SkillPriority,
+  EligibilityDetail,
+  DependencyCheckResult,
+  EnvCheckResult,
+  SkillsConfig,
+  AgentSkillsView,
+  SkillRegistryMeta,
+  SkillProjectMeta,
+  SkillDraftMeta,
+  SkillValidationResult,
+  SkillProject,
+  SkillAuthoringDraft,
+  SkillProjectOrigin,
+  SkillCatalogGroup,
+  UserSkillKind,
+  ExternalSkillSource,
+  SkillCatalogInfo,
+} from './types.ts'
 export { DEFAULT_SKILLS_CONFIG } from './types.ts'

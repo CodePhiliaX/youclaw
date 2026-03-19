@@ -12,7 +12,7 @@ import type { Skill } from '../src/skills/types.ts'
 
 // ---------- helpers ----------
 
-function createMockSkill(name: string, source: 'builtin' | 'project' | 'user' = 'project'): Skill {
+function createMockSkill(name: string, source: 'builtin' | 'workspace' | 'user' = 'workspace'): Skill {
   return {
     name,
     source,
@@ -27,6 +27,8 @@ function createMockSkill(name: string, source: 'builtin' | 'project' | 'user' = 
       env: { passed: true, results: [] },
     },
     loadedAt: Date.now(),
+    enabled: true,
+    usable: true,
   } as Skill
 }
 
@@ -160,7 +162,7 @@ describe('DELETE /api/skills/:name cleanup', () => {
       skills: [skillName],
     })
 
-    const skill = createMockSkill(skillName)
+    const skill = createMockSkill(skillName, 'user')
     // uninstall requires a real directory, so create a fake skill dir
     const skillDir = resolve(tmpBase, 'skills-dir', skillName)
     mkdirSync(skillDir, { recursive: true })
@@ -209,7 +211,7 @@ describe('DELETE /api/skills/:name cleanup', () => {
     }
     const dir = setupAgentDir('no-skills-agent', originalYaml)
 
-    const skill = createMockSkill(skillName)
+    const skill = createMockSkill(skillName, 'user')
     const skillDir = resolve(tmpBase, 'skills-dir2', skillName)
     mkdirSync(skillDir, { recursive: true })
     writeFileSync(resolve(skillDir, 'SKILL.md'), 'body', 'utf-8')
