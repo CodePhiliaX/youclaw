@@ -1,5 +1,6 @@
 import {
   Attachment,
+  AttachmentInfo,
   AttachmentPreview,
   AttachmentRemove,
   Attachments,
@@ -57,6 +58,7 @@ function AttachmentPreviews() {
             onRemove={() => attachments.remove(file.id)}
           >
             <AttachmentPreview />
+            <AttachmentInfo />
             <AttachmentRemove />
           </Attachment>
         ))}
