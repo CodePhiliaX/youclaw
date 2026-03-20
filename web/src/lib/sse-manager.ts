@@ -23,6 +23,8 @@ type SSEEvent = {
   content?: string
   senderName?: string
   timestamp?: string
+  // complete fields
+  sessionId?: string
   // new_chat fields
   name?: string
   channel?: string
@@ -61,8 +63,9 @@ class SSEManager {
         console.log('[SSE system]', data.type, data.chatId)
         if (data.type === 'new_chat') {
           for (const cb of this.onNewChatCallbacks) cb()
-        } else if (data.type === 'inbound_message' && data.chatId && !this.connections.has(data.chatId)) {
-          // Add the inbound user message to the active chat (external channels only)
+        } else if (data.type === 'inbound_message' && data.chatId && !data.chatId.startsWith('web:') && !this.connections.has(data.chatId)) {
+          // Add the inbound user message to the active chat (external channels only;
+          // web messages are already added by send() — skip to avoid duplicates)
           const store = useChatStore.getState()
           if (store.activeChatId === data.chatId) {
             store.initChat(data.chatId)
@@ -238,7 +241,7 @@ class SSEManager {
           ...t,
           status: 'done' as const,
         }))
-        store.completeMessage(chatId, event.fullText ?? '', finalToolUse)
+        store.completeMessage(chatId, event.fullText ?? '', finalToolUse, event.sessionId)
         break
       }
       case 'processing':

@@ -51,6 +51,7 @@ export type Message = {
   toolUse?: ToolUseItem[]
   attachments?: Attachment[]
   errorCode?: string
+  sessionId?: string
 }
 
 export interface ChatState {
@@ -133,7 +134,7 @@ interface ChatStore {
   setProcessing(chatId: string, isProcessing: boolean): void
   addToolUse(chatId: string, tool: ToolUseItem): void
   setDocumentStatus(chatId: string, documentId: string, filename: string, status: 'parsing' | 'parsed' | 'failed', error?: string): void
-  completeMessage(chatId: string, fullText: string, toolUse: ToolUseItem[]): void
+  completeMessage(chatId: string, fullText: string, toolUse: ToolUseItem[], sessionId?: string): void
   addUserMessage(chatId: string, message: Message): void
   setMessages(chatId: string, messages: Message[]): void
   handleError(chatId: string, error: string, errorCode?: string): void
@@ -287,16 +288,21 @@ export const useChatStore = create<ChatStore>((set) => ({
       }),
     })),
 
-  completeMessage: (chatId, fullText, toolUse) => {
+  completeMessage: (chatId, fullText, toolUse, sessionId) => {
     set((state) => ({
       chats: updateChat(state.chats, chatId, (chat) => {
+        // Idempotency: skip if a message with this sessionId already exists
+        if (sessionId && chat.messages.some(m => m.sessionId === sessionId)) {
+          return {}
+        }
         const timestamp = new Date().toISOString()
         const nextMessage: Message = {
-          id: Date.now().toString(),
+          id: sessionId ?? Date.now().toString(),
           role: 'assistant' as const,
           content: fullText,
           timestamp,
           toolUse: toolUse.length > 0 ? toolUse : undefined,
+          sessionId,
         }
         const hasLiveAssistantText = chat.streamingText.trim().length > 0
         const timelineItems = chat.timelineItems.map((item) =>
@@ -327,12 +333,23 @@ export const useChatStore = create<ChatStore>((set) => ({
   },
 
   addUserMessage: (chatId, message) => {
-    set((state) => ({
-      chats: updateChat(state.chats, chatId, (chat) => ({
-        messages: [...chat.messages, message],
-        timelineItems: [...chat.timelineItems, messageToTimelineItem(message)],
-      })),
-    }))
+    set((state) => {
+      const chat = state.chats[chatId]
+      if (!chat || chat.messages.some((existing) => existing.id === message.id)) {
+        return state
+      }
+
+      return {
+        chats: {
+          ...state.chats,
+          [chatId]: {
+            ...chat,
+            messages: [...chat.messages, message],
+            timelineItems: [...chat.timelineItems, messageToTimelineItem(message)],
+          },
+        },
+      }
+    })
     // Notify after state is committed
     queueMicrotask(notifyChatUpdate)
   },
