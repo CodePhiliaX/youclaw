@@ -1,6 +1,18 @@
 // Transport abstraction layer: auto-detect Tauri / Web environment
 
-export const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__
+type TauriInternals = {
+  invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+}
+
+type TauriWindow = Window & {
+  __TAURI_INTERNALS__?: TauriInternals
+}
+
+function getTauriInternals(): TauriInternals | undefined {
+  return (window as TauriWindow).__TAURI_INTERNALS__
+}
+
+export const isTauri = typeof window !== "undefined" && !!getTauriInternals()
 
 /**
  * Convert a local file path to a URL loadable by the webview.
@@ -19,7 +31,7 @@ export function localAssetUrl(filePath: string): string {
 
 export function getTauriInvoke(): (cmd: string, args?: Record<string, unknown>) => Promise<unknown> {
   if (!isTauri) throw new Error("Not in Tauri environment")
-  return (window as any).__TAURI_INTERNALS__.invoke
+  return getTauriInternals()!.invoke
 }
 
 // Cache backend baseUrl to avoid repeated store reads
@@ -80,7 +92,7 @@ export async function openExternal(url: string): Promise<void> {
     const { openUrl } = await import('@tauri-apps/plugin-opener')
     await openUrl(url)
   } else {
-    window.open(url, '_blank')
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 }
 

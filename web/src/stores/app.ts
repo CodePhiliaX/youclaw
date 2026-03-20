@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { getItem, removeItem, setItem } from '@/lib/storage'
 import { applyThemeToDOM, type Theme } from '@/hooks/useTheme'
 import { getAuthUser, getAuthStatus, getAuthLoginUrl, authLogout, getCreditBalance, getPayUrl, updateProfile as apiUpdateProfile, getCloudStatus, getSettings, updateSettings, checkGit, type AuthUser } from '@/api/client'
-import { isTauri } from '@/api/transport'
+import { isTauri, openExternal } from '@/api/transport'
 import type { Locale } from '@/i18n/context'
 
 export type CloseAction = '' | 'minimize' | 'quit'
@@ -195,13 +195,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Older clients keep calling /api/auth/login without platform=tauri and continue
         // using the legacy localhost callback flow, so we preserve backwards compatibility.
         const { loginUrl } = await getAuthLoginUrl('tauri')
-        const { openUrl } = await import('@tauri-apps/plugin-opener')
-        await openUrl(loginUrl)
+        await openExternal(loginUrl)
         startPolling()
       } else {
         // Web mode: polling
         const { loginUrl } = await getAuthLoginUrl()
-        window.open(loginUrl, '_blank')
+        await openExternal(loginUrl)
         startPolling()
       }
     } catch (err) {
@@ -241,11 +240,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       if (isTauri) {
         const { payUrl } = await getPayUrl('tauri')
-        const { openUrl } = await import('@tauri-apps/plugin-opener')
-        await openUrl(payUrl)
+        await openExternal(payUrl)
       } else {
         const { payUrl } = await getPayUrl()
-        window.open(payUrl, '_blank')
+        await openExternal(payUrl)
       }
 
       // Poll for balance change
