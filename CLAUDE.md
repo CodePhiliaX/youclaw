@@ -73,7 +73,7 @@ web/src/
 ## Environment Variables
 
 - `ANTHROPIC_API_KEY` (required)
-- `PORT` (default 3000)
+- `PORT` (default 62601)
 - `DATA_DIR` (default ./data)
 - `AGENT_MODEL` (default claude-sonnet-4-6)
 - `LOG_LEVEL` (debug/info/warn/error, default info)

@@ -6,7 +6,7 @@ The Bun backend lives in [`src/`](/Users/jerry/Program/ATA/YouClaw/src), organiz
 ## Build, Test, and Development Commands
 Use Bun for both workspaces.
 
-- `bun run dev`: start the backend with hot reload on port `PORT` (default `3000`).
+- `bun run dev`: start the backend with hot reload on port `PORT` (default `62601`).
 - `bun run start`: run the backend without hot reload.
 - `bun run dev:web`: start the frontend dev server from `web/`.
 - `bun test`: run the Bun test suite.
