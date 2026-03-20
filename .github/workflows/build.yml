@@ -16,9 +16,10 @@ concurrency:
 
 env:
   CARGO_HOME: ${{ github.workspace }}/.cargo
+  IS_BETA: ${{ contains(github.ref_name, 'beta') }}
 
 jobs:
-  # ── Create release first to avoid race condition ──
+  # ── Stable releases are created first to avoid race condition ──
   create-release:
     runs-on: ubuntu-latest
     name: Create Release
@@ -31,24 +32,16 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: env.IS_BETA != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          # Beta releases: mark as prerelease, do not promote to latest
-          if [[ "$TAG" == *beta* ]]; then
-            gh release create "$TAG" \
-              --title "You Claw v${{ steps.version.outputs.VERSION }}" \
-              --notes "" \
-              --prerelease \
-              || echo "Release already exists"
-          else
-            gh release create "$TAG" \
-              --title "You Claw v${{ steps.version.outputs.VERSION }}" \
-              --notes "" \
-              --latest \
-              || echo "Release already exists"
-          fi
+          gh release create "$TAG" \
+            --title "You Claw v${{ steps.version.outputs.VERSION }}" \
+            --notes "" \
+            --latest \
+            || echo "Release already exists"
 
   # ── macOS builds ──
   build-mac:
@@ -138,6 +131,7 @@ jobs:
           p12-password: ${{ secrets.MAC_CERTS_PASSWORD }}
 
       - name: Build Tauri app
+        if: env.IS_BETA != 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -156,6 +150,27 @@ jobs:
           prerelease: false
           args: ${{ matrix.tauri_args }}
           includeUpdaterJson: true
+
+      - name: Build beta Tauri app without GitHub Release
+        if: env.IS_BETA == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.MAC_CERTS }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: bun tauri build ${{ matrix.tauri_args }}
+
+      - name: Upload beta macOS artifacts
+        if: env.IS_BETA == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-${{ github.ref_name }}-mac-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/${{ matrix.sidecar_suffix }}/release/bundle/**
 
       - name: Notify Feishu
         if: always()
@@ -230,6 +245,7 @@ jobs:
           echo "Git installer size: $(stat --format=%s src-tauri/resources/git-installer/${GIT_INSTALLER_NAME}) bytes"
 
       - name: Build Tauri app
+        if: env.IS_BETA != 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -243,6 +259,23 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
 
+      - name: Build beta Tauri app without GitHub Release
+        if: env.IS_BETA == 'true'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        shell: bash
+        run: bun tauri build
+
+      - name: Upload beta Windows artifacts
+        if: env.IS_BETA == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-${{ github.ref_name }}-windows-x64
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/**
+
       - name: Notify Feishu
         if: always()
         uses: ./.github/actions/notify-feishu
@@ -255,6 +288,7 @@ jobs:
 
   # ── Windows code signing (self-hosted runner with USB token) ──
   sign-windows:
+    if: ${{ !contains(github.ref_name, 'beta') }}
     needs: build-windows
     runs-on: self-hosted
     name: Sign Windows exe
@@ -428,8 +462,8 @@ jobs:
 
   # ── Upload to OSS & generate updater manifest ──
   updater:
+    if: ${{ !contains(github.ref_name, 'beta') && always() && (needs.build-mac.result == 'success' && needs.sign-windows.result == 'success') }}
     needs: [build-mac, sign-windows]
-    if: always() && (needs.build-mac.result == 'success' && needs.sign-windows.result == 'success')
     runs-on: ubuntu-latest
     name: Upload to OSS & generate latest.json
 
