@@ -4,6 +4,7 @@ import { QQChannel } from './qq.ts'
 import { WeComChannel } from './wecom.ts'
 import { DingTalkChannel } from './dingtalk.ts'
 import { WechatOAChannel } from './wechat-oa.ts'
+import { WechatPersonalChannel } from './wechat-personal.ts'
 import type { Channel, OnInboundMessage } from './types.ts'
 import type { ChannelRecord } from '../db/index.ts'
 import type { EventBus } from '../events/bus.ts'
@@ -47,6 +48,11 @@ export function createChannelFromRecord(record: ChannelRecord, onMessage: OnInbo
     }
     case 'wechat-oa': {
       const channel = new WechatOAChannel({ onMessage })
+      channel.name = record.id
+      return channel
+    }
+    case 'wechat-personal': {
+      const channel = new WechatPersonalChannel(config, { onMessage })
       channel.name = record.id
       return channel
     }

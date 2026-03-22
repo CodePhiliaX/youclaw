@@ -1,6 +1,11 @@
 import { getDatabase } from '../db/index.ts'
 import { getEnv } from '../config/index.ts'
-import { SettingsSchema, type Settings, type CustomModel } from './schema.ts'
+import {
+  RegistrySourceSettingSchema,
+  SettingsSchema,
+  type Settings,
+  type CustomModel,
+} from './schema.ts'
 
 // Key in kv_state table
 const SETTINGS_KEY = 'settings'
@@ -27,11 +32,23 @@ export function getSettings(): Settings {
 export function updateSettings(partial: Partial<Settings>): Settings {
   const db = getDatabase()
   const current = getSettings()
+  const hasDefaultRegistrySource = Object.prototype.hasOwnProperty.call(partial, 'defaultRegistrySource')
 
   // Deep merge
   const merged: Settings = {
     activeModel: partial.activeModel ?? current.activeModel,
     customModels: partial.customModels ?? current.customModels,
+    defaultRegistrySource: hasDefaultRegistrySource ? partial.defaultRegistrySource : current.defaultRegistrySource,
+    registrySources: {
+      clawhub: {
+        ...current.registrySources.clawhub,
+        ...partial.registrySources?.clawhub,
+      },
+      tencent: {
+        ...current.registrySources.tencent,
+        ...partial.registrySources?.tencent,
+      },
+    },
   }
 
   // Validate and write
@@ -41,6 +58,10 @@ export function updateSettings(partial: Partial<Settings>): Settings {
     [SETTINGS_KEY, JSON.stringify(validated)]
   )
   return validated
+}
+
+export function isRegistrySourceSetting(value: unknown): value is Settings['defaultRegistrySource'] {
+  return RegistrySourceSettingSchema.safeParse(value).success
 }
 
 /**

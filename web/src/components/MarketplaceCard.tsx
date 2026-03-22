@@ -1,86 +1,118 @@
-import { useState, type ReactNode } from 'react'
-import type { MarketplaceSkill, MarketplaceSkillDetail } from '../api/client'
+import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import type { RegistrySelectableSource } from '../api/client'
 import { getMarketplaceSkill, installRecommendedSkill, uninstallRecommendedSkill, updateMarketplaceSkill } from '../api/client'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { MarketplaceInstallDialog } from '../components/MarketplaceInstallDialog'
 import { useI18n } from '../i18n'
+import {
+  toMarketplaceInstallDialogFallbackViewModel,
+  toMarketplaceInstallDialogViewModel,
+  type MarketplaceCardViewModel,
+  type MarketplaceInstallDialogViewModel,
+} from '../lib/marketplace-view-model'
+import { useAppStore } from '../stores/app'
 import { Puzzle, Download, Loader2, Trash2, RefreshCw } from 'lucide-react'
 
-function formatMarketplaceDate(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString()
+function normalizeMarketplaceActionError(message: string, fallback: string, skillNotFoundLabel: string) {
+  if (!message) {
+    return fallback
+  }
+
+  const skillNotFoundMatch = message.match(/^Skill "(.+)" was not found$/)
+  if (skillNotFoundMatch) {
+    return skillNotFoundLabel.replace('{name}', skillNotFoundMatch[1] ?? '')
+  }
+
+  return message
 }
 
 export function MarketplaceCard({
-  skill,
+  viewModel,
   onChanged,
   extraActions,
   hideInstalledBadge = false,
+  hideCategoryBadge = false,
   statusBadges,
+  onOpenInstallDialog,
+  openInstallDialogDisabled = false,
+  registrySource,
 }: {
-  skill: MarketplaceSkill
+  viewModel: MarketplaceCardViewModel
   onChanged: () => void
   extraActions?: ReactNode
   hideInstalledBadge?: boolean
+  hideCategoryBadge?: boolean
   statusBadges?: ReactNode
+  onOpenInstallDialog?: () => void | Promise<void>
+  openInstallDialogDisabled?: boolean
+  registrySource?: RegistrySelectableSource
 }) {
   const { t } = useI18n()
-  const [status, setStatus] = useState<'idle' | 'installing' | 'updating' | 'uninstalling' | 'error'>('idle')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [confirmDetail, setConfirmDetail] = useState<MarketplaceSkillDetail | null>(null)
+  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const [status, setStatus] = useState<'idle' | 'installing' | 'updating' | 'uninstalling'>('idle')
+  const [confirmDetailViewModel, setConfirmDetailViewModel] = useState<MarketplaceInstallDialogViewModel | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const actionSource = useMemo<RegistrySelectableSource>(
+    () => registrySource ?? (viewModel.source === 'tencent' ? 'tencent' : 'clawhub'),
+    [registrySource, viewModel.source],
+  )
+  const buildMarketplaceMessage = (template: string) => template.replace('{name}', viewModel.displayName)
+  const formatActionError = (message: string | undefined, fallback: string) => (
+    normalizeMarketplaceActionError(message ?? '', fallback, t.skills.marketplaceSkillNotFound)
+  )
 
   const handleInstall = async () => {
     setStatus('installing')
-    setErrorMsg('')
     try {
-      const result = await installRecommendedSkill(skill.slug)
+      const result = await installRecommendedSkill(viewModel.slug, actionSource)
       if (result.ok) {
         setStatus('idle')
+        showGlobalBubble({
+          message: buildMarketplaceMessage(t.skills.marketplaceInstallSuccess),
+        })
         onChanged()
       } else {
-        setStatus('error')
-        setErrorMsg(result.error || t.skills.installFailed)
+        const message = formatActionError(result.error, t.skills.installFailed)
+        setStatus('idle')
+        showGlobalBubble({ type: 'error', message })
       }
     } catch (error) {
-      setStatus('error')
-      setErrorMsg(error instanceof Error ? error.message : t.skills.installFailed)
+      const message = formatActionError(error instanceof Error ? error.message : undefined, t.skills.installFailed)
+      setStatus('idle')
+      showGlobalBubble({ type: 'error', message })
     }
   }
 
   const handleUpdate = async () => {
     setStatus('updating')
-    setErrorMsg('')
     try {
-      const result = await updateMarketplaceSkill(skill.slug)
+      const result = await updateMarketplaceSkill(viewModel.slug, actionSource)
       if (result.ok) {
         setStatus('idle')
+        showGlobalBubble({
+          message: buildMarketplaceMessage(t.skills.marketplaceUpdateSuccess),
+        })
         onChanged()
       } else {
-        setStatus('error')
-        setErrorMsg(result.error || t.skills.updateFailed)
+        const message = formatActionError(result.error, t.skills.updateFailed)
+        setStatus('idle')
+        showGlobalBubble({ type: 'error', message })
       }
     } catch (error) {
-      setStatus('error')
-      setErrorMsg(error instanceof Error ? error.message : t.skills.updateFailed)
+      const message = formatActionError(error instanceof Error ? error.message : undefined, t.skills.updateFailed)
+      setStatus('idle')
+      showGlobalBubble({ type: 'error', message })
     }
   }
 
   const handleConfirmInstall = async () => {
     setLoadingDetail(true)
-    setErrorMsg('')
     try {
-      const detail = await getMarketplaceSkill(skill.slug)
-      setConfirmDetail(detail)
+      const detail = await getMarketplaceSkill(viewModel.slug, actionSource)
+      setConfirmDetailViewModel(toMarketplaceInstallDialogViewModel(detail, t))
     } catch {
-      // Fallback: show dialog with basic info from the card
-      setConfirmDetail({
-        ...skill,
-        ownerHandle: null,
-        ownerDisplayName: null,
-        ownerImage: null,
-        moderation: null,
-      })
+      setConfirmDetailViewModel(toMarketplaceInstallDialogFallbackViewModel(viewModel, t))
     } finally {
       setLoadingDetail(false)
     }
@@ -88,26 +120,76 @@ export function MarketplaceCard({
 
   const handleUninstall = async () => {
     setStatus('uninstalling')
-    setErrorMsg('')
     try {
-      const result = await uninstallRecommendedSkill(skill.slug)
+      const result = await uninstallRecommendedSkill(viewModel.slug, actionSource)
       if (result.ok) {
         setStatus('idle')
+        showGlobalBubble({
+          message: buildMarketplaceMessage(t.skills.marketplaceUninstallSuccess),
+        })
         onChanged()
       } else {
-        setStatus('error')
-        setErrorMsg(result.error || t.skills.installFailed)
+        const message = formatActionError(result.error, t.skills.uninstallFailed)
+        setStatus('idle')
+        showGlobalBubble({ type: 'error', message })
       }
     } catch (error) {
-      setStatus('error')
-      setErrorMsg(error instanceof Error ? error.message : t.skills.installFailed)
+      const message = formatActionError(error instanceof Error ? error.message : undefined, t.skills.uninstallFailed)
+      setStatus('idle')
+      showGlobalBubble({ type: 'error', message })
+    }
+  }
+
+  const canOpenInstallDialog = !viewModel.installed
+    && !openInstallDialogDisabled
+    && status !== 'installing'
+    && !loadingDetail
+    && (Boolean(onOpenInstallDialog) || !extraActions)
+
+  const triggerInstallDialog = () => {
+    if (!canOpenInstallDialog) return
+    if (onOpenInstallDialog) {
+      void onOpenInstallDialog()
+      return
+    }
+    void handleConfirmInstall()
+  }
+
+  const isNestedInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLDivElement) => {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    const interactiveTarget = target.closest('button, a, input, select, textarea, summary, [role="button"], [role="link"]')
+    return interactiveTarget !== null && interactiveTarget !== currentTarget
+  }
+
+  const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (isNestedInteractiveTarget(event.target, event.currentTarget)) {
+      return
+    }
+    triggerInstallDialog()
+  }
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      triggerInstallDialog()
     }
   }
 
   return (
     <div
-      data-testid={`marketplace-card-${skill.slug}`}
-      className="rounded-xl border border-border p-4 transition-colors hover:bg-accent/20"
+      data-testid={`marketplace-card-${viewModel.slug}`}
+      className={`rounded-xl border border-border p-4 transition-colors hover:bg-accent/20 ${
+        canOpenInstallDialog ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]' : ''
+      }`}
+      role={canOpenInstallDialog ? 'button' : undefined}
+      tabIndex={canOpenInstallDialog ? 0 : undefined}
+      onClick={canOpenInstallDialog ? handleCardClick : undefined}
+      onKeyDown={canOpenInstallDialog ? handleCardKeyDown : undefined}
     >
       <div className="flex gap-4">
         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -115,16 +197,25 @@ export function MarketplaceCard({
         </div>
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="font-medium text-sm">{skill.displayName}</div>
-            {!hideInstalledBadge && skill.installed && (
-              <Badge data-testid={`marketplace-installed-badge-${skill.slug}`} variant="secondary">
+            <div className="font-medium text-sm">{viewModel.displayName}</div>
+            {!hideCategoryBadge && (
+              <Badge
+                data-testid={`marketplace-category-badge-${viewModel.slug}`}
+                variant="outline"
+                className="text-[10px] uppercase tracking-wide"
+              >
+                {viewModel.categoryLabel}
+              </Badge>
+            )}
+            {!hideInstalledBadge && viewModel.installed && (
+              <Badge data-testid={`marketplace-installed-badge-${viewModel.slug}`} variant="secondary">
                 {t.skills.installed}
               </Badge>
             )}
             {statusBadges}
-            {skill.hasUpdate && (
+            {viewModel.hasUpdate && (
               <Badge
-                data-testid={`marketplace-update-badge-${skill.slug}`}
+                data-testid={`marketplace-update-badge-${viewModel.slug}`}
                 variant="outline"
                 className="text-amber-500 border-amber-500/40"
               >
@@ -132,48 +223,21 @@ export function MarketplaceCard({
               </Badge>
             )}
           </div>
-          <div className="text-xs text-muted-foreground">{skill.summary}</div>
+          <div className="text-xs text-muted-foreground">{viewModel.summary}</div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {skill.latestVersion && (
-              <span data-testid={`marketplace-latest-version-${skill.slug}`}>
-                {t.skills.marketplaceVersionLabel}: {skill.latestVersion}
+            {viewModel.metrics.map((metric) => (
+              <span key={metric.key} data-testid={metric.testId}>
+                {metric.text}
               </span>
-            )}
-            {skill.installedVersion && (
-              <span data-testid={`marketplace-installed-version-${skill.slug}`}>
-                {t.skills.marketplaceInstalledVersionLabel}: {skill.installedVersion}
-              </span>
-            )}
-            {typeof skill.downloads === 'number' && (
-              <span>{t.skills.marketplaceDownloadsLabel}: {skill.downloads}</span>
-            )}
-            {typeof skill.stars === 'number' && (
-              <span>{t.skills.marketplaceStarsLabel}: {skill.stars}</span>
-            )}
-            {typeof skill.installsCurrent === 'number' && (
-              <span>{t.skills.marketplaceInstallsLabel}: {skill.installsCurrent}</span>
-            )}
-            {skill.updatedAt && (
-              <span>{t.skills.marketplaceUpdatedLabel}: {formatMarketplaceDate(skill.updatedAt)}</span>
-            )}
+            ))}
           </div>
 
-          {(skill.tags.length > 0 || skill.metadata?.os.length || skill.metadata?.systems.length) && (
+          {viewModel.metadataBadges.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {skill.tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-              {skill.metadata?.os.map((os) => (
-                <Badge key={`os-${os}`} variant="outline" className="text-xs">
-                  {os}
-                </Badge>
-              ))}
-              {skill.metadata?.systems.map((system) => (
-                <Badge key={`sys-${system}`} variant="outline" className="text-xs">
-                  {system}
+              {viewModel.metadataBadges.map((badge) => (
+                <Badge key={badge} variant="outline" className="text-xs">
+                  {badge}
                 </Badge>
               ))}
             </div>
@@ -182,9 +246,9 @@ export function MarketplaceCard({
         <div className="shrink-0 flex items-start gap-2">
           {extraActions ?? (
             <>
-              {skill.installed && skill.hasUpdate && (
+              {viewModel.installed && viewModel.hasUpdate && (
                 <Button
-                  data-testid={`marketplace-update-${skill.slug}`}
+                  data-testid={`marketplace-update-${viewModel.slug}`}
                   size="sm"
                   variant="secondary"
                   className="text-xs"
@@ -198,9 +262,9 @@ export function MarketplaceCard({
                   )}
                 </Button>
               )}
-              {skill.installed ? (
+              {viewModel.installed ? (
                 <Button
-                  data-testid={`marketplace-uninstall-${skill.slug}`}
+                  data-testid={`marketplace-uninstall-${viewModel.slug}`}
                   size="sm"
                   variant="ghost"
                   className="text-xs text-muted-foreground hover:text-red-400"
@@ -215,7 +279,7 @@ export function MarketplaceCard({
                 </Button>
               ) : (
                 <Button
-                  data-testid={`marketplace-install-${skill.slug}`}
+                  data-testid={`marketplace-install-${viewModel.slug}`}
                   size="sm"
                   variant="default"
                   className="text-xs"
@@ -233,18 +297,15 @@ export function MarketplaceCard({
           )}
         </div>
       </div>
-      {status === 'error' && errorMsg && (
-        <div className="text-xs text-red-400 mt-3">{errorMsg}</div>
-      )}
 
       <MarketplaceInstallDialog
-        open={!!confirmDetail}
-        detail={confirmDetail}
+        open={!!confirmDetailViewModel}
+        viewModel={confirmDetailViewModel}
         onOpenChange={(open) => {
-          if (!open) setConfirmDetail(null)
+          if (!open) setConfirmDetailViewModel(null)
         }}
         onConfirm={() => {
-          setConfirmDetail(null)
+          setConfirmDetailViewModel(null)
           handleInstall()
         }}
       />

@@ -529,7 +529,7 @@ export function ModelsPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t.settings.confirmDeleteModel}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t.settings.deleteModelDesc ?? ''}
+              {t.settings.confirmDeleteModel}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -541,7 +541,7 @@ export function ModelsPanel() {
                 setDeleteModelId(null)
               }}
             >
-              {t.common.delete ?? t.common.confirm}
+              {t.common.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
