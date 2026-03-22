@@ -62,6 +62,8 @@ function createRegistryManager(
     userSkillsDir: testUserSkillsDir,
     apiBaseUrl,
     downloadUrl,
+    clawhubEnabled: true,
+    tencentEnabled: true,
     fetchImpl,
     sleep: async () => {},
   })
@@ -83,23 +85,36 @@ describe('RegistryManager', () => {
       const manager = createRegistryManager(loader, async () => new Response('nope', { status: 500 }))
       const list = manager.getRecommended()
 
-      expect(list.length).toBe(10)
+      expect(list.length).toBeGreaterThanOrEqual(30)
       expect(list[0]).toMatchObject({
         slug: 'self-improving-agent',
-        displayName: 'self-improving-agent',
+        displayName: 'Self Improving Agent',
         category: 'agent',
         source: 'fallback',
       })
+      expect(list[0]?.tags.length).toBeGreaterThan(0)
     })
 
     test('bundled recommendations use unique slugs and supported categories', () => {
-      const supportedCategories = new Set(['agent', 'search', 'browser', 'coding'])
+      const supportedCategories = new Set([
+        'agent',
+        'memory',
+        'documents',
+        'media',
+        'productivity',
+        'data',
+        'coding',
+        'integrations',
+        'security',
+      ])
       const slugs = new Set<string>()
 
       for (const entry of recommendedSkillsData) {
         expect(entry.slug.length).toBeGreaterThan(0)
         expect(entry.displayName.length).toBeGreaterThan(0)
         expect(entry.summary.length).toBeGreaterThan(0)
+        expect(Array.isArray(entry.tags)).toBe(true)
+        expect(entry.tags.length).toBeGreaterThan(0)
         expect(supportedCategories.has(entry.category)).toBe(true)
         expect(slugs.has(entry.slug)).toBe(false)
         slugs.add(entry.slug)
@@ -107,20 +122,31 @@ describe('RegistryManager', () => {
     })
 
     test('merges installed registry metadata into fallback items', () => {
-      const skillDir = getUserSkillDir('coding')
+      const skillDir = getUserSkillDir('find-skills')
       mkdirSync(skillDir, { recursive: true })
-      writeFileSync(resolve(skillDir, 'SKILL.md'), '---\nname: coding-helper\ndescription: test\n---\n')
-      writeFileSync(resolve(skillDir, '.registry.json'), JSON.stringify(createClawhubMeta('coding', '1.0.0')))
+      writeFileSync(resolve(skillDir, 'SKILL.md'), '---\nname: finder-local\ndescription: test\n---\n')
+      writeFileSync(resolve(skillDir, '.registry.json'), JSON.stringify(createClawhubMeta('find-skills', '1.0.0')))
 
       const { loader } = createMockLoader()
       const manager = createRegistryManager(loader, async () => new Response('nope', { status: 500 }))
       const list = manager.getRecommended()
-      const coding = list.find((skill) => skill.slug === 'coding')!
+      const finder = list.find((skill) => skill.slug === 'find-skills')!
 
-      expect(coding.installed).toBe(true)
-      expect(coding.installedSkillName).toBe('coding-helper')
-      expect(coding.installSource).toBe('clawhub')
-      expect(coding.installedVersion).toBe('1.0.0')
+      expect(finder.installed).toBe(true)
+      expect(finder.installedSkillName).toBe('finder-local')
+      expect(finder.installSource).toBe('clawhub')
+      expect(finder.installedVersion).toBe('1.0.0')
+      expect(finder.tags.length).toBeGreaterThan(0)
+    })
+
+    test('empty-query fallback marketplace search matches recommendation tags', async () => {
+      const { loader } = createMockLoader()
+      const manager = createRegistryManager(loader, async () => new Response('boom', { status: 500 }))
+
+      const result = await manager.listMarketplace({ query: '' })
+
+      expect(result.source).toBe('fallback')
+      expect(result.items.some((skill) => skill.slug === 'notion')).toBe(true)
     })
   })
 
@@ -135,7 +161,20 @@ describe('RegistryManager', () => {
 
       expect(result.source).toBe('fallback')
       expect(result.query).toBe('')
-      expect(result.nextCursor).toBeNull()
+      expect(result.nextCursor).toBe('fallback:24')
+      expect(result.items.length).toBeGreaterThan(0)
+    })
+
+    test('returns bundled recommendations for empty queries regardless of selected source', async () => {
+      const { loader } = createMockLoader()
+      const manager = createRegistryManager(loader, async () => {
+        throw new Error('should not fetch remote marketplace for empty queries')
+      })
+
+      const result = await manager.listMarketplace({ source: 'tencent', query: '   ' })
+
+      expect(result.source).toBe('fallback')
+      expect(result.query).toBe('')
       expect(result.items.length).toBeGreaterThan(0)
     })
 
@@ -179,15 +218,46 @@ describe('RegistryManager', () => {
       })
     })
 
-    test('falls back to the bundled recommendations when remote loading fails', async () => {
+    test('throws when remote loading fails for non-empty queries', async () => {
       const { loader } = createMockLoader()
       const manager = createRegistryManager(loader, async () => new Response('boom', { status: 500 }))
 
-      const result = await manager.listMarketplace({ query: 'coding', limit: 2 })
+      await expect(manager.listMarketplace({ query: 'coding', limit: 2 })).rejects.toThrow('500')
+    })
 
-      expect(result.source).toBe('fallback')
-      expect(result.items.length).toBeGreaterThan(0)
-      expect(result.items.every((item) => item.displayName || item.summary)).toBe(true)
+    test('loads Tencent search results when the Tencent source is selected', async () => {
+      const { loader } = createMockLoader()
+      const manager = new RegistryManager(loader, {
+        userSkillsDir: testUserSkillsDir,
+        tencentEnabled: true,
+        tencentSearchUrl: 'https://tencent.test/search',
+        fetchImpl: async (url) => {
+          if (String(url) === 'https://tencent.test/search?q=browser&limit=50') {
+            return Response.json({
+              results: [
+                {
+                  slug: 'browser',
+                  displayName: 'Browser',
+                  summary: 'Browse the web',
+                  version: '1.0.0',
+                },
+              ],
+            })
+          }
+          return new Response('not found', { status: 404 })
+        },
+        sleep: async () => {},
+      })
+
+      const result = await manager.listMarketplace({ source: 'tencent', query: 'browser' })
+
+      expect(result.source).toBe('tencent')
+      expect(result.items[0]).toMatchObject({
+        slug: 'browser',
+        displayName: 'Browser',
+        latestVersion: '1.0.0',
+        source: 'tencent',
+      })
     })
   })
 
@@ -253,10 +323,131 @@ describe('RegistryManager', () => {
         slug: 'coding',
         displayName: 'Coding',
         latestVersion: '2.0.0',
+        detailUrl: 'https://clawhub.ai/jerry/coding',
         ownerHandle: 'jerry',
         ownerDisplayName: 'Jerry',
       })
       expect(detail.metadata).toEqual({ os: ['linux'], systems: ['x86_64-linux'] })
+      expect(detail.homepageUrl).toBeNull()
+    })
+
+    test('does not expose third-party homepage links for Tencent skills', async () => {
+      const { loader } = createMockLoader()
+      const manager = new RegistryManager(loader, {
+        userSkillsDir: testUserSkillsDir,
+        tencentEnabled: true,
+        tencentIndexUrl: 'https://tencent.test/index',
+        fetchImpl: async (url) => {
+          if (String(url) === 'https://tencent.test/index') {
+            return Response.json({
+              skills: [
+                {
+                  slug: 'find-skills',
+                  name: 'Find Skills',
+                  description: 'Find useful skills',
+                  version: '1.0.0',
+                  homepage: 'https://clawhub.ai/find-skills',
+                  categories: ['其他'],
+                },
+              ],
+            })
+          }
+          return new Response('not found', { status: 404 })
+        },
+        sleep: async () => {},
+      })
+
+      const detail = await manager.getMarketplaceSkill('find-skills', 'tencent')
+
+      expect(detail.detailUrl).toBeNull()
+      expect(detail.homepageUrl).toBeNull()
+      expect(detail.category).toBe('other')
+    })
+
+    test('does not expose Tencent-hosted homepage links for Tencent skills', async () => {
+      const { loader } = createMockLoader()
+      const manager = new RegistryManager(loader, {
+        userSkillsDir: testUserSkillsDir,
+        tencentEnabled: true,
+        tencentIndexUrl: 'https://tencent.test/index',
+        fetchImpl: async (url) => {
+          if (String(url) === 'https://tencent.test/index') {
+            return Response.json({
+              skills: [
+                {
+                  slug: 'browser',
+                  name: 'Browser',
+                  description: 'Browse the web',
+                  version: '1.0.0',
+                  homepage: 'https://lightmake.site/skills/browser',
+                  categories: ['browser'],
+                },
+              ],
+            })
+          }
+          return new Response('not found', { status: 404 })
+        },
+        sleep: async () => {},
+      })
+
+      const detail = await manager.getMarketplaceSkill('browser', 'tencent')
+
+      expect(detail.detailUrl).toBeNull()
+      expect(detail.homepageUrl).toBeNull()
+      expect(detail.category).toBe('integrations')
+    })
+
+    test('falls back to Tencent search detail when the slug is missing from the index', async () => {
+      const { loader } = createMockLoader()
+      const manager = new RegistryManager(loader, {
+        userSkillsDir: testUserSkillsDir,
+        tencentEnabled: true,
+        tencentIndexUrl: 'https://tencent.test/index',
+        tencentSearchUrl: 'https://tencent.test/search',
+        fetchImpl: async (url) => {
+          if (String(url) === 'https://tencent.test/index') {
+            return Response.json({
+              skills: [
+                {
+                  slug: 'find-skills',
+                  name: 'Find Skills',
+                  description: 'Indexed skill',
+                  version: '0.1.0',
+                  categories: ['其他'],
+                },
+              ],
+            })
+          }
+          if (String(url) === 'https://tencent.test/search?q=find-skills-2&limit=50') {
+            return Response.json({
+              results: [
+                {
+                  slug: 'find-skills-2',
+                  displayName: 'Find Skills 2',
+                  summary: 'Search-only skill',
+                  version: '0.1.0',
+                  updatedAt: 42,
+                },
+              ],
+            })
+          }
+          return new Response('not found', { status: 404 })
+        },
+        sleep: async () => {},
+      })
+
+      const detail = await manager.getMarketplaceSkill('find-skills-2', 'tencent')
+
+      expect(detail).toMatchObject({
+        slug: 'find-skills-2',
+        displayName: 'Find Skills 2',
+        summary: 'Search-only skill',
+        latestVersion: '0.1.0',
+        updatedAt: 42,
+        source: 'tencent',
+      })
+      expect(detail.detailUrl).toBeNull()
+      expect(detail.homepageUrl).toBeNull()
     })
   })
 
@@ -379,6 +570,57 @@ describe('RegistryManager', () => {
 
       await expect(manager.installSkill('coding')).rejects.toThrow('SKILL.md')
       expect(existsSync(getUserSkillDir('coding'))).toBe(false)
+    })
+
+    test('installs Tencent skills that are searchable and downloadable even when they are missing from the index', async () => {
+      const { loader, getRefreshCount } = createMockLoader()
+      const zip = createSkillZip({
+        'find-skills-2/SKILL.md': '---\nname: find-skills-2\ndescription: Search-only Tencent skill\n---\n',
+      })
+      const manager = new RegistryManager(loader, {
+        userSkillsDir: testUserSkillsDir,
+        tencentEnabled: true,
+        tencentIndexUrl: 'https://tencent.test/index',
+        tencentSearchUrl: 'https://tencent.test/search',
+        tencentDownloadUrl: 'https://tencent.test/download',
+        fetchImpl: async (url) => {
+          if (String(url) === 'https://tencent.test/index') {
+            return Response.json({
+              skills: [],
+            })
+          }
+          if (String(url) === 'https://tencent.test/search?q=find-skills-2&limit=50') {
+            return Response.json({
+              results: [
+                {
+                  slug: 'find-skills-2',
+                  displayName: 'Find Skills 2',
+                  summary: 'Search-only skill',
+                  version: '0.1.0',
+                },
+              ],
+            })
+          }
+          if (String(url) === 'https://tencent.test/download?slug=find-skills-2') {
+            return new Response(zip, {
+              status: 200,
+              headers: { 'content-length': String(zip.byteLength) },
+            })
+          }
+          return new Response('not found', { status: 404 })
+        },
+        sleep: async () => {},
+      })
+
+      await manager.installSkill('find-skills-2', 'tencent')
+
+      const skillDir = getUserSkillDir('find-skills-2')
+      expect(existsSync(resolve(skillDir, 'SKILL.md'))).toBe(true)
+      const meta = JSON.parse(readFileSync(resolve(skillDir, '.registry.json'), 'utf-8')) as SkillRegistryMeta
+      expect(meta.source).toBe('tencent')
+      expect(meta.slug).toBe('find-skills-2')
+      expect(meta.version).toBe('0.1.0')
+      expect(getRefreshCount()).toBe(1)
     })
 
     test('rejects path traversal entries and cleans up', async () => {

@@ -1,4 +1,3 @@
-import type { MarketplaceSkillDetail } from '../api/client'
 import { openExternal } from '../api/transport'
 import {
   AlertDialog,
@@ -11,22 +10,24 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog'
 import { useI18n } from '../i18n'
+import type { MarketplaceInstallDialogViewModel } from '../lib/marketplace-view-model'
 import { AlertTriangle, ExternalLink, ShieldAlert, User } from 'lucide-react'
 
 export function MarketplaceInstallDialog({
   open,
-  detail,
+  viewModel,
   confirmLabel,
   onOpenChange,
   onConfirm,
 }: {
   open: boolean
-  detail: MarketplaceSkillDetail | null
+  viewModel: MarketplaceInstallDialogViewModel | null
   confirmLabel?: string
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
 }) {
   const { t } = useI18n()
+  const externalUrl = viewModel?.externalUrl ?? null
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -35,56 +36,50 @@ export function MarketplaceInstallDialog({
           <AlertDialogTitle>{t.skills.confirmInstallTitle}</AlertDialogTitle>
           <AlertDialogDescription>{t.skills.confirmInstallDesc}</AlertDialogDescription>
         </AlertDialogHeader>
-        {detail && (
+        {viewModel && (
           <div className="space-y-3 text-sm">
-            {detail.ownerHandle && detail.slug ? (
+            {externalUrl ? (
               <button
                 type="button"
-                onClick={() => void openExternal(`https://clawhub.ai/${detail.ownerHandle}/${detail.slug}`)}
+                onClick={() => void openExternal(externalUrl)}
                 className="flex items-center gap-2 font-medium hover:text-primary"
               >
-                <span>{detail.displayName}</span>
+                <span>{viewModel.displayName}</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </button>
             ) : (
               <div className="flex items-center gap-2 font-medium">
-                {detail.displayName}
+                {viewModel.displayName}
               </div>
             )}
-            <div className="text-xs text-muted-foreground">{detail.summary}</div>
+            <div className="text-xs text-muted-foreground">{viewModel.summary}</div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              {typeof detail.downloads === 'number' && (
-                <span>{t.skills.marketplaceDownloadsLabel}: {detail.downloads}</span>
-              )}
-              {typeof detail.stars === 'number' && (
-                <span>{t.skills.marketplaceStarsLabel}: {detail.stars}</span>
-              )}
-              {typeof detail.installsCurrent === 'number' && (
-                <span>{t.skills.marketplaceInstallsLabel}: {detail.installsCurrent}</span>
-              )}
+              {viewModel.stats.map((stat) => (
+                <span key={stat.key}>{stat.label}: {stat.value}</span>
+              ))}
             </div>
 
-            {(detail.ownerHandle || detail.ownerDisplayName) && (
+            {viewModel.authorName && (
               <div className="flex items-center gap-2 text-xs">
-                {detail.ownerImage ? (
-                  <img src={detail.ownerImage} alt="" className="w-5 h-5 rounded-full" />
+                {viewModel.authorImage ? (
+                  <img src={viewModel.authorImage} alt="" className="w-5 h-5 rounded-full" />
                 ) : (
                   <User className="h-4 w-4 text-muted-foreground" />
                 )}
                 <span className="text-muted-foreground">{t.skills.skillAuthor}:</span>
-                <span>{detail.ownerDisplayName || detail.ownerHandle}</span>
+                <span>{viewModel.authorName}</span>
               </div>
             )}
 
-            {detail.moderation?.isSuspicious && (
+            {viewModel.isSuspicious && (
               <div className="flex items-center gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-2 text-xs text-yellow-500">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>{t.skills.skillSuspicious}</span>
               </div>
             )}
 
-            {detail.moderation?.isMalwareBlocked && (
+            {viewModel.isMalwareBlocked && (
               <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-500">
                 <ShieldAlert className="h-4 w-4 shrink-0" />
                 <span>{t.skills.skillBlocked}</span>
@@ -101,7 +96,7 @@ export function MarketplaceInstallDialog({
           <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            disabled={detail?.moderation?.isMalwareBlocked}
+            disabled={viewModel?.isMalwareBlocked}
           >
             {confirmLabel || t.skills.confirmInstall}
           </AlertDialogAction>

@@ -1,9 +1,36 @@
-import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, cpSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
+import { tmpdir } from 'node:os'
 import { execSync } from 'node:child_process'
 import { getLogger } from '../logger/index.ts'
 import { getShellEnv } from '../utils/shell-env.ts'
-import type { Skill } from './types.ts'
+import { SkillImportProvider } from './types.ts'
+import type {
+  GitHubSkillRegistryMeta,
+  MarketplaceSkillRegistryMeta,
+  RawUrlSkillRegistryMeta,
+  RegistryMarketplaceSource,
+  Skill,
+  SkillProjectMeta,
+  SkillRegistryMeta,
+} from './types.ts'
+
+const PROJECT_META_FILENAME = '.youclaw-skill.json'
+const SCHEMA_VERSION = 1
+
+export interface InstallMetadata {
+  source: RegistryMarketplaceSource | typeof SkillImportProvider.RawUrl | typeof SkillImportProvider.GitHub
+  slug?: string
+  installedAt?: string
+  displayName?: string
+  version?: string
+  provider?: typeof SkillImportProvider.RawUrl | typeof SkillImportProvider.GitHub
+  sourceUrl?: string
+  homepageUrl?: string
+  ref?: string
+  path?: string
+  projectOrigin?: SkillProjectMeta['origin']
+}
 
 /**
  * SkillsInstaller: manages skill installation and uninstallation.
@@ -18,7 +45,7 @@ export class SkillsInstaller {
   /**
    * Install a skill from a local path to the target directory.
    */
-  async installFromLocal(sourcePath: string, targetDir: string): Promise<void> {
+  async installFromLocal(sourcePath: string, targetDir: string, metadata?: InstallMetadata): Promise<void> {
     const logger = getLogger()
 
     if (!existsSync(sourcePath)) {
@@ -32,14 +59,20 @@ export class SkillsInstaller {
       throw new Error(`Skill "${skillName}" already exists in target directory`)
     }
 
-    // Create target directory
     mkdirSync(destPath, { recursive: true })
 
-    // Copy files
     try {
-      execSync(`cp -r "${sourcePath}/"* "${destPath}/"`, { encoding: 'utf-8', timeout: 30_000, env: getShellEnv() })
+      cpSync(sourcePath, destPath, { recursive: true, force: false })
+      this.writeInstallMeta(destPath, metadata?.projectOrigin ?? 'imported')
+      if (metadata) {
+        this.writeRegistryMeta(destPath, {
+          ...metadata,
+          slug: metadata.slug ?? skillName,
+          displayName: metadata.displayName ?? skillName,
+          installedAt: metadata.installedAt ?? new Date().toISOString(),
+        })
+      }
     } catch (err) {
-      // Clean up failed installation
       rmSync(destPath, { recursive: true, force: true })
       throw new Error(`Failed to copy skill files: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -50,20 +83,18 @@ export class SkillsInstaller {
   /**
    * Install a skill from a remote URL.
    */
-  async installFromUrl(url: string, targetDir: string): Promise<void> {
+  async installFromUrl(url: string, targetDir: string, metadata?: InstallMetadata): Promise<void> {
     const logger = getLogger()
-
-    // Create temp directory for download
-    const tmpDir = resolve(targetDir, `.tmp-${Date.now()}`)
-    mkdirSync(tmpDir, { recursive: true })
+    const tmpRoot = mkdtempSync(resolve(tmpdir(), 'youclaw-skill-url-'))
 
     try {
-      // Download using curl
-      execSync(`curl -sL "${url}" -o "${tmpDir}/SKILL.md"`, { encoding: 'utf-8', timeout: 30_000, env: getShellEnv() })
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to download skill: HTTP ${response.status} ${response.statusText}`)
+      }
+      const content = await response.text()
 
-      // Read downloaded file and parse frontmatter for name
       const { parseFrontmatter } = await import('./frontmatter.ts')
-      const content = readFileSync(resolve(tmpDir, 'SKILL.md'), 'utf-8')
       const { frontmatter } = parseFrontmatter(content)
       const skillName = frontmatter.name
 
@@ -72,14 +103,21 @@ export class SkillsInstaller {
         throw new Error(`Skill "${skillName}" already exists in target directory`)
       }
 
-      // Move to final location
       mkdirSync(destPath, { recursive: true })
-      execSync(`mv "${tmpDir}/SKILL.md" "${destPath}/SKILL.md"`, { encoding: 'utf-8', env: getShellEnv() })
+      writeFileSync(resolve(destPath, 'SKILL.md'), content, 'utf-8')
+      this.writeInstallMeta(destPath, metadata?.projectOrigin ?? 'manual')
+      if (metadata) {
+        this.writeRegistryMeta(destPath, {
+          ...metadata,
+          slug: metadata.slug ?? skillName,
+          displayName: metadata.displayName ?? skillName,
+          installedAt: metadata.installedAt ?? new Date().toISOString(),
+        })
+      }
 
       logger.info({ skillName, url, destPath }, 'Skill installed from remote URL')
     } finally {
-      // Clean up temp directory
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmSync(tmpRoot, { recursive: true, force: true })
     }
   }
 
@@ -146,5 +184,58 @@ export class SkillsInstaller {
     }
 
     return { ok: issues.length === 0, issues }
+  }
+
+  private writeInstallMeta(skillDir: string, origin: SkillProjectMeta['origin']): void {
+    const now = new Date().toISOString()
+    const meta: SkillProjectMeta = {
+      schemaVersion: SCHEMA_VERSION,
+      managed: false,
+      origin,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    writeFileSync(resolve(skillDir, PROJECT_META_FILENAME), JSON.stringify(meta, null, 2), 'utf-8')
+  }
+
+  private writeRegistryMeta(skillDir: string, metadata: InstallMetadata): void {
+    const base = {
+      slug: metadata.slug ?? basename(skillDir),
+      installedAt: metadata.installedAt ?? new Date().toISOString(),
+      displayName: metadata.displayName,
+      version: metadata.version,
+    }
+
+    let registryMeta: SkillRegistryMeta
+    if (metadata.source === SkillImportProvider.RawUrl) {
+      const rawUrlMeta: RawUrlSkillRegistryMeta = {
+        ...base,
+        source: SkillImportProvider.RawUrl,
+        provider: SkillImportProvider.RawUrl,
+        sourceUrl: metadata.sourceUrl ?? '',
+      }
+      registryMeta = rawUrlMeta
+    } else if (metadata.source === SkillImportProvider.GitHub) {
+      const githubMeta: GitHubSkillRegistryMeta = {
+        ...base,
+        source: SkillImportProvider.GitHub,
+        provider: SkillImportProvider.GitHub,
+        sourceUrl: metadata.sourceUrl ?? '',
+        homepageUrl: metadata.homepageUrl,
+        ref: metadata.ref,
+        path: metadata.path,
+      }
+      registryMeta = githubMeta
+    } else {
+      const marketplaceMeta: MarketplaceSkillRegistryMeta = {
+        ...base,
+        source: metadata.source,
+        homepageUrl: metadata.homepageUrl,
+      }
+      registryMeta = marketplaceMeta
+    }
+
+    writeFileSync(resolve(skillDir, '.registry.json'), JSON.stringify(registryMeta, null, 2), 'utf-8')
   }
 }

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getSettings, updateSettings, getActiveModelConfig, getBuiltinModelId } from '../settings/manager.ts'
+import { RegistrySourceSettingSchema } from '../settings/schema.ts'
 import { getDatabase } from '../db/index.ts'
 
 const app = new Hono()
@@ -15,6 +16,13 @@ app.get('/settings', (c) => {
   const masked = {
     ...settings,
     builtinModelId,
+    registrySources: {
+      clawhub: {
+        ...settings.registrySources.clawhub,
+        token: settings.registrySources.clawhub.token ? `****${settings.registrySources.clawhub.token.slice(-4)}` : '',
+      },
+      tencent: settings.registrySources.tencent,
+    },
     customModels: settings.customModels.map((m) => ({
       ...m,
       apiKey: m.apiKey ? `****${m.apiKey.slice(-4)}` : '',
@@ -48,11 +56,54 @@ app.patch('/settings', async (c) => {
     })
   }
 
+  if ('defaultRegistrySource' in body) {
+    const incoming = body.defaultRegistrySource
+    if (incoming !== undefined && incoming !== null) {
+      const parsed = RegistrySourceSettingSchema.safeParse(incoming)
+      if (!parsed.success) {
+        return c.json({ error: 'Invalid defaultRegistrySource' }, 400)
+      }
+      partial.defaultRegistrySource = parsed.data
+    } else {
+      partial.defaultRegistrySource = undefined
+    }
+  }
+
+  if ('registrySources' in body && body.registrySources && typeof body.registrySources === 'object') {
+    const incoming = body.registrySources as Record<string, unknown>
+    const partialSources: Record<string, unknown> = {}
+
+    if ('clawhub' in incoming && incoming.clawhub && typeof incoming.clawhub === 'object') {
+      const clawhub = incoming.clawhub as Record<string, unknown>
+      partialSources.clawhub = {
+        ...clawhub,
+        token: typeof clawhub.token === 'string' && clawhub.token.startsWith('****')
+          ? current.registrySources.clawhub.token
+          : typeof clawhub.token === 'string'
+            ? clawhub.token
+            : current.registrySources.clawhub.token,
+      }
+    }
+
+    if ('tencent' in incoming && incoming.tencent && typeof incoming.tencent === 'object') {
+      partialSources.tencent = incoming.tencent
+    }
+
+    partial.registrySources = partialSources
+  }
+
   const updated = updateSettings(partial)
 
   // Return masked result
   const masked = {
     ...updated,
+    registrySources: {
+      clawhub: {
+        ...updated.registrySources.clawhub,
+        token: updated.registrySources.clawhub.token ? `****${updated.registrySources.clawhub.token.slice(-4)}` : '',
+      },
+      tencent: updated.registrySources.tencent,
+    },
     customModels: updated.customModels.map((m) => ({
       ...m,
       apiKey: m.apiKey ? `****${m.apiKey.slice(-4)}` : '',

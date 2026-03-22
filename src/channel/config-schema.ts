@@ -34,6 +34,10 @@ export const DingTalkConfigSchema = z.object({
 })
 
 export const WechatOAConfigSchema = z.object({})
+export const WechatPersonalConfigSchema = z.object({
+  accountId: z.string().optional(),
+  cdnBaseUrl: z.string().optional(),
+})
 
 // ===== Config field descriptors =====
 
@@ -129,6 +133,15 @@ export const CHANNEL_TYPE_REGISTRY: Record<string, ChannelTypeInfo> = {
     configFields: [],
     docsUrl: 'https://readmex.com',
     configSchema: WechatOAConfigSchema,
+  },
+  'wechat-personal': {
+    type: 'wechat-personal',
+    label: 'WeChat Personal',
+    description: 'WeChat personal account via OpenClaw-compatible bridge',
+    chatIdPrefix: 'wxp:',
+    configFields: [],
+    docsUrl: '',
+    configSchema: WechatPersonalConfigSchema,
   },
 }
 

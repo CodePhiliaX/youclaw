@@ -1,17 +1,21 @@
 import type { MarketplaceSkill, Skill } from '../api/client'
 
-export enum AgentSkillBindingState {
-  Unbound = 'unbound',
-  Bound = 'bound',
-  BoundViaWildcard = 'bound_via_wildcard',
-  Unresolvable = 'unresolvable',
-}
+export const AgentSkillBindingState = {
+  Unbound: 'unbound',
+  Bound: 'bound',
+  BoundViaWildcard: 'bound_via_wildcard',
+  Unresolvable: 'unresolvable',
+} as const
 
-export enum AgentMarketplaceSkillState {
-  InstallAndBind = 'install_and_bind',
-  Bind = 'bind',
-  HiddenBound = 'hidden_bound',
-}
+export type AgentSkillBindingState = typeof AgentSkillBindingState[keyof typeof AgentSkillBindingState]
+
+export const AgentMarketplaceSkillState = {
+  InstallAndBind: 'install_and_bind',
+  Bind: 'bind',
+  HiddenBound: 'hidden_bound',
+} as const
+
+export type AgentMarketplaceSkillState = typeof AgentMarketplaceSkillState[keyof typeof AgentMarketplaceSkillState]
 
 export interface AgentSkillBindingsModel {
   isWildcard: boolean

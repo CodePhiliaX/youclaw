@@ -14,6 +14,25 @@ export interface InboundMessage {
   attachments?: Array<{ filename: string; mediaType: string; filePath: string }>
 }
 
+export interface ChannelLoginStartResult {
+  qrDataUrl?: string
+  message: string
+}
+
+export interface ChannelLoginWaitResult {
+  connected: boolean
+  message: string
+  accountId?: string
+}
+
+export interface ChannelAuthStatus {
+  supportsQrLogin: boolean
+  loggedIn: boolean
+  connected: boolean
+  accountId?: string
+  accountLabel?: string
+}
+
 export interface Channel {
   name: string
   connect(): Promise<void>
@@ -21,6 +40,10 @@ export interface Channel {
   isConnected(): boolean
   ownsChatId(chatId: string): boolean
   disconnect(): Promise<void>
+  loginWithQrStart?(params?: { force?: boolean; timeoutMs?: number; verbose?: boolean }): Promise<ChannelLoginStartResult>
+  loginWithQrWait?(params?: { timeoutMs?: number }): Promise<ChannelLoginWaitResult>
+  logout?(): Promise<{ cleared: boolean; message?: string }>
+  getAuthStatus?(): Promise<ChannelAuthStatus>
 }
 
 export type OnInboundMessage = (message: InboundMessage) => void
@@ -36,4 +59,7 @@ export interface ChannelStatus {
   enabled: boolean
   error?: string
   configuredFields: string[]
+  supportsQrLogin?: boolean
+  loggedIn?: boolean
+  accountLabel?: string
 }

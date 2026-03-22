@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { getAgents, getAgentDocs, updateAgentDoc, createAgent, deleteAgent, getAgentConfig, updateAgentConfig, getSkills, getMarketplaceSkills, getRecommendedSkills, getMarketplaceSkill, installRecommendedSkill } from '../api/client'
+import { getAgents, getAgentDocs, updateAgentDoc, createAgent, deleteAgent, getAgentConfig, updateAgentConfig, getSkills, getMarketplaceSkills, getMarketplaceSkill, installRecommendedSkill } from '../api/client'
 import type { BrowserProfileDTO, Skill, MarketplaceSkill, MarketplaceSkillDetail } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -22,6 +22,9 @@ import { SidePanel } from '@/components/layout/SidePanel'
 import { MarketplaceCard } from '@/components/MarketplaceCard'
 import { MarketplaceDisclaimer } from '@/components/MarketplaceDisclaimer'
 import { MarketplaceInstallDialog } from '@/components/MarketplaceInstallDialog'
+import { RegistrySourceSelect } from '@/components/RegistrySourceSelect'
+import { toMarketplaceCardViewModel, toMarketplaceInstallDialogViewModel } from '@/lib/marketplace-view-model'
+import { useAppStore } from '@/stores/app'
 import { useDragRegion } from "@/hooks/useDragRegion"
 import {
   AgentMarketplaceSkillState,
@@ -801,6 +804,9 @@ function AgentSkillsSection({
   onUpdate: () => void
 }) {
   const { t } = useI18n()
+  const registrySource = useAppStore((s) => s.registrySource)
+  const registrySources = useAppStore((s) => s.registrySources)
+  const setRegistrySource = useAppStore((s) => s.setRegistrySource)
   const [search, setSearch] = useState('')
 
   // Marketplace dialog state
@@ -868,10 +874,10 @@ function AgentSkillsSection({
       setMarketplaceError(null)
       setMarketplaceAppendError(null)
       marketplacePendingCursorRef.current = null
-      getRecommendedSkills()
-        .then((skills) => {
-          setMarketplaceResults(skills)
-          setNextCursor(null)
+      getMarketplaceSkills({ source: registrySource, query: '' })
+        .then((page) => {
+          setMarketplaceResults(page.items)
+          setNextCursor(page.nextCursor)
         })
         .catch(() => {
           setMarketplaceResults([])
@@ -886,7 +892,7 @@ function AgentSkillsSection({
       setMarketplaceError(null)
       setMarketplaceAppendError(null)
       marketplacePendingCursorRef.current = null
-      getMarketplaceSkills({ query: marketplaceQuery })
+      getMarketplaceSkills({ source: registrySource, query: marketplaceQuery })
         .then((page) => {
           setMarketplaceResults(page.items)
           setNextCursor(page.nextCursor)
@@ -899,14 +905,14 @@ function AgentSkillsSection({
     }, 300)
 
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
-  }, [marketplaceOpen, marketplaceQuery, t.agents.marketplaceError])
+  }, [marketplaceOpen, marketplaceQuery, registrySource, t.agents.marketplaceError])
 
   const handleLoadMore = useCallback(() => {
     if (!nextCursor || marketplaceLoading || marketplacePendingCursorRef.current === nextCursor) return
     marketplacePendingCursorRef.current = nextCursor
     setMarketplaceAppendError(null)
     setMarketplaceLoading(true)
-    getMarketplaceSkills({ query: marketplaceQuery, cursor: nextCursor })
+    getMarketplaceSkills({ source: registrySource, query: marketplaceQuery, cursor: nextCursor })
       .then((page) => {
         setMarketplaceResults((prev) => [...prev, ...page.items])
         setNextCursor(page.nextCursor)
@@ -917,7 +923,7 @@ function AgentSkillsSection({
         setMarketplaceAppendError(t.agents.marketplaceError)
       })
       .finally(() => setMarketplaceLoading(false))
-  }, [marketplaceLoading, marketplaceQuery, nextCursor, t.agents.marketplaceError])
+  }, [marketplaceLoading, marketplaceQuery, nextCursor, registrySource, t.agents.marketplaceError])
 
   const handleOpenMarketplace = () => {
     setMarketplaceQuery('')
@@ -938,7 +944,7 @@ function AgentSkillsSection({
     setInstallingSlug(slug)
     try {
       const beforeNames = new Set(installedSkillNames)
-      await installRecommendedSkill(slug)
+      await installRecommendedSkill(slug, registrySource)
       const freshSkills = await getSkills()
 
       const newSkill = freshSkills.find((skill) => skill.registryMeta?.slug === slug)
@@ -962,7 +968,7 @@ function AgentSkillsSection({
   const handleConfirmInstallAndBind = async (skill: MarketplaceSkill) => {
     setLoadingConfirmSlug(skill.slug)
     try {
-      const detail = await getMarketplaceSkill(skill.slug)
+      const detail = await getMarketplaceSkill(skill.slug, registrySource)
       setConfirmDetail(detail)
     } catch {
       setConfirmDetail({
@@ -1031,7 +1037,7 @@ function AgentSkillsSection({
           className="flex items-center gap-1 text-xs text-primary hover:underline ml-2"
         >
           <Store className="h-3 w-3" />
-          {t.agents.browseClawHub}
+          {t.agents.browseMarketplace}
         </button>
         <span className="text-xs text-muted-foreground ml-auto">{selectedCount}/{allSkills.length}</span>
       </div>
@@ -1095,16 +1101,24 @@ function AgentSkillsSection({
         <DialogContent className="sm:max-w-3xl max-h-[70vh] overflow-hidden flex flex-col p-8">
           <div className="flex items-center gap-2 mb-2">
             <Store className="h-5 w-5 text-primary" />
-            <h2 className="text-base font-semibold">{t.agents.browseClawHub}</h2>
+            <h2 className="text-base font-semibold">{t.agents.browseMarketplace}</h2>
           </div>
 
-          <Input
-            placeholder={t.agents.searchMarketplace}
-            value={marketplaceQuery}
-            onChange={(e) => setMarketplaceQuery(e.target.value)}
-            className="h-9 text-sm"
-            autoFocus
-          />
+          <div className="flex items-center gap-3">
+            <Input
+              placeholder={t.agents.searchMarketplace}
+              value={marketplaceQuery}
+              onChange={(e) => setMarketplaceQuery(e.target.value)}
+              className="h-9 min-w-0 flex-1 text-sm"
+              autoFocus
+            />
+            <RegistrySourceSelect
+              sources={registrySources}
+              value={registrySource}
+              onValueChange={setRegistrySource}
+              className="w-[128px] shrink-0"
+            />
+          </div>
 
           <div ref={marketplaceScrollRef} className="mt-4 space-y-1 flex-1 overflow-y-auto pr-1">
             <MarketplaceDisclaimer compact className="mb-3" />
@@ -1128,9 +1142,16 @@ function AgentSkillsSection({
               return (
                 <MarketplaceCard
                   key={skill.slug}
-                  skill={skill}
+                  viewModel={toMarketplaceCardViewModel(skill, t)}
                   onChanged={onUpdate}
+                  registrySource={registrySource}
                   hideInstalledBadge={marketplaceState === AgentMarketplaceSkillState.Bind}
+                  onOpenInstallDialog={
+                    marketplaceState === AgentMarketplaceSkillState.InstallAndBind
+                      ? () => handleConfirmInstallAndBind(skill)
+                      : undefined
+                  }
+                  openInstallDialogDisabled={loadingConfirmSlug === skill.slug || installingSlug === skill.slug}
                   statusBadges={
                     marketplaceState === AgentMarketplaceSkillState.Bind ? (
                       <Badge variant="secondary">
@@ -1210,7 +1231,7 @@ function AgentSkillsSection({
 
           <MarketplaceInstallDialog
             open={!!confirmDetail}
-            detail={confirmDetail}
+            viewModel={confirmDetail ? toMarketplaceInstallDialogViewModel(confirmDetail, t) : null}
             confirmLabel={t.agents.installAndBind}
             onOpenChange={(open) => {
               if (!open) setConfirmDetail(null)

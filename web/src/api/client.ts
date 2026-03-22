@@ -188,7 +188,15 @@ export interface SkillFrontmatter {
   dependencies?: string[]
   env?: string[]
   tools?: string[]
+  tags?: string[]
+  globs?: string[]
+  priority?: 'critical' | 'normal' | 'low'
   install?: Record<string, string>
+  requires?: string[]
+  conflicts?: string[]
+  setup?: string
+  teardown?: string
+  source?: string
 }
 
 export interface EligibilityDetail {
@@ -197,9 +205,59 @@ export interface EligibilityDetail {
   env: { passed: boolean; results: Array<{ name: string; found: boolean }> }
 }
 
+export const RegistryMarketplaceSource = {
+  ClawHub: 'clawhub',
+  Tencent: 'tencent',
+} as const
+
+export type RegistryMarketplaceSource = typeof RegistryMarketplaceSource[keyof typeof RegistryMarketplaceSource]
+
+export const SkillImportProvider = {
+  RawUrl: 'raw-url',
+  GitHub: 'github',
+} as const
+
+export type SkillImportProvider = typeof SkillImportProvider[keyof typeof SkillImportProvider]
+
+interface SkillRegistryMetaBase {
+  slug: string
+  installedAt: string
+  displayName?: string
+  version?: string
+}
+
+export interface MarketplaceSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: RegistryMarketplaceSource
+  homepageUrl?: string
+}
+
+export interface RawUrlSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: typeof SkillImportProvider.RawUrl
+  provider: typeof SkillImportProvider.RawUrl
+  sourceUrl: string
+}
+
+export interface GitHubSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: typeof SkillImportProvider.GitHub
+  provider: typeof SkillImportProvider.GitHub
+  sourceUrl: string
+  homepageUrl?: string
+  ref?: string
+  path?: string
+}
+
+export type SkillRegistryMeta =
+  | MarketplaceSkillRegistryMeta
+  | RawUrlSkillRegistryMeta
+  | GitHubSkillRegistryMeta
+
 export interface Skill {
   name: string
   source: 'workspace' | 'builtin' | 'user'
+  catalogGroup: 'builtin' | 'user'
+  userSkillKind?: 'external' | 'custom'
+  externalSource?: 'marketplace' | 'imported' | 'manual'
+  sortTimestamp?: string
   frontmatter: SkillFrontmatter
   content: string
   path: string
@@ -208,13 +266,64 @@ export interface Skill {
   eligibilityDetail: EligibilityDetail
   enabled: boolean
   usable: boolean
-  registryMeta?: {
-    source: string
-    slug: string
-    installedAt: string
-    displayName?: string
-    version?: string
-  }
+  registryMeta?: SkillRegistryMeta
+}
+
+export interface SkillAuthoringDraft {
+  frontmatter: SkillFrontmatter
+  content: string
+  rawMarkdown: string
+}
+
+export interface SkillDraftMeta {
+  schemaVersion: number
+  updatedAt: string
+  basedOnPublishedUpdatedAt?: string
+  isValid: boolean
+  lastEditorMode: 'form' | 'source'
+}
+
+export interface SkillValidationMessage {
+  field?: string
+  message: string
+}
+
+export interface SkillValidationResult {
+  normalizedName: string
+  errors: SkillValidationMessage[]
+  warnings: SkillValidationMessage[]
+  generatedMarkdown: string
+  draft: SkillAuthoringDraft | null
+}
+
+export interface ManagedSkill {
+  name: string
+  rootDir: string
+  entryFile: string
+  path: string
+  source: 'workspace' | 'builtin' | 'user'
+  catalogGroup: 'builtin' | 'user'
+  userSkillKind?: 'external' | 'custom'
+  externalSource?: 'marketplace' | 'imported' | 'manual'
+  sortTimestamp?: string
+  editable: boolean
+  managed: boolean
+  origin: 'user' | 'imported' | 'marketplace' | 'manual' | 'duplicated' | 'builtin'
+  createdAt?: string
+  updatedAt?: string
+  hasPublished: boolean
+  hasDraft: boolean
+  draftUpdatedAt?: string
+  description?: string
+  boundAgentIds: string[]
+}
+
+export interface ManagedSkillDetail {
+  skill: ManagedSkill
+  publishedDraft: SkillAuthoringDraft | null
+  draft: SkillAuthoringDraft | null
+  draftMeta: SkillDraftMeta | null
+  bindingStates: Array<{ id: string; name: string; state: 'bound' | 'bound_via_wildcard' | 'unbound' }>
 }
 
 // Get all available skills
@@ -265,6 +374,158 @@ export async function toggleSkill(name: string, enabled: boolean) {
   })
 }
 
+export async function getMySkills() {
+  return apiFetch<ManagedSkill[]>('/api/skills/mine')
+}
+
+export async function createSkill(data: { name: string; description: string; locale?: 'en' | 'zh' }) {
+  return apiFetch<ManagedSkillDetail>('/api/skills', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getEditableSkill(name: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/draft`)
+}
+
+export async function getSkillDraft(name: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/draft`)
+}
+
+export async function saveSkillDraft(name: string, data: {
+  mode: 'form' | 'source'
+  draft?: Partial<SkillAuthoringDraft>
+  rawMarkdown?: string
+}) {
+  return apiFetch<ManagedSkillDetail & { validation: SkillValidationResult }>(
+    `/api/skills/${encodeURIComponent(name)}/draft`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    },
+  )
+}
+
+export async function validateSkillDraft(name: string, data: {
+  mode: 'form' | 'source'
+  draft?: Partial<SkillAuthoringDraft>
+  rawMarkdown?: string
+}) {
+  return apiFetch<SkillValidationResult>(`/api/skills/${encodeURIComponent(name)}/validate`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function publishSkill(name: string, data?: { bindingAgentIds?: string[] }) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/publish`, {
+    method: 'POST',
+    body: JSON.stringify(data ?? {}),
+  })
+}
+
+export async function discardSkillDraft(name: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/draft`, {
+    method: 'DELETE',
+  })
+}
+
+export async function duplicateSkill(name: string, nextName?: string) {
+  return apiFetch<ManagedSkillDetail>(`/api/skills/${encodeURIComponent(name)}/duplicate`, {
+    method: 'POST',
+    body: JSON.stringify(nextName ? { name: nextName } : {}),
+  })
+}
+
+export async function deleteManagedSkill(name: string) {
+  return apiFetch<{ ok: true; affectedAgents: Array<{ id: string; name: string }> }>(
+    `/api/skills/${encodeURIComponent(name)}/manage`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function getSkillBindingStates(name: string) {
+  return apiFetch<Array<{ id: string; name: string; state: 'bound' | 'bound_via_wildcard' | 'unbound' }>>(
+    `/api/skills/${encodeURIComponent(name)}/agents`,
+  )
+}
+
+export async function bindSkillToAgent(name: string, agentId: string) {
+  return apiFetch<{ ok: true; state: 'bound' | 'bound_via_wildcard' }>(
+    `/api/skills/${encodeURIComponent(name)}/bind`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ agentId }),
+    },
+  )
+}
+
+export async function unbindSkillFromAgent(name: string, agentId: string) {
+  return apiFetch<{ ok: true }>(`/api/skills/${encodeURIComponent(name)}/unbind`, {
+    method: 'POST',
+    body: JSON.stringify({ agentId }),
+  })
+}
+
+export interface ImportProviderInfoDTO {
+  id: 'raw-url' | 'github'
+  label: string
+  description: string
+  capabilities: {
+    probe: boolean
+    singleFile: boolean
+    directoryTree: boolean
+    auth: 'none' | 'optional' | 'required'
+  }
+}
+
+export interface ImportProbeResponse {
+  provider: 'raw-url' | 'github'
+  ok: boolean
+  suggestedName?: string
+  summary?: string
+  metadata?: Record<string, unknown>
+}
+
+export async function getImportProviders() {
+  return apiFetch<ImportProviderInfoDTO[]>('/api/skills/import/providers')
+}
+
+export async function probeRawUrlImport(data: { url: string; targetDir?: string }) {
+  return apiFetch<ImportProbeResponse>(
+    '/api/skills/import/raw-url/probe',
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  )
+}
+
+export async function importFromRawUrl(data: { url: string; targetDir?: string }) {
+  return apiFetch<{ ok: boolean }>('/api/skills/import/raw-url', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function probeGitHubSkillImport(data: { repoUrl: string; path?: string; ref?: string; targetDir?: string }) {
+  return apiFetch<ImportProbeResponse>(
+    '/api/skills/import/github/probe',
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  )
+}
+
+export async function importFromGitHub(data: { repoUrl: string; path?: string; ref?: string; targetDir?: string }) {
+  return apiFetch<{ ok: boolean }>('/api/skills/import/github', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 // ===== Skill Marketplace API =====
 
 export type MarketplaceSort =
@@ -274,6 +535,39 @@ export type MarketplaceSort =
   | 'installsCurrent'
   | 'installsAllTime'
   | 'trending'
+
+export type MarketplaceCategory =
+  | 'agent'
+  | 'memory'
+  | 'documents'
+  | 'media'
+  | 'productivity'
+  | 'security'
+  | 'integrations'
+  | 'data'
+  | 'coding'
+  | 'other'
+  | 'search'
+  | 'browser'
+
+export type RegistrySourceId = 'clawhub' | 'tencent' | 'fallback'
+export type RegistrySelectableSource = Exclude<RegistrySourceId, 'fallback'>
+
+export interface RegistrySourceInfo {
+  id: RegistrySelectableSource
+  label: string
+  description: string
+  capabilities: {
+    search: boolean
+    list: boolean
+    detail: boolean
+    download: boolean
+    update: boolean
+    auth: 'none' | 'optional' | 'required'
+    cursorPagination: boolean
+    sorts: MarketplaceSort[]
+  }
+}
 
 export interface MarketplaceSkill {
   slug: string
@@ -293,12 +587,14 @@ export interface MarketplaceSkill {
   installsCurrent?: number | null
   installsAllTime?: number | null
   tags: string[]
-  category?: string
-  source: 'clawhub' | 'fallback'
+  category?: MarketplaceCategory
+  source: RegistrySourceId
+  detailUrl?: string | null
   metadata?: {
     os: string[]
     systems: string[]
   }
+  homepageUrl?: string | null
 }
 
 export interface MarketplaceSkillDetail extends MarketplaceSkill {
@@ -316,18 +612,20 @@ export interface MarketplaceSkillDetail extends MarketplaceSkill {
 export interface MarketplacePage {
   items: MarketplaceSkill[]
   nextCursor: string | null
-  source: 'clawhub' | 'fallback'
+  source: RegistrySourceId
   query: string
   sort: MarketplaceSort
 }
 
 export async function getMarketplaceSkills(params: {
+  source?: RegistrySelectableSource
   query?: string
   cursor?: string | null
   limit?: number
   sort?: MarketplaceSort
 } = {}) {
   const search = new URLSearchParams()
+  if (params.source) search.set('source', params.source)
   if (params.query) search.set('q', params.query)
   if (params.cursor) search.set('cursor', params.cursor)
   if (params.limit) search.set('limit', String(params.limit))
@@ -340,32 +638,39 @@ export async function getRecommendedSkills() {
   return apiFetch<MarketplaceSkill[]>('/api/registry/recommended')
 }
 
-export async function getMarketplaceSkill(slug: string) {
-  return apiFetch<MarketplaceSkillDetail>(`/api/registry/marketplace/${encodeURIComponent(slug)}`)
+export async function getRegistrySources() {
+  return apiFetch<RegistrySourceInfo[]>('/api/registry/sources')
 }
 
-export async function searchRegistrySkills(query: string) {
-  return apiFetch<MarketplaceSkill[]>(`/api/registry/search?q=${encodeURIComponent(query)}`)
+export async function getMarketplaceSkill(slug: string, source?: RegistrySelectableSource) {
+  const suffix = source ? `?source=${encodeURIComponent(source)}` : ''
+  return apiFetch<MarketplaceSkillDetail>(`/api/registry/marketplace/${encodeURIComponent(slug)}${suffix}`)
 }
 
-export async function installRecommendedSkill(slug: string) {
+export async function searchRegistrySkills(query: string, source?: RegistrySelectableSource) {
+  const search = new URLSearchParams({ q: query })
+  if (source) search.set('source', source)
+  return apiFetch<MarketplaceSkill[]>(`/api/registry/search?${search.toString()}`)
+}
+
+export async function installRecommendedSkill(slug: string, source?: RegistrySelectableSource) {
   return apiFetch<{ ok: boolean; error?: string }>('/api/registry/install', {
     method: 'POST',
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify({ slug, source }),
   })
 }
 
-export async function updateMarketplaceSkill(slug: string) {
+export async function updateMarketplaceSkill(slug: string, source?: RegistrySelectableSource) {
   return apiFetch<{ ok: boolean; error?: string }>('/api/registry/update', {
     method: 'POST',
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify({ slug, source }),
   })
 }
 
-export async function uninstallRecommendedSkill(slug: string) {
+export async function uninstallRecommendedSkill(slug: string, source?: RegistrySelectableSource) {
   return apiFetch<{ ok: boolean; error?: string }>('/api/registry/uninstall', {
     method: 'POST',
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify({ slug, source }),
   })
 }
 
@@ -662,6 +967,21 @@ export interface SettingsDTO {
     id?: string
   }
   customModels: CustomModelDTO[]
+  defaultRegistrySource?: RegistrySelectableSource
+  registrySources: {
+    clawhub: {
+      enabled: boolean
+      apiBaseUrl: string
+      downloadUrl: string
+      token: string
+    }
+    tencent: {
+      enabled: boolean
+      indexUrl: string
+      searchUrl: string
+      downloadUrl: string
+    }
+  }
   builtinModelId?: string | null
 }
 
@@ -750,8 +1070,19 @@ export interface ChannelInstance {
   config: Record<string, string>
   configuredFields: string[]
   error?: string
+  supportsQrLogin?: boolean
+  loggedIn?: boolean
+  accountLabel?: string
   created_at: string
   updated_at: string
+}
+
+export interface ChannelAuthStatus {
+  supportsQrLogin: boolean
+  loggedIn: boolean
+  connected: boolean
+  accountId?: string
+  accountLabel?: string
 }
 
 export async function getChannels() {
@@ -800,6 +1131,34 @@ export async function connectChannel(id: string) {
 
 export async function disconnectChannel(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/channels/${encodeURIComponent(id)}/disconnect`, {
+    method: 'POST',
+  })
+}
+
+export async function getChannelAuthStatus(id: string) {
+  return apiFetch<ChannelAuthStatus>(`/api/channels/${encodeURIComponent(id)}/auth-status`)
+}
+
+export async function startChannelQrLogin(id: string, data?: {
+  force?: boolean
+  timeoutMs?: number
+  verbose?: boolean
+}) {
+  return apiFetch<{ qrDataUrl?: string; message: string }>(`/api/channels/${encodeURIComponent(id)}/login/start`, {
+    method: 'POST',
+    body: JSON.stringify(data ?? {}),
+  })
+}
+
+export async function waitChannelQrLogin(id: string, data?: { timeoutMs?: number }) {
+  return apiFetch<{ connected: boolean; message: string; accountId?: string }>(`/api/channels/${encodeURIComponent(id)}/login/wait`, {
+    method: 'POST',
+    body: JSON.stringify(data ?? {}),
+  })
+}
+
+export async function logoutChannel(id: string) {
+  return apiFetch<{ cleared: boolean; message?: string }>(`/api/channels/${encodeURIComponent(id)}/logout`, {
     method: 'POST',
   })
 }

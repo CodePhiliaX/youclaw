@@ -8,8 +8,19 @@ import { getShellEnv, resetShellEnvCache } from '../utils/shell-env.ts'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { getLogger } from '../logger/index.ts'
 import type { SkillsLoader } from '../skills/index.ts'
-import { SkillsInstaller } from '../skills/installer.ts'
+import { ImportManager, SkillProjectService, SkillsInstaller, resolveManagedSkillCatalogInfo } from '../skills/index.ts'
 import type { AgentManager } from '../agent/index.ts'
+import type {
+  AgentSkillsView,
+  Skill,
+  SkillCatalogInfo,
+  SkillProject,
+  SkillProjectMeta,
+} from '../skills/types.ts'
+import type { SkillProjectDetail } from '../skills/project-service.ts'
+
+const PROJECT_META_FILENAME = '.youclaw-skill.json'
+const MARKETPLACE_SOURCES = new Set(['clawhub', 'tencent'])
 
 const configureEnvSchema = z.object({
   key: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
@@ -25,24 +36,150 @@ const toggleSchema = z.object({
   enabled: z.boolean(),
 })
 
+const normalizedUrlField = z.preprocess(
+  (value) => typeof value === 'string' ? value.trim().replace(/^[-*+]\s+/, '') : value,
+  z.string().url(),
+)
+
 const installFromPathSchema = z.object({
   sourcePath: z.string().min(1),
   targetDir: z.string().optional(),
 })
 
 const installFromUrlSchema = z.object({
-  url: z.string().url(),
+  url: normalizedUrlField,
   targetDir: z.string().optional(),
 })
 
-export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: AgentManager) {
+const rawUrlImportSchema = z.object({
+  url: normalizedUrlField,
+  targetDir: z.string().optional(),
+})
+
+const githubImportSchema = z.object({
+  repoUrl: normalizedUrlField,
+  path: z.string().optional(),
+  ref: z.string().optional(),
+  targetDir: z.string().optional(),
+})
+
+const createSkillSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().default(''),
+  locale: z.enum(['en', 'zh']).optional(),
+})
+
+const draftPayloadSchema = z.object({
+  mode: z.enum(['form', 'source']),
+  draft: z.object({
+    frontmatter: z.record(z.string(), z.unknown()).optional(),
+    content: z.string().optional(),
+    rawMarkdown: z.string().optional(),
+  }).optional(),
+  rawMarkdown: z.string().optional(),
+})
+
+const duplicateSkillSchema = z.object({
+  name: z.string().optional(),
+})
+
+const bindSkillSchema = z.object({
+  agentId: z.string().min(1),
+})
+
+const publishSkillSchema = z.object({
+  bindingAgentIds: z.array(z.string().min(1)).optional(),
+})
+
+export type SerializedSkill = Skill & SkillCatalogInfo
+export type SerializedManagedSkill = SkillProject & SkillCatalogInfo
+export type SerializedSkillProjectDetail = Omit<SkillProjectDetail, 'project'> & { skill: SerializedManagedSkill }
+
+function readRuntimeSkillProjectMeta(skill: Skill): SkillProjectMeta | null {
+  const metaPath = resolve(skill.path, '..', PROJECT_META_FILENAME)
+  if (!existsSync(metaPath)) {
+    return null
+  }
+
+  try {
+    return JSON.parse(readFileSync(metaPath, 'utf-8')) as SkillProjectMeta
+  } catch {
+    return null
+  }
+}
+
+function resolveRuntimeSkillCatalogInfo(skill: Skill): SkillCatalogInfo {
+  const projectMeta = readRuntimeSkillProjectMeta(skill)
+  const treatAsUserSkill = skill.source === 'user'
+    || Boolean(projectMeta && projectMeta.origin !== 'builtin')
+
+  if (!treatAsUserSkill) {
+    return {
+      catalogGroup: 'builtin',
+      sortTimestamp: undefined,
+    }
+  }
+
+  const externalSource = skill.registryMeta?.source && MARKETPLACE_SOURCES.has(skill.registryMeta.source)
+    ? 'marketplace'
+    : skill.registryMeta?.source === 'raw-url' || skill.registryMeta?.source === 'github' || projectMeta?.origin === 'imported'
+      ? 'imported'
+      : 'manual'
+
+  return {
+    catalogGroup: 'user',
+    userSkillKind: projectMeta?.managed ? 'custom' : 'external',
+    externalSource: projectMeta?.managed ? undefined : externalSource,
+    sortTimestamp: skill.registryMeta?.installedAt ?? projectMeta?.updatedAt ?? projectMeta?.createdAt,
+  }
+}
+
+function serializeSkill(skill: Skill): SerializedSkill {
+  return {
+    ...skill,
+    ...resolveRuntimeSkillCatalogInfo(skill),
+  }
+}
+
+function serializeAgentSkillsView(view: AgentSkillsView) {
+  return {
+    available: view.available.map(serializeSkill),
+    enabled: view.enabled.map(serializeSkill),
+    eligible: view.eligible.map(serializeSkill),
+  }
+}
+
+export function serializeManagedSkill(skill: SkillProject): SerializedManagedSkill {
+  return {
+    ...skill,
+    ...resolveManagedSkillCatalogInfo(skill),
+  }
+}
+
+export function serializeManagedSkillDetail(detail: SkillProjectDetail): SerializedSkillProjectDetail {
+  return {
+    skill: serializeManagedSkill(detail.project),
+    publishedDraft: detail.publishedDraft,
+    draft: detail.draft,
+    draftMeta: detail.draftMeta,
+    bindingStates: detail.bindingStates,
+  }
+}
+
+export function createSkillsRoutes(
+  skillsLoader: SkillsLoader,
+  agentManager: AgentManager,
+  options?: { skillsDir?: string; installer?: SkillsInstaller; importManager?: ImportManager },
+) {
   const skills = new Hono()
-  const installer = new SkillsInstaller()
+  const installer = options?.installer ?? new SkillsInstaller()
+  const importManager = options?.importManager ?? new ImportManager(installer)
+  const skillAuthoringService = new SkillProjectService(skillsLoader, agentManager, options?.skillsDir)
 
   // GET /api/skills — all available skills
   skills.get('/skills', (c) => {
     const allSkills = skillsLoader.loadAllSkills()
-    return c.json(allSkills)
+    return c.json(allSkills.map(serializeSkill))
   })
 
   // GET /api/skills/stats — cache statistics
@@ -50,6 +187,159 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
     const stats = skillsLoader.getCacheStats()
     const config = skillsLoader.getConfig()
     return c.json({ ...stats, config })
+  })
+
+  // GET /api/skills/mine — managed custom skills
+  skills.get('/skills/mine', (c) => {
+    return c.json(skillAuthoringService.listProjects().filter((skill) => skill.editable).map(serializeManagedSkill))
+  })
+
+  // POST /api/skills — create new managed skill
+  skills.post('/skills', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = createSkillSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const detail = skillAuthoringService.createProject(parsed.data)
+      return c.json(serializeManagedSkillDetail(detail), 201)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // GET /api/skills/:name/draft — draft detail
+  skills.get('/skills/:name/draft', (c) => {
+    try {
+      return c.json(serializeManagedSkillDetail(skillAuthoringService.getProject(c.req.param('name'))))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 404)
+    }
+  })
+
+  // PUT /api/skills/:name/draft — save draft
+  skills.put('/skills/:name/draft', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = draftPayloadSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const detail = skillAuthoringService.saveDraft(c.req.param('name'), parsed.data)
+      const validation = skillAuthoringService.validateDraft(c.req.param('name'), parsed.data)
+      return c.json({ ...serializeManagedSkillDetail(detail), validation })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // DELETE /api/skills/:name/draft — discard draft
+  skills.delete('/skills/:name/draft', (c) => {
+    try {
+      return c.json(serializeManagedSkillDetail(skillAuthoringService.discardDraft(c.req.param('name'))))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // POST /api/skills/:name/validate — validate draft without saving
+  skills.post('/skills/:name/validate', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = draftPayloadSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      return c.json(skillAuthoringService.validateDraft(c.req.param('name'), parsed.data))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // POST /api/skills/:name/publish — publish draft to SKILL.md
+  skills.post('/skills/:name/publish', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = publishSkillSchema.safeParse(body ?? {})
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const detail = await skillAuthoringService.publishDraft(c.req.param('name'), parsed.data)
+      return c.json(serializeManagedSkillDetail(detail))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // POST /api/skills/:name/duplicate — duplicate managed skill
+  skills.post('/skills/:name/duplicate', async (c) => {
+    const body = await c.req.json().catch(() => ({}))
+    const parsed = duplicateSkillSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      return c.json(serializeManagedSkillDetail(skillAuthoringService.duplicateProject(c.req.param('name'), parsed.data.name)), 201)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // DELETE /api/skills/:name/manage — delete managed skill
+  skills.delete('/skills/:name/manage', async (c) => {
+    try {
+      return c.json(await skillAuthoringService.deleteProject(c.req.param('name')))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // POST /api/skills/:name/bind — bind published skill to an agent
+  skills.post('/skills/:name/bind', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = bindSkillSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const result = await skillAuthoringService.bindSkill(c.req.param('name'), parsed.data.agentId)
+      return c.json(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // POST /api/skills/:name/unbind — unbind skill from an agent
+  skills.post('/skills/:name/unbind', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = bindSkillSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const result = await skillAuthoringService.unbindSkill(c.req.param('name'), parsed.data.agentId)
+      return c.json(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
   })
 
   // POST /api/skills/reload — force reload
@@ -71,13 +361,11 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
     const logger = getLogger()
 
     try {
-      // Read existing .env content
       let content = ''
       if (existsSync(envPath)) {
         content = readFileSync(envPath, 'utf-8')
       }
 
-      // Replace or append
       const lineRegex = new RegExp(`^(#\\s*)?${key}\\s*=.*$`, 'm')
       if (lineRegex.test(content)) {
         content = content.replace(lineRegex, `${key}=${value}`)
@@ -86,11 +374,7 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
       }
 
       writeFileSync(envPath, content, 'utf-8')
-
-      // Update process.env immediately, no restart needed
       process.env[key] = value
-
-      // Reload skills so eligibility checks use the new env vars
       skillsLoader.refresh()
 
       logger.info({ key }, 'Env var saved to .env')
@@ -112,15 +396,12 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
 
     const { skillName, method } = parsed.data
     const logger = getLogger()
-
-    // Find skill
     const allSkills = skillsLoader.loadAllSkills()
     const skill = allSkills.find((s) => s.name === skillName)
     if (!skill) {
       return c.json({ error: 'Skill not found' }, 404)
     }
 
-    // Find install command
     const command = skill.frontmatter.install?.[method]
     if (!command) {
       return c.json({ error: `Install method "${method}" not found for skill "${skillName}"` }, 400)
@@ -140,10 +421,7 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
         exitCode = execErr.status ?? 1
       }
 
-      // Reset env cache so recheck picks up newly installed binaries
       resetShellEnvCache()
-
-      // Reload skills after installation
       skillsLoader.refresh()
 
       logger.info({ skillName, method, exitCode }, 'Installation complete')
@@ -171,7 +449,7 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
     }
 
     const updated = skillsLoader.setSkillEnabled(name, parsed.data.enabled)
-    return c.json(updated)
+    return c.json(updated ? serializeSkill(updated) : null)
   })
 
   // POST /api/skills/install-from-path — install skill from local path
@@ -216,12 +494,78 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
     }
   })
 
+  skills.get('/skills/import/providers', (c) => {
+    return c.json(importManager.listProviders())
+  })
+
+  skills.post('/skills/import/raw-url/probe', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = rawUrlImportSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      return c.json(await importManager.probe('raw-url', parsed.data))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  skills.post('/skills/import/raw-url', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = rawUrlImportSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      await importManager.import('raw-url', parsed.data)
+      skillsLoader.refresh()
+      return c.json({ ok: true })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  skills.post('/skills/import/github/probe', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = githubImportSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      return c.json(await importManager.probe('github', parsed.data))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  skills.post('/skills/import/github', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = githubImportSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid parameters', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      await importManager.import('github', parsed.data)
+      skillsLoader.refresh()
+      return c.json({ ok: true })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    }
+  })
+
   // DELETE /api/skills/:name — uninstall a skill
   skills.delete('/skills/:name', async (c) => {
     const name = c.req.param('name')
     const logger = getLogger()
-
-    // Find skill to get its path
     const allSkills = skillsLoader.loadAllSkills()
     const skill = allSkills.find((s) => s.name === name)
 
@@ -229,7 +573,6 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
       return c.json({ error: 'Skill not found' }, 404)
     }
 
-    // Only allow uninstalling project-level and user-level skills (not workspace-level)
     if (skill.source === 'workspace') {
       return c.json({ error: 'Cannot uninstall workspace-level skills via API' }, 403)
     }
@@ -240,7 +583,6 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
       await installer.uninstall(basename(skillDir), dirname(skillDir))
       skillsLoader.refresh()
 
-      // Clean up agent configs that reference the deleted skill
       const agents = agentManager.getAgents()
       let modified = false
       for (const agent of agents) {
@@ -260,7 +602,6 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
         }
       }
       if (modified) {
-        // Reload agents (also syncs .claude/skills/ via AgentManager.loadAgents)
         await agentManager.reloadAgents()
       }
 
@@ -292,7 +633,7 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
       return c.json({ error: 'Skill not found' }, 404)
     }
 
-    return c.json(skill)
+    return c.json(serializeSkill(skill))
   })
 
   // GET /api/agents/:id/skills — agent skills view (enhanced)
@@ -305,7 +646,7 @@ export function createSkillsRoutes(skillsLoader: SkillsLoader, agentManager: Age
     }
 
     const view = skillsLoader.getAgentSkillsView(managed.config)
-    return c.json(view)
+    return c.json(serializeAgentSkillsView(view))
   })
 
   return skills

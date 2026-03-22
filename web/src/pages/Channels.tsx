@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import QRCode from 'qrcode'
 import {
   Radio, CheckCircle, Save, Eye, EyeOff,
   ExternalLink, RefreshCw, Plus, Trash2,
-  Power, PowerOff, AlertTriangle, Pencil, Check, X,
+  Power, PowerOff, AlertTriangle, Pencil, Check, X, QrCode,
 } from 'lucide-react'
 import {
   getChannels, getChannelTypes, createChannel,
   updateChannel, deleteChannel, connectChannel, disconnectChannel,
+  startChannelQrLogin, waitChannelQrLogin, logoutChannel,
 } from '../api/client'
 import type { ChannelInstance, ChannelTypeInfo } from '../api/client'
 import { openExternal } from '../api/transport'
@@ -309,6 +311,19 @@ function ChannelDetail({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editingLabel, setEditingLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState(channel.label)
+  const [qrImageUrl, setQrImageUrl] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const pollRef = useRef(0)
+
+  useEffect(() => {
+    setLabelDraft(channel.label)
+  }, [channel.label])
+
+  useEffect(() => {
+    return () => {
+      pollRef.current += 1
+    }
+  }, [])
 
   const handleConnect = async () => {
     setActionLoading('connect')
@@ -375,6 +390,61 @@ function ChannelDetail({
     setActionError('')
     try {
       await updateChannel(channel.id, { enabled: !channel.enabled })
+      onUpdated()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const handleStartQrLogin = async () => {
+    setActionLoading('login')
+    setActionError('')
+    setAuthMessage('')
+    try {
+      const started = await startChannelQrLogin(channel.id, { timeoutMs: 30000 })
+      if (started.qrDataUrl) {
+        const renderedQr = await QRCode.toDataURL(started.qrDataUrl, {
+          width: 224,
+          margin: 1,
+        })
+        setQrImageUrl(renderedQr)
+      } else {
+        setQrImageUrl('')
+      }
+      setAuthMessage(started.message)
+      const pollId = ++pollRef.current
+      setActionLoading('login-wait')
+
+      while (pollRef.current === pollId) {
+        const waited = await waitChannelQrLogin(channel.id, { timeoutMs: 35000 })
+        if (pollRef.current !== pollId) return
+        setAuthMessage(waited.message)
+        if (waited.connected) {
+          setQrImageUrl('')
+          setActionLoading('')
+          onUpdated()
+          return
+        }
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+      setActionLoading('')
+    }
+  }
+
+  const handleLogout = async () => {
+    pollRef.current += 1
+    setActionLoading('logout')
+    setActionError('')
+    setAuthMessage('')
+    setQrImageUrl('')
+    try {
+      const result = await logoutChannel(channel.id)
+      if (result.message) {
+        setAuthMessage(result.message)
+      }
       onUpdated()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
@@ -470,7 +540,7 @@ function ChannelDetail({
             <PowerOff className="h-3.5 w-3.5" />
             {t.channels.disconnect}
           </button>
-        ) : (
+        ) : !channel.supportsQrLogin || channel.loggedIn ? (
           <button
             onClick={handleConnect}
             disabled={!!actionLoading || !channel.enabled}
@@ -480,7 +550,7 @@ function ChannelDetail({
             <Power className="h-3.5 w-3.5" />
             {t.channels.connect}
           </button>
-        )}
+        ) : null}
         <button
           onClick={handleToggleEnabled}
           disabled={!!actionLoading}
@@ -554,7 +624,69 @@ function ChannelDetail({
           value={channel.chatIdPrefix || '-'}
           mono
         />
+        {channel.supportsQrLogin && (
+          <InfoCard
+            label={t.channels.loginStatus}
+            value={channel.loggedIn ? t.channels.loggedIn : t.channels.notLoggedIn}
+            color={channel.loggedIn ? 'green' : 'yellow'}
+          />
+        )}
+        {channel.supportsQrLogin && (
+          <InfoCard
+            label={t.channels.account}
+            value={channel.accountLabel || '-'}
+            mono
+          />
+        )}
       </div>
+
+      {channel.supportsQrLogin && (
+        <div className="rounded-2xl border border-border p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{t.channels.qrLogin}</h2>
+              <p className="text-sm text-muted-foreground mt-1">{t.channels.qrLoginHint}</p>
+            </div>
+            <div className="flex gap-2">
+              {!channel.loggedIn && (
+                <button
+                  onClick={handleStartQrLogin}
+                  disabled={!!actionLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-xl border border-green-500/30 text-green-500 hover:bg-green-500/10 transition-colors disabled:opacity-50"
+                  data-testid="channel-qr-login-btn"
+                >
+                  <QrCode className="h-3.5 w-3.5" />
+                  {actionLoading === 'login' || actionLoading === 'login-wait' ? t.channels.loggingIn : t.channels.login}
+                </button>
+              )}
+              {channel.loggedIn && (
+                <button
+                  onClick={handleLogout}
+                  disabled={!!actionLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                  data-testid="channel-qr-logout-btn"
+                >
+                  <PowerOff className="h-3.5 w-3.5" />
+                  {actionLoading === 'logout' ? t.channels.loggingOut : t.channels.logout}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {authMessage && (
+            <div className="text-sm text-muted-foreground" data-testid="channel-qr-message">
+              {authMessage}
+            </div>
+          )}
+
+          {qrImageUrl && (
+            <div className="rounded-2xl bg-muted/60 border border-border p-4 inline-flex flex-col gap-3" data-testid="channel-qr-code">
+              <img src={qrImageUrl} alt="WeChat login QR code" className="w-56 h-56 rounded-xl bg-white p-3" />
+              <div className="text-xs text-muted-foreground">{t.channels.scanQrHint}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Config editor */}
       {typeInfo && (

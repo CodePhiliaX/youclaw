@@ -1,62 +1,289 @@
 [
   {
     "slug": "self-improving-agent",
-    "displayName": "self-improving-agent",
-    "summary": "Captures learnings, errors, and corrections to enable continuous improvement. Use when: (1) A command or operation fails unexpectedly, (2) User corrects Clau...",
-    "category": "agent"
-  },
-  {
-    "slug": "ddg-web-search",
-    "displayName": "DuckDuckGo Web Search",
-    "summary": "Web search without an API key using DuckDuckGo Lite via web_fetch. Use as a fallback when web_search fails with missing_brave_api_key error, or whenever you...",
-    "category": "search"
-  },
-  {
-    "slug": "web-search-exa",
-    "displayName": "Web Search by Exa",
-    "summary": "Neural web search, content extraction, company and people research, code search, and deep research via the Exa MCP server. Use when you need to: (1) search t...",
-    "category": "search"
-  },
-  {
-    "slug": "agent-browser-clawdbot",
-    "displayName": "Agent Browser",
-    "summary": "Headless browser automation CLI optimized for AI agents with accessibility tree snapshots and ref-based element selection",
-    "category": "browser"
-  },
-  {
-    "slug": "agentic-coding",
-    "displayName": "Agentic Coding",
-    "summary": "Ship production code with AI agents through acceptance contracts, micro diffs, red green loops, and deterministic handoff checkpoints.",
-    "category": "coding"
-  },
-  {
-    "slug": "coding",
-    "displayName": "Coding",
-    "summary": "Coding style memory that adapts to your preferences, conventions, and patterns for consistent coding.",
-    "category": "coding"
+    "displayName": "Self Improving Agent",
+    "summary": "Capture failures and corrections to improve future task execution quality.",
+    "category": "agent",
+    "tags": ["agent", "self-improvement", "reflection"]
   },
   {
     "slug": "find-skills",
     "displayName": "Find Skills",
-    "summary": "Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.",
-    "category": "agent"
+    "summary": "Discover and install suitable skills for user goals and workflows.",
+    "category": "agent",
+    "tags": ["agent", "discovery", "marketplace"]
   },
   {
-    "slug": "browser-research-lite",
-    "displayName": "Browser Research Lite",
-    "summary": "API-key-free online research via the built-in browser tool. Use this skill when web_search fails due to missing keys, and you still need web evidence.",
-    "category": "browser"
+    "slug": "skill-creator",
+    "displayName": "Skill Creator",
+    "summary": "Scaffold and refine new skills with consistent frontmatter and structure.",
+    "category": "agent",
+    "tags": ["agent", "authoring", "templates"]
   },
   {
-    "slug": "vibe-coding",
-    "displayName": "Vibe Coding",
-    "summary": "Build software with AI by describing what you want. Covers prompting techniques, workflow patterns, rules files, and when to intervene.",
-    "category": "coding"
+    "slug": "create-agent-skills",
+    "displayName": "Create Agent Skills",
+    "summary": "Generate production-ready agent skill packs from structured requirements.",
+    "category": "agent",
+    "tags": ["agent", "authoring", "workflow"]
   },
   {
-    "slug": "web-browsing",
-    "displayName": "Web Browsing",
-    "summary": "Browse and summarize websites, extract content from URLs, search the web for information. Use when user asks to visit a website, get webpage content, search...",
-    "category": "browser"
+    "slug": "ontology",
+    "displayName": "Ontology",
+    "summary": "Build and query structured knowledge graphs for reusable task memory.",
+    "category": "memory",
+    "tags": ["memory", "knowledge-graph", "reasoning"]
+  },
+  {
+    "slug": "notion",
+    "displayName": "Notion",
+    "summary": "Read and write Notion pages and databases for team knowledge workflows.",
+    "category": "memory",
+    "tags": ["memory", "notes", "notion"]
+  },
+  {
+    "slug": "notion-clipper-skill",
+    "displayName": "Notion Clipper",
+    "summary": "Save web content into Notion with metadata for later retrieval.",
+    "category": "memory",
+    "tags": ["memory", "notion", "web-clipping"]
+  },
+  {
+    "slug": "obsidian",
+    "displayName": "Obsidian",
+    "summary": "Operate Obsidian vaults for markdown-first personal knowledge management.",
+    "category": "memory",
+    "tags": ["memory", "notes", "obsidian"]
+  },
+  {
+    "slug": "persistent-memory",
+    "displayName": "Persistent Memory",
+    "summary": "Persist important context and preferences across sessions and tasks.",
+    "category": "memory",
+    "tags": ["memory", "persistence", "context"]
+  },
+  {
+    "slug": "mnemon",
+    "displayName": "Mnemon",
+    "summary": "Store and recall facts with compact memory indexing primitives.",
+    "category": "memory",
+    "tags": ["memory", "recall", "indexing"]
+  },
+  {
+    "slug": "apple-notes",
+    "displayName": "Apple Notes",
+    "summary": "Access and organize Apple Notes as a lightweight memory backend.",
+    "category": "memory",
+    "tags": ["memory", "notes", "apple"]
+  },
+  {
+    "slug": "summarize",
+    "displayName": "Summarize",
+    "summary": "Summarize long documents and media into concise actionable takeaways.",
+    "category": "documents",
+    "tags": ["documents", "summary", "analysis"]
+  },
+  {
+    "slug": "nano-pdf",
+    "displayName": "Nano PDF",
+    "summary": "Inspect, annotate, and rewrite PDF content through natural language.",
+    "category": "documents",
+    "tags": ["documents", "pdf", "editing"]
+  },
+  {
+    "slug": "openai-whisper",
+    "displayName": "OpenAI Whisper",
+    "summary": "Transcribe audio and normalize transcripts for downstream automation.",
+    "category": "media",
+    "tags": ["media", "audio", "transcription"]
+  },
+  {
+    "slug": "video-frames",
+    "displayName": "Video Frames",
+    "summary": "Extract and process key frames from videos for review and analysis.",
+    "category": "media",
+    "tags": ["media", "video", "frames"]
+  },
+  {
+    "slug": "nano-banana-pro",
+    "displayName": "Nano Banana Pro",
+    "summary": "Generate and edit images for creative and product content workflows.",
+    "category": "media",
+    "tags": ["media", "image-generation", "multimodal"]
+  },
+  {
+    "slug": "companycam",
+    "displayName": "CompanyCam",
+    "summary": "Manage field photos and visual updates for operations teams.",
+    "category": "media",
+    "tags": ["media", "photos", "operations"]
+  },
+  {
+    "slug": "himalaya",
+    "displayName": "Himalaya",
+    "summary": "Automate email workflows with structured inbox operations.",
+    "category": "productivity",
+    "tags": ["communication", "email", "automation"]
+  },
+  {
+    "slug": "wacli",
+    "displayName": "WA CLI",
+    "summary": "Run WhatsApp-oriented messaging workflows from terminal-style commands.",
+    "category": "productivity",
+    "tags": ["communication", "messaging", "whatsapp"]
+  },
+  {
+    "slug": "ms365",
+    "displayName": "Microsoft 365",
+    "summary": "Integrate Outlook, Calendar, and OneDrive for office productivity.",
+    "category": "productivity",
+    "tags": ["productivity", "microsoft", "calendar"]
+  },
+  {
+    "slug": "gog",
+    "displayName": "Google Workspace",
+    "summary": "Automate Gmail, Calendar, Drive, Docs, and Sheets workflows.",
+    "category": "productivity",
+    "tags": ["productivity", "google", "workspace"]
+  },
+  {
+    "slug": "basecamp",
+    "displayName": "Basecamp",
+    "summary": "Track project work and team coordination in Basecamp.",
+    "category": "productivity",
+    "tags": ["productivity", "project-management", "collaboration"]
+  },
+  {
+    "slug": "native-linear",
+    "displayName": "Native Linear",
+    "summary": "Manage issues and roadmap execution in Linear with native flows.",
+    "category": "productivity",
+    "tags": ["productivity", "project-management", "linear"]
+  },
+  {
+    "slug": "no-nonsense-tasks",
+    "displayName": "No Nonsense Tasks",
+    "summary": "Operate lightweight task planning with predictable local persistence.",
+    "category": "productivity",
+    "tags": ["productivity", "tasks", "planning"]
+  },
+  {
+    "slug": "pasteclaw",
+    "displayName": "PasteClaw",
+    "summary": "Capture snippets and quickly reuse clipboard knowledge across tasks.",
+    "category": "productivity",
+    "tags": ["productivity", "clipboard", "snippets"]
+  },
+  {
+    "slug": "weather",
+    "displayName": "Weather",
+    "summary": "Fetch current and forecast weather for location-based workflows.",
+    "category": "data",
+    "tags": ["data", "weather", "forecast"]
+  },
+  {
+    "slug": "goplaces",
+    "displayName": "GoPlaces",
+    "summary": "Query places data and location metadata for planning and ops use cases.",
+    "category": "data",
+    "tags": ["data", "geo", "places"]
+  },
+  {
+    "slug": "exa",
+    "displayName": "Exa",
+    "summary": "Run high-quality research retrieval for evidence-backed responses.",
+    "category": "data",
+    "tags": ["data", "research", "retrieval"]
+  },
+  {
+    "slug": "technical-analyst",
+    "displayName": "Technical Analyst",
+    "summary": "Analyze technical indicators and market structure for trade research.",
+    "category": "data",
+    "tags": ["data", "finance", "analysis"]
+  },
+  {
+    "slug": "google-ads",
+    "displayName": "Google Ads",
+    "summary": "Inspect and optimize campaign performance with ads account operations.",
+    "category": "data",
+    "tags": ["data", "marketing", "ads"]
+  },
+  {
+    "slug": "github",
+    "displayName": "GitHub",
+    "summary": "Operate repositories, pull requests, and issues through GitHub flows.",
+    "category": "coding",
+    "tags": ["coding", "github", "collaboration"]
+  },
+  {
+    "slug": "github-kb",
+    "displayName": "GitHub KB",
+    "summary": "Build codebase knowledge snapshots from repository artifacts.",
+    "category": "coding",
+    "tags": ["coding", "github", "knowledge-base"]
+  },
+  {
+    "slug": "fastapi",
+    "displayName": "FastAPI",
+    "summary": "Accelerate FastAPI endpoint and schema development for Python services.",
+    "category": "coding",
+    "tags": ["coding", "python", "api"]
+  },
+  {
+    "slug": "sql-server-toolkit",
+    "displayName": "SQL Server Toolkit",
+    "summary": "Handle SQL Server schema, migration, and diagnostics workflows.",
+    "category": "coding",
+    "tags": ["coding", "database", "sql-server"]
+  },
+  {
+    "slug": "perf-profiler",
+    "displayName": "Perf Profiler",
+    "summary": "Profile bottlenecks and performance regressions in runtime workloads.",
+    "category": "coding",
+    "tags": ["coding", "performance", "profiling"]
+  },
+  {
+    "slug": "octolens",
+    "displayName": "OctoLens",
+    "summary": "Inspect repository health and engineering velocity signals.",
+    "category": "coding",
+    "tags": ["coding", "analytics", "engineering"]
+  },
+  {
+    "slug": "mcporter",
+    "displayName": "MCPorter",
+    "summary": "Bridge and orchestrate MCP tools with clearer operator control.",
+    "category": "integrations",
+    "tags": ["integration", "mcp", "tooling"]
+  },
+  {
+    "slug": "model-usage",
+    "displayName": "Model Usage",
+    "summary": "Track model consumption and usage trends for cost-aware operations.",
+    "category": "integrations",
+    "tags": ["integration", "observability", "cost"]
+  },
+  {
+    "slug": "prompt-guard",
+    "displayName": "Prompt Guard",
+    "summary": "Detect and mitigate prompt-injection risks in user-facing flows.",
+    "category": "security",
+    "tags": ["security", "prompt-injection", "guardrails"]
+  },
+  {
+    "slug": "openscan",
+    "displayName": "OpenScan",
+    "summary": "Scan projects for risky patterns and security blind spots.",
+    "category": "security",
+    "tags": ["security", "scanning", "audit"]
+  },
+  {
+    "slug": "ai-shield-audit",
+    "displayName": "AI Shield Audit",
+    "summary": "Run compliance-oriented checks for AI workflow safety controls.",
+    "category": "security",
+    "tags": ["security", "compliance", "audit"]
   }
 ]

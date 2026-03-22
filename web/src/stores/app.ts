@@ -1,11 +1,36 @@
 import { create } from 'zustand'
 import { getItem, removeItem, setItem } from '@/lib/storage'
 import { applyThemeToDOM, type Theme } from '@/hooks/useTheme'
-import { getAuthUser, getAuthStatus, getAuthLoginUrl, authLogout, getCreditBalance, getPayUrl, updateProfile as apiUpdateProfile, getCloudStatus, getSettings, updateSettings, checkGit, type AuthUser } from '@/api/client'
+import {
+  checkGit,
+  authLogout,
+  getAuthLoginUrl,
+  getAuthStatus,
+  getAuthUser,
+  getCloudStatus,
+  getCreditBalance,
+  getPayUrl,
+  getRegistrySources,
+  getSettings,
+  updateProfile as apiUpdateProfile,
+  updateSettings,
+  type AuthUser,
+  type RegistrySelectableSource,
+  type RegistrySourceInfo,
+} from '@/api/client'
 import { isTauri, openExternal } from '@/api/transport'
 import type { Locale } from '@/i18n/context'
+import { resolvePreferredRegistrySource } from '@/lib/registry-source'
 
 export type CloseAction = '' | 'minimize' | 'quit'
+type GlobalBubbleType = 'success' | 'error'
+
+interface GlobalBubbleState {
+  id: number
+  message: string
+  type: GlobalBubbleType
+  durationMs: number
+}
 
 let authPollInterval: ReturnType<typeof setInterval> | null = null
 let authPollTimeout: ReturnType<typeof setTimeout> | null = null
@@ -50,18 +75,20 @@ interface AppState {
   collapseSidebar: () => void
   expandSidebar: () => void
 
-  // Cloud
   cloudEnabled: boolean
 
-  // Git
   gitAvailable: boolean
   gitChecked: boolean
   recheckGit: () => Promise<boolean>
 
-  // Model
   modelReady: boolean
 
-  // Auth
+  registrySource: RegistrySelectableSource
+  registrySources: RegistrySourceInfo[]
+  setRegistrySource: (source: RegistrySelectableSource) => void
+  setRegistrySources: (sources: RegistrySourceInfo[]) => void
+  refreshRegistrySources: () => Promise<RegistrySourceInfo[]>
+
   user: AuthUser | null
   isLoggedIn: boolean
   authLoading: boolean
@@ -70,13 +97,18 @@ interface AppState {
   logout: () => Promise<void>
   updateProfile: (params: { displayName?: string; avatar?: string }) => Promise<void>
 
-  // Credits
   creditBalance: number | null
   fetchCreditBalance: () => Promise<void>
   openPayPage: () => Promise<void>
 
+  globalBubble: GlobalBubbleState | null
+  showGlobalBubble: (bubble: { message: string; type?: GlobalBubbleType; durationMs?: number }) => void
+  dismissGlobalBubble: () => void
+
   hydrate: () => Promise<void>
 }
+
+let nextGlobalBubbleId = 0
 
 export const useAppStore = create<AppState>((set, get) => ({
   theme: 'system',
@@ -117,11 +149,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     void setItem('sidebar-collapsed', 'false')
   },
 
-  // Cloud
   cloudEnabled: false,
 
-  // Git
-  gitAvailable: true, // default true, only set false on Windows when check fails
+  gitAvailable: true,
   gitChecked: false,
 
   recheckGit: async () => {
@@ -130,16 +160,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ gitAvailable: available, gitChecked: true })
       return available
     } catch {
-      // Backend not ready, assume available
       set({ gitAvailable: true, gitChecked: true })
       return true
     }
   },
 
-  // Model
   modelReady: false,
 
-  // Auth
+  registrySource: 'clawhub',
+  registrySources: [],
+  setRegistrySource: (registrySource) => set({ registrySource }),
+  setRegistrySources: (registrySources) => set({ registrySources }),
+  refreshRegistrySources: async () => {
+    try {
+      const [settings, sources] = await Promise.all([
+        getSettings(),
+        getRegistrySources(),
+      ])
+      const locale = get().locale
+      const registrySource = resolvePreferredRegistrySource(sources, settings.defaultRegistrySource, locale)
+      set({ registrySources: sources, registrySource })
+      return sources
+    } catch {
+      return get().registrySources
+    }
+  },
+
   user: null,
   isLoggedIn: false,
   authLoading: false,
@@ -148,11 +194,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ authLoading: true })
       const user = await getAuthUser()
-      // Construct a default username from user id when backend doesn't return one
       if (!user.name) {
         user.name = `User_${user.id.slice(0, 6)}`
       }
-      // Use default avatar when backend doesn't return one
       if (!user.avatar) {
         user.avatar = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.name)}`
       }
@@ -166,7 +210,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ authLoading: true })
 
-      // Helper: poll /auth/status until logged in
       const startPolling = () => {
         clearAuthPolling()
         authPollInterval = setInterval(async () => {
@@ -182,7 +225,6 @@ export const useAppStore = create<AppState>((set, get) => ({
             // Continue polling
           }
         }, 2000)
-        // 120 second timeout
         authPollTimeout = setTimeout(() => {
           clearAuthPolling()
           set({ authLoading: false })
@@ -198,7 +240,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         await openExternal(loginUrl)
         startPolling()
       } else {
-        // Web mode: polling
         const { loginUrl } = await getAuthLoginUrl()
         await openExternal(loginUrl)
         startPolling()
@@ -224,7 +265,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ user: updatedUser })
   },
 
-  // Credits
   creditBalance: null,
 
   fetchCreditBalance: async () => {
@@ -246,7 +286,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         await openExternal(payUrl)
       }
 
-      // Poll for balance change
       const oldBalance = get().creditBalance
       const pollInterval = setInterval(async () => {
         try {
@@ -266,6 +305,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  globalBubble: null,
+  showGlobalBubble: ({ message, type = 'success', durationMs = 4000 }) => {
+    set({
+      globalBubble: {
+        id: ++nextGlobalBubbleId,
+        message,
+        type,
+        durationMs,
+      },
+    })
+  },
+  dismissGlobalBubble: () => {
+    set({ globalBubble: null })
+  },
+
   hydrate: async () => {
     const [theme, locale, closeAction, sidebar] = await Promise.all([
       getItem('theme'),
@@ -274,24 +328,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       getItem('sidebar-collapsed'),
     ])
     const resolvedTheme = (theme as Theme) ?? 'system'
+    const resolvedLocale = (locale as Locale) ?? (navigator.language.startsWith('zh') ? 'zh' : 'en')
     set({
       theme: resolvedTheme,
-      locale: (locale as Locale) ?? (navigator.language.startsWith('zh') ? 'zh' : 'en'),
+      locale: resolvedLocale,
       closeAction: closeAction === 'minimize' || closeAction === 'quit' ? closeAction : '',
       sidebarCollapsed: sidebar === 'true',
     })
     applyThemeToDOM(resolvedTheme)
 
-    // Check git availability on Windows
     const isWindows = navigator.userAgent.includes('Windows')
     if (isWindows) {
       await get().recheckGit()
     }
 
-    // Check cloud service status & model configuration
     try {
-      const { enabled } = await getCloudStatus()
-      set({ cloudEnabled: enabled })
+      const [cloudStatus, settings, registrySources] = await Promise.all([
+        getCloudStatus(),
+        getSettings(),
+        getRegistrySources().catch(() => [] as RegistrySourceInfo[]),
+      ])
+      const { enabled } = cloudStatus
+      set({
+        cloudEnabled: enabled,
+        registrySources,
+        registrySource: resolvePreferredRegistrySource(registrySources, settings.defaultRegistrySource, resolvedLocale),
+      })
+
       if (enabled) {
         const { loggedIn } = await getAuthStatus()
         if (loggedIn) {
@@ -300,14 +363,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      // Fetch model settings to determine availability
-      const settings = await getSettings()
       const { provider } = settings.activeModel
 
       if (!enabled && (provider === 'builtin' || provider === 'cloud')) {
-        // Builtin/cloud models unavailable in offline mode, auto-switch to custom
         await updateSettings({ activeModel: { provider: 'custom' } })
-        // Only considered ready when custom models exist
         set({ modelReady: settings.customModels.length > 0 })
       } else if (provider === 'custom') {
         const model = settings.activeModel.id
@@ -315,7 +374,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           : settings.customModels[0]
         set({ modelReady: !!model })
       } else {
-        // Builtin/cloud models available in online mode
         set({ modelReady: true })
       }
     } catch {

@@ -10,6 +10,7 @@ import { Skills } from './pages/Skills'
 import { Login } from './pages/Login'
 import { GitSetup } from './pages/GitSetup'
 import { PortConflictDialog } from './components/PortConflictDialog'
+import { GlobalBubble } from './components/GlobalBubble'
 import { CloseConfirmDialog } from './components/CloseConfirmDialog'
 import { useTheme } from './hooks/useTheme'
 import { useAppStore } from './stores/app'
@@ -232,6 +233,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to={canPass ? "/" : "/login"} replace />} />
       </Routes>
+      <GlobalBubble />
       {isTauri && <PortConflictDialog open={portConflict} onResolved={() => setPortConflict(false)} />}
       {isTauri && <CloseConfirmDialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen} />}
     </BrowserRouter>

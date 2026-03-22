@@ -6,7 +6,14 @@ import {
   updateChannelRecord, deleteChannelRecord,
 } from '../db/index.ts'
 import type { ChannelRecord } from '../db/index.ts'
-import type { Channel, OnInboundMessage, ChannelStatus } from './types.ts'
+import type {
+  Channel,
+  ChannelAuthStatus,
+  ChannelLoginStartResult,
+  ChannelLoginWaitResult,
+  OnInboundMessage,
+  ChannelStatus,
+} from './types.ts'
 import type { MessageRouter } from './router.ts'
 import type { EnvConfig } from '../config/index.ts'
 import type { EventBus } from '../events/bus.ts'
@@ -46,7 +53,7 @@ export class ChannelManager {
       if (!record.enabled) continue
 
       try {
-        await this.startChannel(record)
+        await this.startChannel(record, { autoConnect: true })
       } catch (err) {
         logger.error({ channelId: record.id, error: err instanceof Error ? err.message : String(err) }, 'Channel failed to start')
       }
@@ -182,7 +189,7 @@ export class ChannelManager {
     // Auto-connect if enabled
     if (record.enabled) {
       try {
-        await this.startChannel(record)
+        await this.startChannel(record, { autoConnect: true })
       } catch (err) {
         getLogger().error({ channelId: id, error: err instanceof Error ? err.message : String(err) }, 'Newly created channel failed to connect')
       }
@@ -259,9 +266,17 @@ export class ChannelManager {
     const record = getChannelRecord(id)
     if (!record) throw new Error(`Channel "${id}" does not exist`)
 
+    const instance = createChannelFromRecord(record, this.onMessage, this.eventBus ?? undefined)
+    if (instance.getAuthStatus) {
+      const authStatus = await instance.getAuthStatus()
+      if (authStatus.supportsQrLogin && !authStatus.loggedIn) {
+        throw new Error(`Channel "${id}" requires login before connecting`)
+      }
+    }
+
     // Disconnect existing connection first
     await this.stopChannel(id)
-    await this.startChannel(record)
+    await this.startChannel(record, { autoConnect: false })
   }
 
   /**
@@ -269,6 +284,82 @@ export class ChannelManager {
    */
   async disconnectChannel(id: string): Promise<void> {
     await this.stopChannel(id)
+  }
+
+  async startQrLogin(id: string, params?: { force?: boolean; timeoutMs?: number; verbose?: boolean }): Promise<ChannelLoginStartResult> {
+    const managed = this.ensureChannelInstance(id)
+    if (!managed.instance?.loginWithQrStart) {
+      throw new Error(`Channel "${id}" does not support QR login`)
+    }
+    return await managed.instance.loginWithQrStart(params)
+  }
+
+  async waitQrLogin(id: string, params?: { timeoutMs?: number }): Promise<ChannelLoginWaitResult> {
+    const managed = this.ensureChannelInstance(id)
+    if (!managed.instance?.loginWithQrWait) {
+      throw new Error(`Channel "${id}" does not support QR login`)
+    }
+
+    const result = await managed.instance.loginWithQrWait(params)
+    const record = getChannelRecord(id)
+    if (!record) {
+      return result
+    }
+
+    if (result.accountId !== undefined) {
+      const existingConfig = JSON.parse(record.config) as Record<string, unknown>
+      const mergedConfig = { ...existingConfig, accountId: result.accountId }
+      const validation = validateChannelConfig(record.type, mergedConfig)
+      if (!validation.success) {
+        throw new Error(`Config validation failed: ${validation.error}`)
+      }
+      const updated = updateChannelRecord(id, { config: JSON.stringify(mergedConfig) })
+      if (!updated) {
+        throw new Error(`Failed to persist QR login result for channel "${id}"`)
+      }
+      managed.record = updated
+    }
+
+    if (result.connected && record.enabled) {
+      await this.connectChannel(id)
+    }
+
+    return result
+  }
+
+  async logoutChannel(id: string): Promise<{ cleared: boolean; message?: string }> {
+    const managed = this.ensureChannelInstance(id)
+    if (!managed.instance?.logout) {
+      throw new Error(`Channel "${id}" does not support logout`)
+    }
+
+    const result = await managed.instance.logout()
+    await this.stopChannel(id)
+
+    const record = getChannelRecord(id)
+    if (record) {
+      const existingConfig = JSON.parse(record.config) as Record<string, unknown>
+      const mergedConfig = { ...existingConfig, accountId: '' }
+      const validation = validateChannelConfig(record.type, mergedConfig)
+      if (!validation.success) {
+        throw new Error(`Config validation failed: ${validation.error}`)
+      }
+      updateChannelRecord(id, { config: JSON.stringify(mergedConfig) })
+    }
+
+    return result
+  }
+
+  async getChannelAuthStatus(id: string): Promise<ChannelAuthStatus> {
+    const managed = this.ensureChannelInstance(id)
+    if (!managed.instance?.getAuthStatus) {
+      return {
+        supportsQrLogin: false,
+        loggedIn: false,
+        connected: managed.instance?.isConnected() ?? false,
+      }
+    }
+    return await managed.instance.getAuthStatus()
   }
 
   /**
@@ -310,10 +401,34 @@ export class ChannelManager {
     }
   }
 
+  private ensureChannelInstance(id: string): ManagedChannel {
+    const existing = this.managed.get(id)
+    if (existing?.instance) {
+      return existing
+    }
+
+    const record = getChannelRecord(id)
+    if (!record) {
+      throw new Error(`Channel "${id}" does not exist`)
+    }
+
+    const instance = createChannelFromRecord(record, this.onMessage, this.eventBus ?? undefined)
+    const managed: ManagedChannel = existing ?? {
+      record,
+      instance,
+      retryCount: 0,
+      retryTimer: null,
+    }
+    managed.record = record
+    managed.instance = instance
+    this.managed.set(id, managed)
+    return managed
+  }
+
   /**
    * Start a single channel (create instance + connect + register with router)
    */
-  private async startChannel(record: ChannelRecord): Promise<void> {
+  private async startChannel(record: ChannelRecord, opts?: { autoConnect?: boolean }): Promise<void> {
     const logger = getLogger()
 
     const instance = createChannelFromRecord(record, this.onMessage, this.eventBus ?? undefined)
@@ -325,6 +440,19 @@ export class ChannelManager {
       retryTimer: null,
     }
     this.managed.set(record.id, managed)
+
+    if (opts?.autoConnect && instance.getAuthStatus) {
+      try {
+        const authStatus = await instance.getAuthStatus()
+        if (authStatus.supportsQrLogin && !authStatus.loggedIn) {
+          managed.lastError = undefined
+          logger.info({ channelId: record.id, type: record.type }, 'Channel login required before auto-connect; leaving disconnected')
+          return
+        }
+      } catch (err) {
+        logger.warn({ channelId: record.id, error: err instanceof Error ? err.message : String(err) }, 'Failed to determine channel auth status before auto-connect')
+      }
+    }
 
     // Connect asynchronously, don't block startup
     instance.connect().then(() => {
@@ -373,6 +501,11 @@ export class ChannelManager {
     const managed = this.managed.get(id)
     if (!managed) return
 
+    if (managed.lastError?.includes('not logged in') || managed.lastError?.includes('not configured')) {
+      getLogger().info({ channelId: id }, 'Channel retry skipped until configuration is completed')
+      return
+    }
+
     if (managed.retryCount >= MAX_RETRIES) {
       getLogger().warn({ channelId: id, retries: managed.retryCount }, 'Channel retry attempts exhausted')
       return
@@ -395,6 +528,14 @@ export class ChannelManager {
         const instance = createChannelFromRecord(record, this.onMessage, this.eventBus ?? undefined)
         current.instance = instance
         current.record = record
+        if (instance.getAuthStatus) {
+          const authStatus = await instance.getAuthStatus()
+          if (authStatus.supportsQrLogin && !authStatus.loggedIn) {
+            current.lastError = undefined
+            getLogger().info({ channelId: id }, 'Channel retry skipped until login is completed')
+            return
+          }
+        }
         await instance.connect()
         this.router.addChannel(instance)
         current.retryCount = 0

@@ -66,6 +66,11 @@ export function parseFrontmatter(raw: string): ParseResult {
     globs: Array.isArray(parsed.globs) ? (parsed.globs as unknown[]).map(String) : undefined,
     priority,
     install,
+    requires: Array.isArray(parsed.requires) ? (parsed.requires as unknown[]).map(String) : undefined,
+    conflicts: Array.isArray(parsed.conflicts) ? (parsed.conflicts as unknown[]).map(String) : undefined,
+    setup: parsed.setup != null ? String(parsed.setup) : undefined,
+    teardown: parsed.teardown != null ? String(parsed.teardown) : undefined,
+    source: parsed.source != null ? String(parsed.source) : undefined,
   }
 
   return { frontmatter, content }
