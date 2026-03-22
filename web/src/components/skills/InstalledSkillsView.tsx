@@ -90,15 +90,15 @@ export function InstalledSkillsView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="start" sideOffset={8} className="w-56">
-              <DropdownMenuItem className="cursor-pointer" onClick={onCreateSkill}>
+              <DropdownMenuItem className="cursor-pointer" onSelect={onCreateSkill}>
                 <Plus className="h-4 w-4" />
                 {t.skills.newSkill}
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => onImportSkill('raw-url')}>
+              <DropdownMenuItem className="cursor-pointer" onSelect={() => onImportSkill('raw-url')}>
                 <Link2 className="h-4 w-4" />
                 {t.skills.importFromRawUrl}
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => onImportSkill('github')}>
+              <DropdownMenuItem className="cursor-pointer" onSelect={() => onImportSkill('github')}>
                 <FolderGit2 className="h-4 w-4" />
                 {t.skills.importFromGitHub}
               </DropdownMenuItem>
