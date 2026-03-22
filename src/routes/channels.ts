@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { z } from 'zod/v4'
-import { getLogger } from '../logger/index.ts'
 import { CHANNEL_TYPE_REGISTRY, maskSecretFields } from '../channel/config-schema.ts'
 import type { ChannelManager } from '../channel/manager.ts'
 import { getChannelRecords, getChannelRecord } from '../db/index.ts'
@@ -23,15 +22,21 @@ export function createChannelsRoutes(channelManager: ChannelManager) {
   const channels = new Hono()
 
   // GET /api/channels — list all channel instances (with runtime status)
-  channels.get('/channels', (c) => {
+  channels.get('/channels', async (c) => {
     const statuses = channelManager.getStatuses()
     const records = getChannelRecords()
 
-    const result = records.map((record) => {
+    const result = await Promise.all(records.map(async (record) => {
       const status = statuses.find((s) => s.id === record.id)
       const config = JSON.parse(record.config) as Record<string, unknown>
       const { masked, configuredFields } = maskSecretFields(record.type, config)
       const typeInfo = CHANNEL_TYPE_REGISTRY[record.type]
+      const authStatus = await channelManager.getChannelAuthStatus(record.id).catch(() => ({
+        supportsQrLogin: false,
+        loggedIn: false,
+        connected: status?.connected ?? false,
+        accountLabel: undefined,
+      }))
 
       return {
         id: record.id,
@@ -44,10 +49,13 @@ export function createChannelsRoutes(channelManager: ChannelManager) {
         config: masked,
         configuredFields,
         error: status?.error,
+        supportsQrLogin: authStatus.supportsQrLogin,
+        loggedIn: authStatus.loggedIn,
+        accountLabel: authStatus.accountLabel,
         created_at: record.created_at,
         updated_at: record.updated_at,
       }
-    })
+    }))
 
     return c.json(result)
   })
@@ -140,6 +148,72 @@ export function createChannelsRoutes(channelManager: ChannelManager) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return c.json({ error: msg }, 400)
+    }
+  })
+
+  // GET /api/channels/:id/auth-status — login/auth state for QR-capable channels
+  channels.get('/channels/:id/auth-status', async (c) => {
+    const id = c.req.param('id')
+    try {
+      const status = await channelManager.getChannelAuthStatus(id)
+      return c.json(status)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const status = msg.includes('does not exist') ? 404 : 400
+      return c.json({ error: msg }, status)
+    }
+  })
+
+  // POST /api/channels/:id/login/start — start QR login for a channel
+  channels.post('/channels/:id/login/start', async (c) => {
+    const id = c.req.param('id')
+    const body = await c.req.json().catch(() => ({})) as {
+      force?: boolean
+      timeoutMs?: number
+      verbose?: boolean
+    }
+
+    try {
+      const result = await channelManager.startQrLogin(id, {
+        force: body.force,
+        timeoutMs: body.timeoutMs,
+        verbose: body.verbose,
+      })
+      return c.json(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const status = msg.includes('does not exist') ? 404 : 400
+      return c.json({ error: msg }, status)
+    }
+  })
+
+  // POST /api/channels/:id/login/wait — wait for QR login completion
+  channels.post('/channels/:id/login/wait', async (c) => {
+    const id = c.req.param('id')
+    const body = await c.req.json().catch(() => ({})) as { timeoutMs?: number }
+
+    try {
+      const result = await channelManager.waitQrLogin(id, {
+        timeoutMs: body.timeoutMs,
+      })
+      return c.json(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const status = msg.includes('does not exist') ? 404 : 400
+      return c.json({ error: msg }, status)
+    }
+  })
+
+  // POST /api/channels/:id/logout — clear login state for QR-capable channels
+  channels.post('/channels/:id/logout', async (c) => {
+    const id = c.req.param('id')
+    try {
+      const result = await channelManager.logoutChannel(id)
+      return c.json(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const status = msg.includes('does not exist') ? 404 : 400
+      return c.json({ error: msg }, status)
     }
   })
 

@@ -1063,8 +1063,19 @@ export interface ChannelInstance {
   config: Record<string, string>
   configuredFields: string[]
   error?: string
+  supportsQrLogin?: boolean
+  loggedIn?: boolean
+  accountLabel?: string
   created_at: string
   updated_at: string
+}
+
+export interface ChannelAuthStatus {
+  supportsQrLogin: boolean
+  loggedIn: boolean
+  connected: boolean
+  accountId?: string
+  accountLabel?: string
 }
 
 export async function getChannels() {
@@ -1113,6 +1124,34 @@ export async function connectChannel(id: string) {
 
 export async function disconnectChannel(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/channels/${encodeURIComponent(id)}/disconnect`, {
+    method: 'POST',
+  })
+}
+
+export async function getChannelAuthStatus(id: string) {
+  return apiFetch<ChannelAuthStatus>(`/api/channels/${encodeURIComponent(id)}/auth-status`)
+}
+
+export async function startChannelQrLogin(id: string, data?: {
+  force?: boolean
+  timeoutMs?: number
+  verbose?: boolean
+}) {
+  return apiFetch<{ qrDataUrl?: string; message: string }>(`/api/channels/${encodeURIComponent(id)}/login/start`, {
+    method: 'POST',
+    body: JSON.stringify(data ?? {}),
+  })
+}
+
+export async function waitChannelQrLogin(id: string, data?: { timeoutMs?: number }) {
+  return apiFetch<{ connected: boolean; message: string; accountId?: string }>(`/api/channels/${encodeURIComponent(id)}/login/wait`, {
+    method: 'POST',
+    body: JSON.stringify(data ?? {}),
+  })
+}
+
+export async function logoutChannel(id: string) {
+  return apiFetch<{ cleared: boolean; message?: string }>(`/api/channels/${encodeURIComponent(id)}/logout`, {
     method: 'POST',
   })
 }
