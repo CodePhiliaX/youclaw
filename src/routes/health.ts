@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { z } from 'zod/v4'
 import { which, resetShellEnvCache, getShellEnv } from '../utils/shell-env.ts'
+import { getLogger } from '../logger/index.ts'
 
 const health = new Hono()
 
@@ -237,7 +238,7 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
   const zipName = getBunZipTarget()
   if (!zipName) {
     const msg = `Unsupported platform: ${process.platform} ${process.arch}`
-    console.error(`[install-bun] ${msg}`)
+    getLogger().error({ category: 'install' }, `[install-bun] ${msg}`)
     return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
   }
 
@@ -249,23 +250,23 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
   let downloadSource = ''
   for (const url of [cdnUrl, githubUrl]) {
     try {
-      console.info(`[install-bun] Downloading from ${url}...`)
+      getLogger().info({ category: 'install' }, `[install-bun] Downloading from ${url}...`)
       const resp = await fetch(url, { signal: AbortSignal.timeout(120_000) })
       if (resp.ok) {
         zipBuffer = await resp.arrayBuffer()
         downloadSource = url
-        console.info(`[install-bun] Downloaded ${(zipBuffer.byteLength / 1024 / 1024).toFixed(1)}MB from ${url}`)
+        getLogger().info({ category: 'install' }, `[install-bun] Downloaded ${(zipBuffer.byteLength / 1024 / 1024).toFixed(1)}MB from ${url}`)
         break
       }
-      console.warn(`[install-bun] HTTP ${resp.status} from ${url}, trying next...`)
+      getLogger().warn({ category: 'install' }, `[install-bun] HTTP ${resp.status} from ${url}, trying next...`)
     } catch (err: any) {
-      console.warn(`[install-bun] Failed to download from ${url}: ${err.message}`)
+      getLogger().warn({ category: 'install' }, `[install-bun] Failed to download from ${url}: ${err.message}`)
     }
   }
 
   if (!zipBuffer) {
     const msg = 'Failed to download Bun from CDN and GitHub'
-    console.error(`[install-bun] ${msg}`)
+    getLogger().error({ category: 'install' }, `[install-bun] ${msg}`)
     return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
   }
 
@@ -283,7 +284,7 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
     const tmpExtractDir = resolve(tmpdir(), `bun-extract-${ts}`)
     const tmpZip = resolve(tmpdir(), `bun-install-${ts}.zip`)
     writeFileSync(tmpZip, Buffer.from(zipBuffer))
-    console.info(`[install-bun] Zip written to ${tmpZip}, extracting...`)
+    getLogger().info({ category: 'install' }, `[install-bun] Zip written to ${tmpZip}, extracting...`)
 
     // Extract into a dedicated temp directory to avoid conflicts
     mkdirSync(tmpExtractDir, { recursive: true })
@@ -303,7 +304,7 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
     const extractedBun = resolve(tmpExtractDir, folderName, `bun${ext}`)
     if (!existsSync(extractedBun)) {
       const msg = `Extracted binary not found at ${extractedBun}`
-      console.error(`[install-bun] ${msg}`)
+      getLogger().error({ category: 'install' }, `[install-bun] ${msg}`)
       return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
     }
 
@@ -312,7 +313,7 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
     if (process.platform !== 'win32') {
       chmodSync(bunPath, 0o755)
     }
-    console.info(`[install-bun] Binary installed to ${bunPath}`)
+    getLogger().info({ category: 'install' }, `[install-bun] Binary installed to ${bunPath}`)
 
     // Clean up temp files
     try {
@@ -324,11 +325,11 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
     resetShellEnvCache()
 
     const msg = `Bun installed to ${bunPath} (from ${downloadSource})`
-    console.info(`[install-bun] ${msg}`)
+    getLogger().info({ category: 'install' }, `[install-bun] ${msg}`)
     return { ok: true, stdout: msg, stderr: '', exitCode: 0 }
   } catch (err: any) {
     const msg = err.message ?? String(err)
-    console.error(`[install-bun] Install failed: ${msg}`)
+    getLogger().error({ category: 'install' }, `[install-bun] Install failed: ${msg}`)
     return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
   }
 }
