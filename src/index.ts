@@ -1,281 +1,58 @@
-// Remove CLAUDECODE env var to prevent Claude Agent SDK from detecting a nested session
-delete process.env.CLAUDECODE
-
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import { loadEnv, getEnv } from './config/index.ts'
-import { initLogger, getLogger } from './logger/index.ts'
-import { initDatabase, createTask, updateTask, deleteTask, getTasks, getTask } from './db/index.ts'
-import { EventBus } from './events/index.ts'
-import { AgentManager, AgentQueue, PromptBuilder, AgentRouter, HooksManager, SecretsManager } from './agent/index.ts'
-import { MessageRouter, ChannelManager } from './channel/index.ts'
-import { SkillsLoader, SkillsWatcher, RegistryManager } from './skills/index.ts'
-import { MemoryManager, MemoryIndexer } from './memory/index.ts'
-import { Scheduler } from './scheduler/index.ts'
-import { IpcWatcher, refreshTasksSnapshot } from './ipc/index.ts'
-import { createApp } from './routes/index.ts'
-import { ensureBunRuntime } from './agent/runtime.ts'
-import { resetShellEnvCache } from './utils/shell-env.ts'
 
-async function main() {
-  // 1. Load environment variables
-  let env: ReturnType<typeof getEnv>
-  try {
-    loadEnv()
-    env = getEnv()
-  } catch (err) {
-    console.error('[STARTUP] Step 1 failed: load env', err)
-    throw err
-  }
+const DEFAULT_PORT = 62601
+const STARTED_AT = new Date().toISOString()
+const SHELL_DISABLED_MESSAGE = 'Gateway shell build: API disabled for runtime verification.'
 
-  // 2. Initialize logger
-  const logger = initLogger()
-  logger.info('YouClaw starting...')
-
-  // 2b. Pre-extract embedded Bun runtime (before any agent code runs)
-  try {
-    const bunRuntimePath = ensureBunRuntime()
-    if (bunRuntimePath) {
-      logger.info({ path: bunRuntimePath }, 'Bun runtime ready (embedded)')
-      resetShellEnvCache()  // Ensure embedded Bun dir is picked up by getShellEnv()
-    } else {
-      logger.info('Using system Bun runtime')
-    }
-  } catch (err) {
-    logger.warn({ err }, '[STARTUP] Step 2b failed: ensure Bun runtime, continuing without embedded runtime')
-  }
-  // 3. Initialize database
-  try {
-    initDatabase()
-    logger.info('Database initialized')
-  } catch (err) {
-    logger.error({ err }, '[STARTUP] Step 3 failed: init database')
-    throw err
-  }
-
-  // 4. Create EventBus
-  const eventBus = new EventBus()
-
-  // 5. Create SkillsLoader and SkillsWatcher
-  let skillsLoader: SkillsLoader
-  try {
-    skillsLoader = new SkillsLoader()
-    logger.info({ count: skillsLoader.loadAllSkills().length }, 'Skills loaded')
-  } catch (err) {
-    logger.error({ err }, '[STARTUP] Step 5 failed: load skills')
-    throw err
-  }
-
-  let agentManagerRef: AgentManager | null = null
-  const skillsWatcher = new SkillsWatcher(skillsLoader, {
-    onReload: (skills) => {
-      logger.info({ count: skills.length }, 'Skills hot-reloaded')
-      agentManagerRef?.syncAllAgentSkills()
+const SHELL_SETTINGS = {
+  activeModel: {
+    provider: 'custom',
+    id: 'gateway-shell',
+  },
+  customModels: [
+    {
+      id: 'gateway-shell',
+      name: 'Gateway Shell',
+      provider: 'custom',
+      apiKey: '',
+      baseUrl: '',
+      modelId: 'gateway-shell',
     },
-  })
-  skillsWatcher.start()
-
-  // 5b. Create RegistryManager
-  const registryManager = new RegistryManager(skillsLoader)
-
-  // 6. Create MemoryManager and MemoryIndexer
-  let memoryManager: MemoryManager
-  try {
-    memoryManager = new MemoryManager()
-    logger.info('Memory manager initialized')
-  } catch (err) {
-    logger.error({ err }, '[STARTUP] Step 6 failed: init memory manager')
-    throw err
-  }
-  let memoryIndexer: MemoryIndexer | null = null
-  try {
-    memoryIndexer = new MemoryIndexer()
-    memoryIndexer.initTable()
-    memoryIndexer.rebuildIndex()
-    logger.info('Memory search index built')
-  } catch (err) {
-    logger.warn({ error: err instanceof Error ? err.message : String(err) }, 'FTS5 index init failed, search unavailable')
-  }
-
-  // 7. Create SecretsManager
-  const secretsManager = new SecretsManager()
-  try {
-    secretsManager.loadFromEnv()
-  } catch (err) {
-    logger.error({ err }, '[STARTUP] Step 7 failed: init secrets manager')
-    throw err
-  }
-
-  // 8. Create HooksManager
-  const hooksManager = new HooksManager()
-
-  // 9. Create PromptBuilder, AgentRouter
-  const promptBuilder = new PromptBuilder(skillsLoader, memoryManager)
-  const agentRouter = new AgentRouter()
-
-  // 10. Create AgentManager (inject all new modules)
-  let agentManager: AgentManager
-  try {
-    agentManager = new AgentManager(
-      eventBus,
-      promptBuilder,
-      hooksManager,
-      agentRouter,
-      secretsManager,
-      skillsLoader,
-      memoryManager,
-    )
-    await agentManager.loadAgents()
-    agentManagerRef = agentManager
-    logger.info({ count: agentManager.getAgents().length }, 'Agents loaded')
-  } catch (err) {
-    logger.error({ err }, '[STARTUP] Step 10 failed: init agent manager / load agents')
-    throw err
-  }
-
-  // 11. Create AgentQueue
-  const agentQueue = new AgentQueue(agentManager)
-
-  // 12. Create MessageRouter (with MemoryManager)
-  const router = new MessageRouter(agentManager, agentQueue, eventBus, memoryManager, skillsLoader)
-
-  // 13. Create ChannelManager and load channels
-  let channelManager: ChannelManager
-  try {
-    channelManager = new ChannelManager(router, (msg) => router.handleInbound(msg), eventBus)
-    await channelManager.seedFromEnv(env)     // Migrate from env on first launch
-    await channelManager.loadFromDatabase()   // Load and connect all enabled channels
-    logger.info('Channels loaded')
-  } catch (err) {
-    logger.error({ err }, '[STARTUP] Step 13 failed: init channel manager')
-    throw err
-  }
-
-  // 14. Create Scheduler and start
-  const scheduler = new Scheduler(agentQueue, agentManager, eventBus)
-  scheduler.start()
-  logger.info('Task scheduler started')
-
-  // 15. Create IPC Watcher and start
-  const ipcWatcher = new IpcWatcher({
-    onScheduleTask: (data) => {
-      const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const nextRun = scheduler.calculateNextRun({
-        schedule_type: data.scheduleType,
-        schedule_value: data.scheduleValue,
-        last_run: null,
-      })
-
-      createTask({
-        id: taskId,
-        agentId: data.agentId,
-        chatId: data.chatId,
-        prompt: data.prompt,
-        scheduleType: data.scheduleType,
-        scheduleValue: data.scheduleValue,
-        nextRun: nextRun ?? new Date().toISOString(),
-        name: data.name,
-        description: data.description,
-        deliveryMode: data.deliveryMode,
-        deliveryTarget: data.deliveryTarget,
-      })
-
-      // Write snapshot
-      refreshSnapshot(data.agentId)
-      logger.info({ taskId, agentId: data.agentId, scheduleType: data.scheduleType }, 'IPC: scheduled task created')
+  ],
+  defaultRegistrySource: 'clawhub',
+  registrySources: {
+    clawhub: {
+      enabled: false,
+      apiBaseUrl: '',
+      downloadUrl: '',
+      token: '',
     },
-    onPauseTask: (taskId) => {
-      const task = getTask(taskId)
-      if (task) {
-        updateTask(taskId, { status: 'paused' })
-        refreshSnapshot(task.agent_id)
-        logger.info({ taskId }, 'IPC: scheduled task paused')
-      } else {
-        logger.warn({ taskId }, 'IPC: pause failed, task not found')
-      }
+    tencent: {
+      enabled: false,
+      indexUrl: '',
+      searchUrl: '',
+      downloadUrl: '',
     },
-    onResumeTask: (taskId) => {
-      const task = getTask(taskId)
-      if (task) {
-        const nextRun = scheduler.calculateNextRun({
-          schedule_type: task.schedule_type,
-          schedule_value: task.schedule_value,
-          last_run: task.last_run,
-        })
-        updateTask(taskId, { status: 'active', nextRun: nextRun ?? new Date().toISOString() })
-        refreshSnapshot(task.agent_id)
-        logger.info({ taskId }, 'IPC: scheduled task resumed')
-      } else {
-        logger.warn({ taskId }, 'IPC: resume failed, task not found')
-      }
-    },
-    onCancelTask: (taskId) => {
-      const task = getTask(taskId)
-      if (task) {
-        deleteTask(taskId)
-        refreshSnapshot(task.agent_id)
-        logger.info({ taskId }, 'IPC: scheduled task cancelled')
-      } else {
-        logger.warn({ taskId }, 'IPC: cancel failed, task not found')
-      }
-    },
-  })
-  ipcWatcher.start()
-  logger.info('IPC Watcher started')
+  },
+  builtinModelId: null,
+} as const
 
-  /** Refresh task snapshot for the specified agent */
-  function refreshSnapshot(agentId: string) {
-    refreshTasksSnapshot(agentId, getTasks)
+function getRuntimeLabel(): string {
+  if (typeof Bun !== 'undefined') {
+    return `bun ${Bun.version}`
   }
+  return `node ${process.versions.node}`
+}
 
-  // 16. Startup memory maintenance: log cleanup + snapshot restore
-  for (const agentConfig of agentManager.getAgents()) {
-    memoryManager.pruneOldLogs(agentConfig.id, 30)
-    memoryManager.restoreFromSnapshot(agentConfig.id)
+function getPort(): number {
+  const parsed = Number.parseInt(process.env.PORT ?? '', 10)
+  if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
+    return parsed
   }
-
-  // 17. Create HTTP server
-  const app = createApp({ agentManager, agentQueue, eventBus, router, channelManager, skillsLoader, registryManager, memoryManager, memoryIndexer, scheduler })
-
-  let server: ReturnType<typeof Bun.serve>
-  try {
-    server = Bun.serve({
-      fetch: app.fetch,
-      port: env.PORT,
-      hostname: '127.0.0.1',  // Listen on localhost only to avoid Windows firewall prompts
-      idleTimeout: 255,       // Max idle timeout (seconds) for SSE/long-running requests
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    // Bun may emit different messages depending on platform:
-    //   "Failed to start server. Is port X in use?" (Windows)
-    //   "address already in use" (Unix)
-    const isPortConflict = msg.includes('address already in use') || msg.includes('Failed to start server')
-    if (isPortConflict) {
-      logger.error({ port: env.PORT }, `Port ${env.PORT} is already in use`)
-      console.error(`[PORT_CONFLICT] Port ${env.PORT} is already in use`)
-      process.exit(1)
-    }
-    throw err
-  }
-
-  logger.info({ port: env.PORT }, `HTTP server started: http://localhost:${env.PORT}`)
-  logger.info('YouClaw ready')
-
-  // 18. Graceful shutdown
-  const shutdown = async () => {
-    logger.info('Shutting down...')
-    await channelManager.disconnectAll()
-    skillsWatcher.stop()
-    ipcWatcher.stop()
-    scheduler.stop()
-    server.stop()
-    process.exit(0)
-  }
-
-  process.on('SIGTERM', shutdown)
-  process.on('SIGINT', shutdown)
+  return DEFAULT_PORT
 }
 
 function writeStartupCrashLog(errorText: string): void {
@@ -284,15 +61,205 @@ function writeStartupCrashLog(errorText: string): void {
       ? resolve(process.env.DATA_DIR)
       : resolve(tmpdir(), 'youclaw-data')
     mkdirSync(baseDir, { recursive: true })
-    const logPath = resolve(baseDir, 'startup-crash.log')
-    const line = `[${new Date().toISOString()}] ${errorText}\n`
-    appendFileSync(logPath, line, 'utf-8')
+    appendFileSync(
+      resolve(baseDir, 'startup-crash.log'),
+      `[${new Date().toISOString()}] ${errorText}\n`,
+      'utf-8',
+    )
   } catch {
-    // best-effort only
+    // Best effort only.
   }
 }
 
+function json(res: ServerResponse, status: number, payload: unknown): void {
+  const body = JSON.stringify(payload)
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.end(body)
+}
+
+function noContent(res: ServerResponse, status = 204): void {
+  res.writeHead(status, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,HEAD,POST,PATCH,PUT,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Cache-Control': 'no-store',
+  })
+  res.end()
+}
+
+function sendSse(req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.write(`event: connected\ndata: ${JSON.stringify({
+    type: 'connected',
+    mode: 'gateway-shell',
+    runtime: getRuntimeLabel(),
+    startedAt: STARTED_AT,
+  })}\n\n`)
+
+  const timer = setInterval(() => {
+    res.write(`: keepalive ${Date.now()}\n\n`)
+  }, 15000)
+
+  req.on('close', () => {
+    clearInterval(timer)
+    res.end()
+  })
+}
+
+function handleDisabledApi(res: ServerResponse, path: string): void {
+  json(res, 503, {
+    error: SHELL_DISABLED_MESSAGE,
+    mode: 'gateway-shell',
+    path,
+    runtime: getRuntimeLabel(),
+  })
+}
+
+function handleRequest(req: IncomingMessage, res: ServerResponse): void {
+  const method = req.method ?? 'GET'
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`)
+  const runtime = getRuntimeLabel()
+
+  if (method === 'OPTIONS') {
+    noContent(res)
+    return
+  }
+
+  if ((method === 'GET' || method === 'HEAD') && url.pathname === '/api/health') {
+    const payload = {
+      ok: true,
+      mode: 'gateway-shell',
+      runtime,
+      pid: process.pid,
+      platform: process.platform,
+      startedAt: STARTED_AT,
+      port: getPort(),
+    }
+    if (method === 'HEAD') {
+      noContent(res, 200)
+      return
+    }
+    json(res, 200, payload)
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/status') {
+    json(res, 200, {
+      uptime: Math.floor(process.uptime()),
+      platform: process.platform,
+      nodeVersion: runtime,
+      agents: { total: 1, active: 1 },
+      telegram: { connected: false },
+      channels: [],
+      database: {
+        path: '(disabled in gateway shell build)',
+        sizeBytes: 0,
+      },
+      startedAt: STARTED_AT,
+    })
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/auth/cloud-status') {
+    json(res, 200, { enabled: false })
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/settings') {
+    json(res, 200, SHELL_SETTINGS)
+    return
+  }
+
+  if (method === 'PATCH' && url.pathname === '/api/settings') {
+    json(res, 200, SHELL_SETTINGS)
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/registry/sources') {
+    json(res, 200, [])
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/git-check') {
+    json(res, 200, { available: true, path: null })
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/agents') {
+    json(res, 200, [
+      {
+        id: 'default',
+        name: `Gateway Shell (${runtime})`,
+        workspaceDir: process.cwd(),
+        status: 'shell',
+        hasConfig: false,
+      },
+    ])
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/chats') {
+    json(res, 200, [])
+    return
+  }
+
+  if (method === 'GET' && url.pathname === '/api/browser-profiles') {
+    json(res, 200, [])
+    return
+  }
+
+  if (method === 'GET' && url.pathname.startsWith('/api/stream/')) {
+    sendSse(req, res)
+    return
+  }
+
+  if (url.pathname.startsWith('/api/')) {
+    handleDisabledApi(res, url.pathname)
+    return
+  }
+
+  json(res, 404, { error: 'Not found' })
+}
+
+async function main(): Promise<void> {
+  const port = getPort()
+  const server = createServer(handleRequest)
+
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    server.once('error', rejectPromise)
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', rejectPromise)
+      resolvePromise()
+    })
+  })
+
+  console.log(`[gateway-shell] runtime=${getRuntimeLabel()} port=${port}`)
+
+  const shutdown = () => {
+    console.log('[gateway-shell] shutting down')
+    server.close(() => process.exit(0))
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+}
+
 main().catch((err) => {
+  if (typeof err === 'object' && err !== null && 'code' in err && err.code === 'EADDRINUSE') {
+    const port = getPort()
+    console.error(`[PORT_CONFLICT] Port ${port} is already in use`)
+    process.exit(1)
+  }
+
   const errorText = err instanceof Error ? err.stack ?? err.message : String(err)
   const context = [
     `PORT=${process.env.PORT ?? '(unset)'}`,
@@ -300,7 +267,8 @@ main().catch((err) => {
     `TEMP=${process.env.TEMP ?? '(unset)'}`,
     `BUN_TMPDIR=${process.env.BUN_TMPDIR ?? '(unset)'}`,
   ].join(' ')
-  console.error('[STARTUP] Fatal error:', errorText)
+
+  console.error('[gateway-shell] fatal error:', errorText)
   writeStartupCrashLog(`[context: ${context}] ${errorText}`)
   process.exit(1)
 })
