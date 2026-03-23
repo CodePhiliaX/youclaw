@@ -236,7 +236,9 @@ function getBunZipTarget(): string | null {
 async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }> {
   const zipName = getBunZipTarget()
   if (!zipName) {
-    return { ok: false, stdout: '', stderr: `Unsupported platform: ${process.platform} ${process.arch}`, exitCode: 1 }
+    const msg = `Unsupported platform: ${process.platform} ${process.arch}`
+    console.error(`[install-bun] ${msg}`)
+    return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
   }
 
   const cdnUrl = `${BUN_CDN_BASE}/${zipName}`
@@ -247,19 +249,24 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
   let downloadSource = ''
   for (const url of [cdnUrl, githubUrl]) {
     try {
+      console.info(`[install-bun] Downloading from ${url}...`)
       const resp = await fetch(url, { signal: AbortSignal.timeout(120_000) })
       if (resp.ok) {
         zipBuffer = await resp.arrayBuffer()
         downloadSource = url
+        console.info(`[install-bun] Downloaded ${(zipBuffer.byteLength / 1024 / 1024).toFixed(1)}MB from ${url}`)
         break
       }
-    } catch {
-      // Try next source
+      console.warn(`[install-bun] HTTP ${resp.status} from ${url}, trying next...`)
+    } catch (err: any) {
+      console.warn(`[install-bun] Failed to download from ${url}: ${err.message}`)
     }
   }
 
   if (!zipBuffer) {
-    return { ok: false, stdout: '', stderr: `Failed to download Bun from CDN and GitHub`, exitCode: 1 }
+    const msg = 'Failed to download Bun from CDN and GitHub'
+    console.error(`[install-bun] ${msg}`)
+    return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
   }
 
   // Determine install directory
@@ -272,26 +279,32 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
     mkdirSync(bunDir, { recursive: true })
 
     // Write zip to temp file and extract
-    const tmpZip = resolve(tmpdir(), `bun-install-${Date.now()}.zip`)
+    const ts = Date.now()
+    const tmpExtractDir = resolve(tmpdir(), `bun-extract-${ts}`)
+    const tmpZip = resolve(tmpdir(), `bun-install-${ts}.zip`)
     writeFileSync(tmpZip, Buffer.from(zipBuffer))
+    console.info(`[install-bun] Zip written to ${tmpZip}, extracting...`)
 
-    // Extract: the zip contains a folder like bun-darwin-aarch64/bun
+    // Extract into a dedicated temp directory to avoid conflicts
+    mkdirSync(tmpExtractDir, { recursive: true })
     const folderName = zipName.replace('.zip', '')
     if (process.platform === 'win32') {
       execSync(
-        `powershell -Command "Expand-Archive -Force '${tmpZip}' '${tmpdir()}'"`,
-        { timeout: 30_000, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
+        `powershell -NoProfile -Command "Expand-Archive -Force -Path '${tmpZip}' -DestinationPath '${tmpExtractDir}'"`,
+        { timeout: 60_000, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
       )
     } else {
-      execSync(`unzip -o "${tmpZip}" -d "${tmpdir()}"`, {
+      execSync(`unzip -o "${tmpZip}" -d "${tmpExtractDir}"`, {
         timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe'],
       })
     }
 
     // Copy binary to ~/.bun/bin/
-    const extractedBun = resolve(tmpdir(), folderName, `bun${ext}`)
+    const extractedBun = resolve(tmpExtractDir, folderName, `bun${ext}`)
     if (!existsSync(extractedBun)) {
-      return { ok: false, stdout: '', stderr: `Extracted binary not found at ${extractedBun}`, exitCode: 1 }
+      const msg = `Extracted binary not found at ${extractedBun}`
+      console.error(`[install-bun] ${msg}`)
+      return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
     }
 
     const { copyFileSync } = await import('node:fs')
@@ -299,24 +312,24 @@ async function installBun(): Promise<{ ok: boolean; stdout: string; stderr: stri
     if (process.platform !== 'win32') {
       chmodSync(bunPath, 0o755)
     }
+    console.info(`[install-bun] Binary installed to ${bunPath}`)
 
     // Clean up temp files
     try {
       const { rmSync } = await import('node:fs')
       rmSync(tmpZip, { force: true })
-      rmSync(resolve(tmpdir(), folderName), { recursive: true, force: true })
+      rmSync(tmpExtractDir, { recursive: true, force: true })
     } catch { /* ignore cleanup errors */ }
 
     resetShellEnvCache()
 
-    return {
-      ok: true,
-      stdout: `Bun installed to ${bunPath} (from ${downloadSource})`,
-      stderr: '',
-      exitCode: 0,
-    }
+    const msg = `Bun installed to ${bunPath} (from ${downloadSource})`
+    console.info(`[install-bun] ${msg}`)
+    return { ok: true, stdout: msg, stderr: '', exitCode: 0 }
   } catch (err: any) {
-    return { ok: false, stdout: '', stderr: err.message ?? String(err), exitCode: 1 }
+    const msg = err.message ?? String(err)
+    console.error(`[install-bun] Install failed: ${msg}`)
+    return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
   }
 }
 
