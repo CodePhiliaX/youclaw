@@ -34,13 +34,11 @@ concurrency:
 env:
   CARGO_HOME: ${{ github.workspace }}/.cargo
   IS_BETA: ${{ contains(github.ref_name, 'beta') }}
-  BUILD_SCOPE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_scope || 'full-release' }}
-  SIDECAR_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sidecar_runtime || 'bun' }}
 
 jobs:
   # ── Stable releases are created first to avoid race condition ──
   create-release:
-    if: ${{ env.BUILD_SCOPE == 'full-release' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_scope == 'full-release' }}
     runs-on: ubuntu-latest
     name: Create Release
     steps:
@@ -65,7 +63,7 @@ jobs:
 
   # ── macOS builds ──
   build-mac:
-    if: ${{ env.BUILD_SCOPE == 'full-release' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_scope == 'full-release' }}
     needs: create-release
     strategy:
       fail-fast: false
@@ -205,7 +203,7 @@ jobs:
 
   # ── Windows build ──
   build-windows:
-    if: ${{ env.BUILD_SCOPE == 'full-release' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_scope == 'full-release' }}
     needs: create-release
     runs-on: windows-latest
     name: Build Windows x64
@@ -309,9 +307,9 @@ jobs:
           status: ${{ job.status }}
 
   build-windows-runtime-check:
-    if: ${{ github.event_name == 'workflow_dispatch' && env.BUILD_SCOPE == 'windows-runtime-check' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_scope == 'windows-runtime-check' }}
     runs-on: windows-latest
-    name: Runtime Check Windows x64 (${{ env.SIDECAR_RUNTIME }})
+    name: Runtime Check Windows x64 (${{ github.event.inputs.sidecar_runtime }})
 
     steps:
       - name: Checkout
@@ -321,7 +319,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Setup Node.js 22
-        if: env.SIDECAR_RUNTIME == 'node22'
+        if: ${{ github.event.inputs.sidecar_runtime == 'node22' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -341,7 +339,7 @@ jobs:
       - name: Build sidecar
         shell: bash
         env:
-          YOUCLAW_SIDECAR_RUNTIME: ${{ env.SIDECAR_RUNTIME }}
+          YOUCLAW_SIDECAR_RUNTIME: ${{ github.event.inputs.sidecar_runtime }}
           YOUCLAW_WEBSITE_URL: ${{ secrets.YOUCLAW_WEBSITE_URL }}
           YOUCLAW_API_URL: ${{ secrets.YOUCLAW_API_URL }}
           YOUCLAW_BUILTIN_API_URL: ${{ secrets.YOUCLAW_BUILTIN_API_URL }}
@@ -349,7 +347,7 @@ jobs:
         run: bun run build:sidecar
 
       - name: Embed Bun runtime for Bun builds
-        if: env.SIDECAR_RUNTIME == 'bun'
+        if: ${{ github.event.inputs.sidecar_runtime == 'bun' }}
         shell: bash
         run: |
           mkdir -p src-tauri/resources/bun-runtime
@@ -362,7 +360,7 @@ jobs:
           echo "Embedded Bun runtime: $(ls -la src-tauri/resources/bun-runtime/bun.exe)"
 
       - name: Ensure Bun runtime directory exists
-        if: env.SIDECAR_RUNTIME == 'node22'
+        if: ${{ github.event.inputs.sidecar_runtime == 'node22' }}
         shell: bash
         run: mkdir -p src-tauri/resources/bun-runtime
 
@@ -386,7 +384,7 @@ jobs:
       - name: Upload runtime-check artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-check-${{ github.ref_name }}-${{ env.SIDECAR_RUNTIME }}-windows-x64
+          name: runtime-check-${{ github.ref_name }}-${{ github.event.inputs.sidecar_runtime }}-windows-x64
           if-no-files-found: error
           path: |
             src-tauri/bin/youclaw-server-x86_64-pc-windows-msvc.exe
@@ -394,7 +392,7 @@ jobs:
 
   # ── Windows code signing (self-hosted runner with USB token) ──
   sign-windows:
-    if: ${{ env.BUILD_SCOPE == 'full-release' && !contains(github.ref_name, 'beta') }}
+    if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.build_scope == 'full-release') && !contains(github.ref_name, 'beta') }}
     needs: build-windows
     runs-on: self-hosted
     name: Sign Windows exe
@@ -568,7 +566,7 @@ jobs:
 
   # ── Upload to OSS & generate updater manifest ──
   updater:
-    if: ${{ env.BUILD_SCOPE == 'full-release' && !contains(github.ref_name, 'beta') && always() && (needs.build-mac.result == 'success' && needs.sign-windows.result == 'success') }}
+    if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.build_scope == 'full-release') && !contains(github.ref_name, 'beta') && always() && (needs.build-mac.result == 'success' && needs.sign-windows.result == 'success') }}
     needs: [build-mac, sign-windows]
     runs-on: ubuntu-latest
     name: Upload to OSS & generate latest.json
