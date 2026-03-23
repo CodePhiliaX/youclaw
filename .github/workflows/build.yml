@@ -100,43 +100,23 @@ jobs:
           oss-endpoint: ${{ secrets.OSS_ENDPOINT }}
           cdn-base-url: ${{ secrets.CDN_BASE_URL }}
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Build sidecar
         env:
+          YOUCLAW_SIDECAR_RUNTIME: node22
           YOUCLAW_WEBSITE_URL: ${{ secrets.YOUCLAW_WEBSITE_URL }}
           YOUCLAW_API_URL: ${{ secrets.YOUCLAW_API_URL }}
           YOUCLAW_BUILTIN_API_URL: ${{ secrets.YOUCLAW_BUILTIN_API_URL }}
           YOUCLAW_BUILTIN_AUTH_TOKEN: ${{ secrets.YOUCLAW_BUILTIN_AUTH_TOKEN }}
-        run: |
-          mkdir -p src-tauri/bin
-          node -e "
-            const e = process.env;
-            const c = {};
-            for (const k of ['YOUCLAW_WEBSITE_URL','YOUCLAW_API_URL','YOUCLAW_BUILTIN_API_URL','YOUCLAW_BUILTIN_AUTH_TOKEN']) {
-              if (e[k]) c[k] = e[k];
-            }
-            require('fs').writeFileSync('src/config/build-constants.ts',
-              'export const BUILD_CONSTANTS: Record<string, string> = ' + JSON.stringify(c, null, 2) + '\n');
-            console.log('build-constants.ts:', Object.keys(c));
-          "
-          bun build --compile --target=${{ matrix.bun_target }} src/index.ts --outfile src-tauri/bin/youclaw-server-${{ matrix.sidecar_suffix }}
+        run: bun run build:sidecar
 
-      - name: Embed Bun runtime for target platform
+      - name: Ensure Bun runtime directory exists
         run: |
           mkdir -p src-tauri/resources/bun-runtime
-          BUN_VERSION=$(bun --version)
-          # Map matrix arch to Bun download identifier
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            BUN_ARCH="aarch64"
-          else
-            BUN_ARCH="x64"
-          fi
-          BUN_URL="https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-darwin-${BUN_ARCH}.zip"
-          echo "Downloading Bun ${BUN_VERSION} for darwin-${BUN_ARCH}: ${BUN_URL}"
-          curl -fsSL -o /tmp/bun.zip "${BUN_URL}"
-          unzip -o /tmp/bun.zip -d /tmp/bun-extract
-          cp /tmp/bun-extract/bun-darwin-${BUN_ARCH}/bun src-tauri/resources/bun-runtime/bun
-          chmod 755 src-tauri/resources/bun-runtime/bun
-          echo "Embedded Bun runtime: $(file src-tauri/resources/bun-runtime/bun)"
 
       - name: Ensure git installer resource directory exists
         run: |
@@ -221,38 +201,24 @@ jobs:
           oss-endpoint: ${{ secrets.OSS_ENDPOINT }}
           cdn-base-url: ${{ secrets.CDN_BASE_URL }}
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Build sidecar
         shell: bash
         env:
+          YOUCLAW_SIDECAR_RUNTIME: node22
           YOUCLAW_WEBSITE_URL: ${{ secrets.YOUCLAW_WEBSITE_URL }}
           YOUCLAW_API_URL: ${{ secrets.YOUCLAW_API_URL }}
           YOUCLAW_BUILTIN_API_URL: ${{ secrets.YOUCLAW_BUILTIN_API_URL }}
           YOUCLAW_BUILTIN_AUTH_TOKEN: ${{ secrets.YOUCLAW_BUILTIN_AUTH_TOKEN }}
-        run: |
-          mkdir -p src-tauri/bin
-          node -e "
-            const e = process.env;
-            const c = {};
-            for (const k of ['YOUCLAW_WEBSITE_URL','YOUCLAW_API_URL','YOUCLAW_BUILTIN_API_URL','YOUCLAW_BUILTIN_AUTH_TOKEN']) {
-              if (e[k]) c[k] = e[k];
-            }
-            require('fs').writeFileSync('src/config/build-constants.ts',
-              'export const BUILD_CONSTANTS: Record<string, string> = ' + JSON.stringify(c, null, 2) + '\n');
-            console.log('build-constants.ts:', Object.keys(c));
-          "
-          bun build --compile --target=bun-windows-x64 src/index.ts --outfile src-tauri/bin/youclaw-server-x86_64-pc-windows-msvc.exe
+        run: bun run build:sidecar
 
-      - name: Embed Bun runtime for Windows
+      - name: Ensure Bun runtime directory exists
         shell: bash
-        run: |
-          mkdir -p src-tauri/resources/bun-runtime
-          BUN_VERSION=$(bun --version)
-          BUN_URL="https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-windows-x64.zip"
-          echo "Downloading Bun ${BUN_VERSION} for windows-x64: ${BUN_URL}"
-          curl -fsSL -o /tmp/bun.zip "${BUN_URL}"
-          unzip -o /tmp/bun.zip -d /tmp/bun-extract
-          cp /tmp/bun-extract/bun-windows-x64/bun.exe src-tauri/resources/bun-runtime/bun.exe
-          echo "Embedded Bun runtime: $(ls -la src-tauri/resources/bun-runtime/bun.exe)"
+        run: mkdir -p src-tauri/resources/bun-runtime
 
       - name: Download Git installer for bundling
         shell: bash
