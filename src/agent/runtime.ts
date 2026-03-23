@@ -13,6 +13,7 @@ import type { AgentCompiler } from './compiler.ts'
 import type { HooksManager } from './hooks.ts'
 import { resolveMcpServers } from './mcp-utils.ts'
 import { createBuiltinMcpServer } from './builtin-mcp.ts'
+import { createMessageMcpServer } from './message-mcp.ts'
 import { buildParsedDocumentsPrompt, createDocumentMcpServer, ingestDocumentAttachments } from './document-mcp.ts'
 import { preprocessAttachments } from './document-converter.ts'
 import { abortRegistry } from './abort-registry.ts'
@@ -816,6 +817,7 @@ export class AgentRuntime {
     }
     // Always inject built-in minimax MCP (runs in-process, no external dependency)
     mcpServers['minimax'] = createBuiltinMcpServer()
+    mcpServers['message'] = createMessageMcpServer(chatId)
     mcpServers['document'] = createDocumentMcpServer(chatId)
     queryOptions.mcpServers = mcpServers as Record<string, import('@anthropic-ai/claude-agent-sdk').McpServerConfig>
 
