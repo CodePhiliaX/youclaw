@@ -63,7 +63,8 @@ export class PromptBuilder {
       parts.push(
         `## Browser Tools\n` +
         `This chat is connected to browser profile "${context.browserProfileId}". ` +
-        `Use the built-in \`mcp__browser__*\` tools for browser interaction instead of composing external browser CLI commands.`
+        `Use the built-in \`mcp__browser__*\` tools for browser interaction instead of composing external browser CLI commands. ` +
+        `Do NOT invoke the legacy \`agent-browser\` skill and do NOT run \`agent-browser\` from Bash when these browser tools are available.`
       )
     }
 

@@ -1,13 +1,120 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
-import { createServer } from 'node:net'
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
+import { createServer, connect as connectTcp } from 'node:net'
+import { connect as connectTls } from 'node:tls'
 import type { BrowserProfile } from './types.ts'
 import { DEFAULT_CDP_PORT_END, DEFAULT_CDP_PORT_START } from './types.ts'
+import { withNoProxyForCdpUrl } from './cdp-proxy-bypass.ts'
 
 export interface ChromeLaunchResult {
   child: ChildProcess
   executablePath: string
   launchArgs: string[]
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]'
+}
+
+function parseHttpJsonResponse(raw: Buffer): unknown {
+  const delimiter = Buffer.from('\r\n\r\n')
+  const headerEnd = raw.indexOf(delimiter)
+  if (headerEnd === -1) {
+    throw new Error('Invalid HTTP response from CDP endpoint')
+  }
+
+  const headerText = raw.subarray(0, headerEnd).toString('utf8')
+  const body = raw.subarray(headerEnd + delimiter.length).toString('utf8')
+  const [statusLine] = headerText.split('\r\n')
+  const match = statusLine?.match(/^HTTP\/1\.[01]\s+(\d{3})/)
+  const statusCode = Number(match?.[1] ?? '500')
+  if (statusCode >= 400) {
+    throw new Error(`CDP probe failed: ${statusCode}`)
+  }
+
+  return body ? JSON.parse(body) : {}
+}
+
+function readJsonDirect(url: URL): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const port = Number(url.port || (url.protocol === 'https:' ? '443' : '80'))
+    const hostname = url.hostname === '[::1]' ? '::1' : url.hostname
+    const path = `${url.pathname}${url.search}`
+    const socket = url.protocol === 'https:'
+      ? connectTls({ host: hostname, port, servername: hostname === '::1' ? undefined : hostname })
+      : connectTcp({ host: hostname, port })
+
+    const chunks: Buffer[] = []
+    let resolved = false
+    const finalize = () => {
+      if (resolved) return
+      try {
+        const raw = Buffer.concat(chunks)
+        const delimiter = Buffer.from('\r\n\r\n')
+        const headerEnd = raw.indexOf(delimiter)
+        if (headerEnd === -1) return
+        const headerText = raw.subarray(0, headerEnd).toString('utf8')
+        const contentLengthMatch = headerText.match(/^Content-Length:\s*(\d+)/im)
+        if (contentLengthMatch) {
+          const expectedLength = Number(contentLengthMatch[1] ?? '0')
+          const bodyLength = raw.length - headerEnd - delimiter.length
+          if (bodyLength < expectedLength) return
+        }
+        resolved = true
+        resolve(parseHttpJsonResponse(raw))
+        socket.destroy()
+      } catch (err) {
+        resolved = true
+        reject(err)
+        socket.destroy()
+      }
+    }
+    socket.on('connect', () => {
+      socket.write(`GET ${path || '/'} HTTP/1.1\r\nHost: ${url.host}\r\nConnection: close\r\n\r\n`)
+    })
+    socket.on('data', (chunk) => {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+      finalize()
+    })
+    socket.on('end', finalize)
+    socket.on('error', (err) => {
+      if (!resolved) {
+        reject(err)
+      }
+    })
+  })
+}
+
+function readJson(url: URL): Promise<unknown> {
+  if (isLoopbackHost(url.hostname)) {
+    return readJsonDirect(url)
+  }
+
+  const requestImpl = url.protocol === 'https:' ? httpsRequest : httpRequest
+  return new Promise((resolve, reject) => {
+    const req = requestImpl(url, { method: 'GET' }, (res) => {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk) => {
+        body += chunk
+      })
+      res.on('end', () => {
+        if ((res.statusCode ?? 500) >= 400) {
+          reject(new Error(`CDP probe failed: ${res.statusCode} ${res.statusMessage ?? ''}`.trim()))
+          return
+        }
+        try {
+          resolve(body ? JSON.parse(body) : {})
+        } catch (err) {
+          reject(err)
+        }
+      })
+    })
+    req.on('error', reject)
+    req.end()
+  })
 }
 
 export function detectChromeExecutable(): string | null {
@@ -99,7 +206,7 @@ export function spawnManagedChrome(profile: BrowserProfile): ChromeLaunchResult 
   mkdirSync(profile.userDataDir, { recursive: true })
   const launchArgs = buildChromeLaunchArgs(profile)
   const child = spawn(executablePath, launchArgs, {
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: process.env,
   })
 
@@ -124,15 +231,20 @@ export function resolveCdpHttpBase(profile: BrowserProfile): string {
 
 export async function probeCdpVersion(profile: BrowserProfile): Promise<{ webSocketDebuggerUrl: string | null; browser: string | null }> {
   const base = resolveCdpHttpBase(profile)
-  const res = await fetch(`${base}/json/version`)
-  if (!res.ok) {
-    throw new Error(`CDP probe failed: ${res.status} ${res.statusText}`)
-  }
-  const body = await res.json() as { webSocketDebuggerUrl?: string; Browser?: string }
+  const body = await withNoProxyForCdpUrl(base, async () =>
+    readJson(new URL('/json/version', `${base}/`)) as Promise<{ webSocketDebuggerUrl?: string; Browser?: string }>,
+  )
   return {
     webSocketDebuggerUrl: body.webSocketDebuggerUrl ?? null,
     browser: body.Browser ?? null,
   }
+}
+
+export async function requestCdpJson<T>(profile: BrowserProfile, pathname: string): Promise<T> {
+  const base = resolveCdpHttpBase(profile)
+  return withNoProxyForCdpUrl(base, async () =>
+    readJson(new URL(pathname, `${base}/`)) as Promise<T>,
+  )
 }
 
 export async function waitForCdpReady(profile: BrowserProfile, timeoutMs = 15_000): Promise<{ webSocketDebuggerUrl: string | null; browser: string | null }> {

@@ -20,7 +20,7 @@ import {
   detectChromeExecutable,
   findAvailablePort,
   probeCdpVersion,
-  resolveCdpHttpBase,
+  requestCdpJson,
   spawnManagedChrome,
   waitForCdpReady,
 } from './chrome.ts'
@@ -151,12 +151,7 @@ export class BrowserManager {
     const profile = getBrowserProfile(id)
     if (!profile) throw new Error('Browser profile not found')
     await this.reconcileProfileRuntime(profile)
-    const base = resolveCdpHttpBase(profile)
-    const res = await fetch(`${base}/json/list`)
-    if (!res.ok) {
-      throw new Error(`Failed to list tabs: ${res.status} ${res.statusText}`)
-    }
-    const tabs = await res.json() as Array<{ id: string; title?: string; url?: string; type?: string }>
+    const tabs = await requestCdpJson<Array<{ id: string; title?: string; url?: string; type?: string }>>(profile, '/json/list')
     return tabs.map((tab) => ({
       id: tab.id,
       title: tab.title,
@@ -242,6 +237,12 @@ export class BrowserManager {
       child = launched.child
       this.managedProcesses.set(id, child)
       this.attachLifecycle(id, child)
+      child.stderr?.on('data', (chunk: Buffer | string) => {
+        const text = String(chunk).trim()
+        if (text) {
+          this.logger.warn({ profileId: id, stderr: text.slice(0, 1000), category: 'browser' }, 'Managed browser stderr')
+        }
+      })
 
       const meta = await waitForCdpReady(nextProfile)
       return upsertBrowserProfileRuntime(id, {
@@ -306,8 +307,24 @@ export class BrowserManager {
   }
 
   private attachLifecycle(profileId: string, child: ChildProcess): void {
-    child.once('exit', (code, signal) => {
+    child.once('exit', async (code, signal) => {
       this.managedProcesses.delete(profileId)
+      const profile = getBrowserProfile(profileId)
+      if (profile) {
+        try {
+          const meta = await probeCdpVersion(profile)
+          upsertBrowserProfileRuntime(profileId, {
+            status: 'running',
+            pid: null,
+            wsEndpoint: meta.webSocketDebuggerUrl,
+            lastError: null,
+            heartbeatAt: new Date().toISOString(),
+          })
+          this.logger.info({ profileId, code, signal, category: 'browser' }, 'Browser launcher exited but CDP endpoint remains reachable')
+          return
+        } catch {}
+      }
+
       const message = code === 0 || signal === 'SIGTERM'
         ? null
         : `browser exited unexpectedly${code !== null ? ` (code ${code})` : ''}${signal ? ` (${signal})` : ''}`
