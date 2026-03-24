@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Skill } from '@/api/client'
-import { configureSkillEnv, installSkill } from '@/api/client'
+import { configureSkillEnv, installSkill, installTool } from '@/api/client'
 import { useI18n } from '@/i18n'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -293,6 +293,86 @@ export function SectionTitle({ icon, children }: { icon: ReactNode; children: Re
       {icon}
       {children}
     </h3>
+  )
+}
+
+/**
+ * Map executable names (from skill dependencies) to env tool names (from /api/install-tool).
+ * If a dependency can be installed via the environment module, we show a one-click install button.
+ */
+const DEP_TO_ENV_TOOL: Record<string, string> = {
+  uv: 'uv',
+  uvx: 'uv',       // uvx is part of the uv package
+  python: 'python',
+  python3: 'python',
+  bun: 'bun',
+  git: 'git',
+  node: 'node',
+}
+
+/**
+ * Resolve which env tools are needed for a list of missing skill dependencies.
+ * Returns deduplicated list of env tool names that can be installed via /api/install-tool.
+ */
+export function resolveEnvTools(missingDeps: string[]): string[] {
+  const tools = new Set<string>()
+  for (const dep of missingDeps) {
+    const tool = DEP_TO_ENV_TOOL[dep]
+    if (tool) tools.add(tool)
+  }
+  return Array.from(tools)
+}
+
+/**
+ * One-click install button for env-managed tools (uv, bun, git, python).
+ * Reuses the /api/install-tool endpoint with CDN download support.
+ */
+export function EnvToolInstallButton({ tool, onInstalled }: { tool: string; onInstalled: () => void }) {
+  const { t } = useI18n()
+  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const [status, setStatus] = useState<'idle' | 'installing'>('idle')
+
+  const handleInstall = async () => {
+    setStatus('installing')
+    try {
+      const result = await installTool(tool)
+      if (result.ok) {
+        showGlobalBubble({ message: `${tool} ${t.envSetup.installSuccess}` })
+        onInstalled()
+      } else {
+        showGlobalBubble({
+          type: 'error',
+          message: result.stderr || t.envSetup.installFailed,
+          durationMs: 6000,
+        })
+      }
+    } catch (err) {
+      showGlobalBubble({
+        type: 'error',
+        message: err instanceof Error ? err.message : t.envSetup.installFailed,
+        durationMs: 6000,
+      })
+    }
+    setStatus('idle')
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="default"
+      onClick={() => void handleInstall()}
+      disabled={status === 'installing'}
+      className="gap-1.5"
+    >
+      {status === 'installing' ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Download className="h-3.5 w-3.5" />
+      )}
+      {status === 'installing'
+        ? t.envSetup.installing.replace('{name}', tool)
+        : `${t.envSetup.installButton} ${tool}`}
+    </Button>
   )
 }
 

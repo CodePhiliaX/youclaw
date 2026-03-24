@@ -32,11 +32,13 @@ import {
 } from 'lucide-react'
 import {
   EnvConfigRow,
+  EnvToolInstallButton,
   InfoRow,
   InstallButton,
   InstallSectionHeader,
   SectionTitle,
   SkillListItem,
+  resolveEnvTools,
 } from './shared'
 import type { InstalledSkillListItem } from './skills-view-types'
 
@@ -254,14 +256,32 @@ function InstalledSkillDetail({
           </div>
         )}
 
-        {skill.eligibilityDetail?.dependencies.passed === false && skill.frontmatter.install && Object.keys(skill.frontmatter.install).length > 0 && (
-          <div className="pt-2 border-t border-border/50 space-y-2">
-            <InstallSectionHeader onRefresh={onReloadSkills}>{t.skills.install}</InstallSectionHeader>
-            {Object.entries(skill.frontmatter.install).map(([method, command]) => (
-              <InstallButton key={method} method={method} command={command} skillName={skill.name} onInstalled={onReloadSkills} />
-            ))}
-          </div>
-        )}
+        {skill.eligibilityDetail?.dependencies.passed === false && (() => {
+          const missingDeps = skill.eligibilityDetail?.dependencies.results.filter(r => !r.found).map(r => r.name) ?? []
+          const envTools = resolveEnvTools(missingDeps)
+          const hasManualInstall = skill.frontmatter.install && Object.keys(skill.frontmatter.install).length > 0
+          return (envTools.length > 0 || hasManualInstall) ? (
+            <div className="pt-2 border-t border-border/50 space-y-2">
+              <InstallSectionHeader onRefresh={onReloadSkills}>{t.skills.install}</InstallSectionHeader>
+              {/* One-click install via environment module (CDN download) */}
+              {envTools.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {envTools.map((tool) => (
+                    <EnvToolInstallButton key={tool} tool={tool} onInstalled={onReloadSkills} />
+                  ))}
+                </div>
+              )}
+              {/* Fallback: manual install commands from skill frontmatter */}
+              {hasManualInstall && (
+                <div className="space-y-1">
+                  {Object.entries(skill.frontmatter.install!).map(([method, command]) => (
+                    <InstallButton key={method} method={method} command={command} skillName={skill.name} onInstalled={onReloadSkills} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null
+        })()}
       </div>
 
       <div className="grid gap-4">
