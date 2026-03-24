@@ -6,6 +6,7 @@ import { getLogger } from '../logger/index.ts'
 import type { SkillsLoader } from '../skills/index.ts'
 import type { MemoryManager } from '../memory/index.ts'
 import type { AgentConfig } from './types.ts'
+import type { BrowserDriver } from '../browser/index.ts'
 
 // Workspace MD file loading order
 const WORKSPACE_FILES = ['SOUL.md', 'USER.md', 'AGENT.md', 'TOOLS.md'] as const
@@ -23,7 +24,17 @@ export class PromptBuilder {
   build(
     workspaceDir: string,
     config: AgentConfig,
-    context?: { agentId: string; chatId: string; requestedSkills?: string[]; browserProfileId?: string },
+    context?: {
+      agentId: string
+      chatId: string
+      requestedSkills?: string[]
+      browserProfileId?: string
+      browserProfile?: {
+        id: string
+        driver: BrowserDriver
+        userDataDir: string | null
+      }
+    },
   ): string {
     const parts: string[] = []
 
@@ -61,11 +72,19 @@ export class PromptBuilder {
     }
 
     if (context?.browserProfileId) {
+      const fallbackHint = context.browserProfile?.driver === 'managed' && context.browserProfile.userDataDir
+        ? `\nIf you must use legacy \`agent-browser\` for unsupported operations, reuse this managed profile:\n` +
+          '```bash\n' +
+          `agent-browser --session ${context.browserProfile.id} --profile ${context.browserProfile.userDataDir} <command>\n` +
+          '```'
+        : '\nIf you must use legacy `agent-browser` for unsupported operations, prefer the built-in browser MCP tools first because legacy commands may not share the same browser runtime state.'
+
       parts.push(
         `## Browser Tools\n` +
         `This chat is connected to browser profile "${context.browserProfileId}". ` +
-        `Use the built-in \`mcp__browser__*\` tools for browser interaction instead of composing external browser CLI commands. ` +
-        `Do NOT invoke the legacy \`agent-browser\` skill and do NOT run \`agent-browser\` from Bash when these browser tools are available.`
+        `Prefer the built-in \`mcp__browser__*\` tools for common browser interaction: status, list_tabs, open_tab, navigate, snapshot, screenshot, click, type, press_key, and close_tab.\n` +
+        `Use the legacy \`agent-browser\` skill only when you need capabilities not yet covered by the built-in browser tools, such as interactive element refs, explicit waits, select/check, get text, PDF export, visual diff, or state import/export.` +
+        fallbackHint
       )
     }
 

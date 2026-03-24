@@ -13,9 +13,9 @@ describe('browser runtime wiring', () => {
     const promptBuilder = read('src/agent/prompt-builder.ts')
 
     expect(promptBuilder).toContain('mcp__browser__*')
-    expect(promptBuilder).not.toContain('agent-browser --session')
-    expect(promptBuilder).not.toContain('agent-browser install chrome')
-    expect(promptBuilder).toContain('Do NOT invoke the legacy \\`agent-browser\\` skill')
+    expect(promptBuilder).toContain('Prefer the built-in \\`mcp__browser__*\\` tools')
+    expect(promptBuilder).toContain('Use the legacy \\`agent-browser\\` skill only when you need capabilities not yet covered')
+    expect(promptBuilder).toContain('agent-browser --session ${context.browserProfile.id} --profile ${context.browserProfile.userDataDir} <command>')
   })
 
   test('agent runtime injects the built-in browser MCP server', () => {
@@ -23,6 +23,6 @@ describe('browser runtime wiring', () => {
 
     expect(runtime).toContain("mcpServers['browser'] = createBrowserMcpServer({")
     expect(runtime).toContain('resolveProfileSelection(browserProfileId, this.config.browser?.defaultProfile ?? this.config.browserProfile)')
-    expect(runtime).toContain('getLegacyBrowserToolBlockReason')
+    expect(runtime).toContain('browserProfile: resolvedBrowserProfile')
   })
 })

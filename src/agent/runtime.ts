@@ -752,7 +752,19 @@ export class AgentRuntime {
     const systemPrompt = this.promptBuilder.build(
       this.config.workspaceDir,
       this.config,
-      { agentId, chatId, requestedSkills, browserProfileId: effectiveBrowserProfileId },
+      {
+        agentId,
+        chatId,
+        requestedSkills,
+        browserProfileId: effectiveBrowserProfileId,
+        browserProfile: resolvedBrowserProfile
+          ? {
+              id: resolvedBrowserProfile.id,
+              driver: resolvedBrowserProfile.driver,
+              userDataDir: resolvedBrowserProfile.userDataDir,
+            }
+          : undefined,
+      },
     )
 
     // Build query options
@@ -1011,7 +1023,7 @@ export class AgentRuntime {
           fullText += text
         }, (sid) => {
           sessionId = sid
-        }, effectiveBrowserProfileId)
+        })
       }
     } catch (err) {
       // User-initiated abort — return partial text gracefully instead of throwing
@@ -1094,7 +1106,6 @@ export class AgentRuntime {
     chatId: string,
     appendText: (text: string) => void,
     setSessionId: (sid: string) => void,
-    activeBrowserProfileId?: string | null,
   ): Promise<void> {
     switch (message.type) {
       case 'assistant': {
@@ -1109,11 +1120,6 @@ export class AgentRuntime {
             appendText(block.text)
             this.emitStream(agentId, chatId, block.text)
           } else if (block.type === 'tool_use') {
-            const legacyBrowserBlockReason = this.getLegacyBrowserToolBlockReason(block.name, block.input, activeBrowserProfileId)
-            if (legacyBrowserBlockReason) {
-              this.emitStream(agentId, chatId, `\n[Tool ${block.name} blocked: ${legacyBrowserBlockReason}]\n`)
-              continue
-            }
             // pre_tool_use hook
             if (this.hooksManager) {
               const preCtx = await this.hooksManager.execute(agentId, 'pre_tool_use', {
@@ -1153,26 +1159,6 @@ export class AgentRuntime {
         break
       }
     }
-  }
-
-  private getLegacyBrowserToolBlockReason(
-    toolName: string,
-    input: unknown,
-    activeBrowserProfileId?: string | null,
-  ): string | null {
-    if (!activeBrowserProfileId) return null
-    if (!input || typeof input !== 'object') return null
-
-    const payload = input as Record<string, unknown>
-    if (toolName === 'Skill' && payload.skill === 'agent-browser') {
-      return `browser profile "${activeBrowserProfileId}" is active; use mcp__browser__* tools instead of the legacy agent-browser skill`
-    }
-
-    if (toolName === 'Bash' && typeof payload.command === 'string' && /\bagent-browser\b/.test(payload.command)) {
-      return `browser profile "${activeBrowserProfileId}" is active; do not run legacy agent-browser CLI commands`
-    }
-
-    return null
   }
 
   /**
