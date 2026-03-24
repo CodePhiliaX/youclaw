@@ -211,11 +211,11 @@ export function SkillImportPanel({
                     aria-invalid={field.key === primaryFieldKey && Boolean(primaryFieldError)}
                     className={cn(
                       'rounded-xl',
-                      field.key === primaryFieldKey && primaryFieldError && 'border-red-500/70 focus-visible:ring-red-500/60',
+                      field.key === primaryFieldKey && primaryFieldError && 'border-destructive/70 focus-visible:ring-destructive/60',
                     )}
                   />
                   {field.key === primaryFieldKey && primaryFieldError && (
-                    <div className="text-sm text-red-400">{primaryFieldError}</div>
+                    <div className="text-sm text-destructive">{primaryFieldError}</div>
                   )}
                 </label>
               ))}
@@ -226,7 +226,7 @@ export function SkillImportPanel({
                 variant="outline"
                 onClick={() => void handleProbe()}
                 disabled={!canSubmit}
-                className="disabled:border-border disabled:bg-black disabled:text-muted-foreground disabled:opacity-100"
+                className="disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-100"
               >
                 {actionStatus === 'probing' ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.skills.importInspect}</>
@@ -237,7 +237,7 @@ export function SkillImportPanel({
               <Button
                 onClick={() => void handleImport()}
                 disabled={!canSubmit}
-                className="disabled:border disabled:border-border disabled:bg-black disabled:text-muted-foreground disabled:opacity-100"
+                className="disabled:border disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-100"
               >
                 {actionStatus === 'importing' ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.skills.importing}</>
@@ -272,7 +272,7 @@ export function SkillImportPanel({
           )}
 
           {actionError && (
-            <div className="whitespace-pre-wrap rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            <div className="whitespace-pre-wrap rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {actionError}
             </div>
           )}

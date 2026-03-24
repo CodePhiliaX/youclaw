@@ -78,7 +78,7 @@ export function InstalledSkillsView({
             <DropdownMenuContent side="right" align="start" sideOffset={8} className="w-56">
               <DropdownMenuItem className="cursor-pointer" onSelect={onCreateSkill}>
                 <Plus className="h-4 w-4" />
-                {t.skills.newSkill}
+                {t.skills.customSkill}
               </DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer" onSelect={() => onImportSkill('raw-url')}>
                 <Link2 className="h-4 w-4" />

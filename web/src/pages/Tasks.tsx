@@ -701,13 +701,15 @@ function OnceDateTimePicker({
       <PopoverContent
         data-testid="task-once-popover"
         align="end"
-        side="bottom"
-        sideOffset={8}
-        avoidCollisions={false}
-        className="h-[312px] w-[412px] p-0 overflow-hidden"
+        side="top"
+        sideOffset={10}
+        alignOffset={4}
+        collisionPadding={16}
+        sticky="partial"
+        className="w-[412px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border-border/80 bg-background/95 p-0 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/90"
       >
-        <div className="flex h-full">
-          <div className="w-[268px] shrink-0 border-r border-border p-2.5">
+        <div className="grid h-[312px] max-h-[calc(100vh-2rem)] grid-cols-[minmax(0,1fr)_144px] overflow-hidden">
+          <div className="min-w-0 border-r border-border p-2.5">
             <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
               <CalendarDays className="h-4 w-4" />
               <span>{t.tasks.runAt}</span>
@@ -754,7 +756,7 @@ function OnceDateTimePicker({
             />
           </div>
 
-          <div className="flex w-[144px] flex-col bg-accent/10 p-3">
+          <div className="flex min-w-0 flex-col bg-accent/10 p-3">
             <div className="grid grid-cols-2 gap-2">
               <WheelPicker
                 label={t.tasks.hour}
