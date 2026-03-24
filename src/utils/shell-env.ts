@@ -59,7 +59,14 @@ export function getShellEnv(): NodeJS.ProcessEnv {
 
   const extras = candidates.filter((p) => existsSync(p))
   if (extras.length > 0) {
-    env.PATH = [env.PATH, ...extras].filter(Boolean).join(SEP)
+    // Windows env vars are case-insensitive but Node.js env object is case-sensitive.
+    // The system may use 'Path' instead of 'PATH'. Update both to ensure 'where' picks it up.
+    const currentPath = env.PATH || env.Path || ''
+    const newPath = [currentPath, ...extras].filter(Boolean).join(SEP)
+    env.PATH = newPath
+    if (isWindows) {
+      env.Path = newPath
+    }
   }
 
   cachedEnv = env
@@ -69,13 +76,33 @@ export function getShellEnv(): NodeJS.ProcessEnv {
 /**
  * Cross-platform executable lookup using the enhanced PATH.
  * Returns the resolved path or null if not found.
+ *
+ * First probes well-known directories directly (fast, no subprocess),
+ * then falls back to system 'where'/'which' command.
  */
 export function which(cmd: string): string | null {
+  const env = getShellEnv()
+  const pathStr = env.PATH || env.Path || ''
+  const ext = isWindows ? '.exe' : ''
+
+  // Fast path: directly check each PATH directory for the executable
+  for (const dir of pathStr.split(SEP)) {
+    if (!dir) continue
+    const fullPath = resolve(dir, cmd + ext)
+    if (existsSync(fullPath)) return fullPath
+    // On Windows, also try without .exe (cmd might already include it)
+    if (isWindows && !cmd.includes('.')) {
+      const withoutExt = resolve(dir, cmd)
+      if (existsSync(withoutExt)) return withoutExt
+    }
+  }
+
+  // Fallback: use system which/where command
   try {
     const bin = isWindows ? 'where' : 'which'
     return execSync(`${bin} ${cmd}`, {
       encoding: 'utf-8',
-      env: getShellEnv(),
+      env,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     }).trim().split('\n')[0] || null
