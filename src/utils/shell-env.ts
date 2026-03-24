@@ -44,12 +44,14 @@ export function getShellEnv(): NodeJS.ProcessEnv {
   const candidates = isWindows
     ? [
         resolve(home, '.bun/bin'),
+        resolve(home, '.local/bin'),
         resolve(home, '.cargo/bin'),
         resolve(home, 'scoop/shims'),
         ...getWindowsGitPaths(),
       ]
     : [
         resolve(home, '.bun/bin'),
+        resolve(home, '.local/bin'),
         resolve(home, '.cargo/bin'),
         '/usr/local/bin',
         '/opt/homebrew/bin',
