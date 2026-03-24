@@ -22,11 +22,26 @@ describe('browser runtime wiring', () => {
     expect(promptBuilder).toContain('For sensitive or high-impact actions, prepare the page and then ask the user to review, confirm, or complete the final step manually')
   })
 
+  test('prompt builder can explicitly disable all browser usage for a chat', () => {
+    const promptBuilder = read('src/agent/prompt-builder.ts')
+
+    expect(promptBuilder).toContain('Browser use is explicitly disabled for this chat.')
+    expect(promptBuilder).toContain('Do NOT use the built-in \\`mcp__browser__*\\` tools.')
+    expect(promptBuilder).toContain('Do NOT invoke the legacy \\`agent-browser\\` skill')
+    expect(promptBuilder).toContain('can be enabled by switching this chat from "None" to a browser profile')
+    expect(promptBuilder).toContain('reply with a short, user-facing explanation')
+  })
+
   test('agent runtime injects the built-in browser MCP server', () => {
     const runtime = read('src/agent/runtime.ts')
 
     expect(runtime).toContain("mcpServers['browser'] = createBrowserMcpServer({")
     expect(runtime).toContain('resolveProfileSelection(browserProfileId, this.config.browser?.defaultProfile ?? this.config.browserProfile)')
     expect(runtime).toContain('browserProfile: resolvedBrowserProfile')
+    expect(runtime).toContain('const browserDisabled = browserProfileId === null')
+    expect(runtime).toContain('getDisabledBrowserToolBlockReason')
+    expect(runtime).toContain('const browserDisabledNotice = { sent: false }')
+    expect(runtime).toContain('buildDisabledBrowserUserMessage')
+    expect(runtime).toContain('This chat is currently set to "No browser".')
   })
 })

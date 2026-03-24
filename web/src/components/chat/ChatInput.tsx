@@ -116,7 +116,7 @@ export function ChatInput() {
 
     send(
       text,
-      selectedProfileId ?? undefined,
+      selectedProfileId,
       attachments.length > 0 ? attachments : undefined,
     );
   };

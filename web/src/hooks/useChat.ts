@@ -34,7 +34,7 @@ export function useChatActions(agentId: string) {
   const send = useCallback(
     async (
       prompt: string,
-      browserProfileId?: string,
+      browserProfileId?: string | null,
       attachments?: Attachment[],
     ) => {
       const store = useChatStore.getState()

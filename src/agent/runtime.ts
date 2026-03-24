@@ -741,7 +741,7 @@ export class AgentRuntime {
     existingSessionId: string | null,
     model: string,
     requestedSkills?: string[],
-    browserProfileId?: string,
+    browserProfileId?: string | null,
     attachments?: Array<{ filename: string; mediaType: string; filePath: string }>,
   ): Promise<{ fullText: string; sessionId: string; aborted: boolean }> {
     const logger = getLogger()
@@ -749,8 +749,11 @@ export class AgentRuntime {
     abortRegistry.register(chatId, abortController)
     let fullText = ''
     let sessionId = existingSessionId ?? ''
+    const browserDisabled = browserProfileId === null
     const resolvedBrowserProfile = this.browserManager
-      ? this.browserManager.resolveProfileSelection(browserProfileId, this.config.browser?.defaultProfile ?? this.config.browserProfile)
+      ? (browserDisabled
+          ? null
+          : this.browserManager.resolveProfileSelection(browserProfileId, this.config.browser?.defaultProfile ?? this.config.browserProfile))
       : null
     const effectiveBrowserProfileId = resolvedBrowserProfile?.id
 
@@ -763,6 +766,7 @@ export class AgentRuntime {
         chatId,
         requestedSkills,
         browserProfileId: effectiveBrowserProfileId,
+        browserDisabled,
         browserProfile: resolvedBrowserProfile
           ? {
               id: resolvedBrowserProfile.id,
@@ -968,6 +972,7 @@ export class AgentRuntime {
     let firstMessageReceived = false
     let firstResponseLogged = false
     let turnCount = 0
+    const browserDisabledNotice = { sent: false }
 
     // 60s timeout for first message — if SDK subprocess hangs, fail fast
     const FIRST_MESSAGE_TIMEOUT_MS = 60_000
@@ -1029,7 +1034,7 @@ export class AgentRuntime {
           fullText += text
         }, (sid) => {
           sessionId = sid
-        })
+        }, browserDisabled, browserDisabledNotice)
       }
     } catch (err) {
       // User-initiated abort — return partial text gracefully instead of throwing
@@ -1112,6 +1117,8 @@ export class AgentRuntime {
     chatId: string,
     appendText: (text: string) => void,
     setSessionId: (sid: string) => void,
+    browserDisabled = false,
+    browserDisabledNotice: { sent: boolean },
   ): Promise<void> {
     switch (message.type) {
       case 'assistant': {
@@ -1126,6 +1133,16 @@ export class AgentRuntime {
             appendText(block.text)
             this.emitStream(agentId, chatId, block.text)
           } else if (block.type === 'tool_use') {
+            const disabledBrowserReason = this.getDisabledBrowserToolBlockReason(block.name, block.input, browserDisabled)
+            if (disabledBrowserReason) {
+              if (!browserDisabledNotice.sent) {
+                browserDisabledNotice.sent = true
+                const message = this.buildDisabledBrowserUserMessage(disabledBrowserReason)
+                appendText(message)
+                this.emitStream(agentId, chatId, message)
+              }
+              continue
+            }
             // pre_tool_use hook
             if (this.hooksManager) {
               const preCtx = await this.hooksManager.execute(agentId, 'pre_tool_use', {
@@ -1165,6 +1182,26 @@ export class AgentRuntime {
         break
       }
     }
+  }
+
+  private getDisabledBrowserToolBlockReason(toolName: string, input: unknown, browserDisabled: boolean): string | null {
+    if (!browserDisabled) return null
+    if (!input || typeof input !== 'object') return null
+
+    const payload = input as Record<string, unknown>
+    if (toolName === 'Skill' && payload.skill === 'agent-browser') {
+      return 'If this task is blocked by login, CAPTCHA, or site verification, ask the user to switch the chat browser setting from "None" to a browser profile and retry.'
+    }
+
+    if (toolName === 'Bash' && typeof payload.command === 'string' && /\bagent-browser\b/.test(payload.command)) {
+      return 'If this task is blocked by login, CAPTCHA, or site verification, ask the user to switch the chat browser setting from "None" to a browser profile and retry.'
+    }
+
+    return null
+  }
+
+  private buildDisabledBrowserUserMessage(reason: string): string {
+    return `This chat is currently set to "No browser". ${reason}`
   }
 
   /**

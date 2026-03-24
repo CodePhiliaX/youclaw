@@ -24,7 +24,7 @@ export async function sendMessage(
   agentId: string,
   prompt: string,
   chatId?: string,
-  browserProfileId?: string,
+  browserProfileId?: string | null,
   attachments?: Attachment[],
   messageId?: string,
 ) {

@@ -99,7 +99,7 @@ export function createMessagesRoutes(agentManager: AgentManager, agentQueue: Age
       chatId: z.string().optional(),
       messageId: z.string().optional(),
       skills: z.array(z.string()).optional(),
-      browserProfileId: z.string().optional(),
+      browserProfileId: z.string().nullable().optional(),
       attachments: z.array(AttachmentSchema).max(MAX_FILES).optional(),
     })
 
