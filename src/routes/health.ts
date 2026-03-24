@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { z } from 'zod/v4'
 import { which, resetShellEnvCache, getShellEnv } from '../utils/shell-env.ts'
 import { getLogger } from '../logger/index.ts'
-import { BUN_CDN_BASE, BUN_GITHUB_BASE, GIT_CDN_URL } from '../config/tools.ts'
+import { BUN_CDN_BASE, BUN_GITHUB_BASE, GIT_CDN_URL, UV_CDN_BASE, UV_GITHUB_BASE } from '../config/tools.ts'
 
 const health = new Hono()
 
@@ -206,9 +206,9 @@ health.get('/env-check', (c) => {
   return c.json({ platform, dependencies })
 })
 
-// POST /api/install-tool — install a system tool (bun, git, node)
+// POST /api/install-tool — install a system tool
 const installToolSchema = z.object({
-  tool: z.enum(['bun', 'git', 'node']),
+  tool: z.enum(['bun', 'git', 'node', 'uv', 'python']),
 })
 
 
@@ -427,6 +427,156 @@ async function installGitWindows(): Promise<{ ok: boolean; stdout: string; stder
   }
 }
 
+/**
+ * Get the uv archive filename for the current platform.
+ */
+function getUvArchiveTarget(): { name: string; format: 'tar.gz' | 'zip' } | null {
+  const arch = process.arch
+  if (process.platform === 'darwin') {
+    return arch === 'arm64'
+      ? { name: 'uv-aarch64-apple-darwin.tar.gz', format: 'tar.gz' }
+      : { name: 'uv-x86_64-apple-darwin.tar.gz', format: 'tar.gz' }
+  }
+  if (process.platform === 'win32') {
+    return { name: 'uv-x86_64-pc-windows-msvc.zip', format: 'zip' }
+  }
+  if (process.platform === 'linux') {
+    return arch === 'arm64'
+      ? { name: 'uv-aarch64-unknown-linux-gnu.tar.gz', format: 'tar.gz' }
+      : { name: 'uv-x86_64-unknown-linux-gnu.tar.gz', format: 'tar.gz' }
+  }
+  return null
+}
+
+/**
+ * Download uv from CDN (with GitHub fallback), extract to ~/.local/bin/.
+ */
+async function installUv(): Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }> {
+  const logger = getLogger()
+  const target = getUvArchiveTarget()
+  if (!target) {
+    const msg = `Unsupported platform: ${process.platform} ${process.arch}`
+    logger.error({ category: 'install' }, `[install-uv] ${msg}`)
+    return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
+  }
+
+  const cdnUrl = `${UV_CDN_BASE}/${target.name}`
+  const githubUrl = `${UV_GITHUB_BASE}/${target.name}`
+
+  // Download: try CDN first, fallback to GitHub
+  let archiveBuffer: ArrayBuffer | null = null
+  let downloadSource = ''
+  for (const url of [cdnUrl, githubUrl]) {
+    try {
+      logger.info({ category: 'install' }, `[install-uv] Downloading from ${url}...`)
+      const resp = await fetch(url, { signal: AbortSignal.timeout(120_000) })
+      if (resp.ok) {
+        archiveBuffer = await resp.arrayBuffer()
+        downloadSource = url
+        logger.info({ category: 'install' }, `[install-uv] Downloaded ${(archiveBuffer.byteLength / 1024 / 1024).toFixed(1)}MB from ${url}`)
+        break
+      }
+      logger.warn({ category: 'install' }, `[install-uv] HTTP ${resp.status} from ${url}, trying next...`)
+    } catch (err: any) {
+      logger.warn({ category: 'install' }, `[install-uv] Failed to download from ${url}: ${err.message}`)
+    }
+  }
+
+  if (!archiveBuffer) {
+    const msg = 'Failed to download uv from CDN and GitHub'
+    logger.error({ category: 'install' }, `[install-uv] ${msg}`)
+    return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
+  }
+
+  const home = process.env.HOME || process.env.USERPROFILE || ''
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  // Install to ~/.local/bin/ (standard location for uv)
+  const binDir = process.platform === 'win32'
+    ? resolve(home, '.local', 'bin')
+    : resolve(home, '.local', 'bin')
+  const uvPath = resolve(binDir, `uv${ext}`)
+  const uvxPath = resolve(binDir, `uvx${ext}`)
+
+  try {
+    mkdirSync(binDir, { recursive: true })
+
+    const ts = Date.now()
+    const tmpExtractDir = resolve(tmpdir(), `uv-extract-${ts}`)
+    mkdirSync(tmpExtractDir, { recursive: true })
+
+    if (target.format === 'zip') {
+      // Windows: zip archive
+      const tmpZip = resolve(tmpdir(), `uv-install-${ts}.zip`)
+      writeFileSync(tmpZip, Buffer.from(archiveBuffer))
+      logger.info({ category: 'install' }, `[install-uv] Extracting zip...`)
+      execSync(
+        `powershell -NoProfile -Command "Expand-Archive -Force -Path '${tmpZip}' -DestinationPath '${tmpExtractDir}'"`,
+        { timeout: 60_000, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
+      )
+      try { const { rmSync } = await import('node:fs'); rmSync(tmpZip, { force: true }) } catch {}
+    } else {
+      // macOS/Linux: tar.gz archive
+      const tmpTar = resolve(tmpdir(), `uv-install-${ts}.tar.gz`)
+      writeFileSync(tmpTar, Buffer.from(archiveBuffer))
+      logger.info({ category: 'install' }, `[install-uv] Extracting tar.gz...`)
+      execSync(`tar -xzf "${tmpTar}" -C "${tmpExtractDir}"`, {
+        timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      try { const { rmSync } = await import('node:fs'); rmSync(tmpTar, { force: true }) } catch {}
+    }
+
+    // Find uv binary in extracted directory (may be in a subfolder)
+    const folderName = target.name.replace('.tar.gz', '').replace('.zip', '')
+    const candidates = [
+      resolve(tmpExtractDir, folderName, `uv${ext}`),
+      resolve(tmpExtractDir, `uv${ext}`),
+    ]
+    let extractedUv: string | null = null
+    for (const c of candidates) {
+      if (existsSync(c)) { extractedUv = c; break }
+    }
+    if (!extractedUv) {
+      const msg = `uv binary not found in extracted archive`
+      logger.error({ category: 'install' }, `[install-uv] ${msg}`)
+      return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
+    }
+
+    // Copy uv binary
+    const { copyFileSync } = await import('node:fs')
+    copyFileSync(extractedUv, uvPath)
+    if (process.platform !== 'win32') {
+      chmodSync(uvPath, 0o755)
+    }
+    logger.info({ category: 'install' }, `[install-uv] uv installed to ${uvPath}`)
+
+    // Also copy uvx if present
+    const extractedUvx = resolve(extractedUv, '..', `uvx${ext}`)
+    if (existsSync(extractedUvx)) {
+      copyFileSync(extractedUvx, uvxPath)
+      if (process.platform !== 'win32') {
+        chmodSync(uvxPath, 0o755)
+      }
+      logger.info({ category: 'install' }, `[install-uv] uvx installed to ${uvxPath}`)
+    }
+
+    // Clean up
+    try {
+      const { rmSync } = await import('node:fs')
+      rmSync(tmpExtractDir, { recursive: true, force: true })
+    } catch {}
+
+    resetShellEnvCache()
+
+    const msg = `uv installed to ${uvPath} (from ${downloadSource})`
+    logger.info({ category: 'install' }, `[install-uv] ${msg}`)
+    return { ok: true, stdout: msg, stderr: '', exitCode: 0 }
+  } catch (err: any) {
+    const msg = err.message ?? String(err)
+    logger.error({ category: 'install' }, `[install-uv] Install failed: ${msg}`)
+    return { ok: false, stdout: '', stderr: msg, exitCode: 1 }
+  }
+}
+
 health.post('/install-tool', async (c) => {
   const body = await c.req.json()
   const parsed = installToolSchema.safeParse(body)
@@ -442,6 +592,44 @@ health.post('/install-tool', async (c) => {
   if (tool === 'bun') {
     const result = await installBun()
     return c.json(result)
+  }
+
+  // uv: download from CDN and extract
+  if (tool === 'uv') {
+    const result = await installUv()
+    return c.json(result)
+  }
+
+  // Python: install via uv (uv must be installed first)
+  if (tool === 'python') {
+    const logger = getLogger()
+    const uvPath = which('uv')
+    if (!uvPath) {
+      const msg = 'uv is not installed. Please install uv first, then install Python.'
+      logger.warn({ category: 'install' }, `[install-python] ${msg}`)
+      return c.json({ ok: false, stdout: '', stderr: msg, exitCode: 1 })
+    }
+    logger.info({ category: 'install' }, `[install-python] Installing Python via uv...`)
+    let stdout = ''
+    let stderr = ''
+    let exitCode = 0
+    try {
+      stdout = execSync(`"${uvPath}" python install`, {
+        encoding: 'utf-8',
+        timeout: 300_000,
+        windowsHide: true,
+        env: getShellEnv(),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      logger.info({ category: 'install' }, `[install-python] Python installed successfully via uv`)
+    } catch (err: any) {
+      stdout = err.stdout ?? ''
+      stderr = err.stderr ?? ''
+      exitCode = err.status ?? 1
+      logger.error({ category: 'install', exitCode, stderr }, `[install-python] Failed`)
+    }
+    resetShellEnvCache()
+    return c.json({ ok: exitCode === 0, stdout, stderr, exitCode })
   }
 
   // Git on Windows: download from CDN and run silent install

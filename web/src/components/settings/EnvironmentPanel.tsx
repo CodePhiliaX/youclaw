@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useI18n } from '@/i18n'
+import { useAppStore } from '@/stores/app'
 import { checkEnv, installTool, type DependencyStatus } from '@/api/client'
 import { CheckCircle2, XCircle, RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function EnvironmentPanel() {
   const { t } = useI18n()
+  const showGlobalBubble = useAppStore((s) => s.showGlobalBubble)
   const [dependencies, setDependencies] = useState<DependencyStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [installingTool, setInstallingTool] = useState<string | null>(null)
@@ -22,8 +24,15 @@ export function EnvironmentPanel() {
   const handleInstall = async (tool: string) => {
     setInstallingTool(tool)
     try {
-      await installTool(tool)
-    } catch { /* ignore */ }
+      const result = await installTool(tool)
+      if (result.ok) {
+        showGlobalBubble({ message: `${tool} ${t.envSetup.installSuccess}`, type: 'success' })
+      } else {
+        showGlobalBubble({ message: result.stderr || t.envSetup.installFailed, type: 'error', durationMs: 6000 })
+      }
+    } catch (err: any) {
+      showGlobalBubble({ message: err.message || t.envSetup.installFailed, type: 'error', durationMs: 6000 })
+    }
     setInstallingTool(null)
     await refresh()
   }

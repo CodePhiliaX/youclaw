@@ -32,6 +32,10 @@ const appConfig = {
       version: '2.53.0.2',
       windowsFileName: 'Git-2.53.0.2-64-bit.exe.zip',
     },
+    uv: {
+      version: '0.7.12',
+      githubReleaseBase: 'https://github.com/astral-sh/uv/releases/download',
+    },
   },
 } as const
 
