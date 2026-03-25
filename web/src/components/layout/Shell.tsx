@@ -48,7 +48,13 @@ export function Shell({ children }: { children: ReactNode }) {
             </main>
           </div>
         </div>
-        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
+        {settingsOpen && (
+          <SettingsDialog
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+            initialTab={settingsTab}
+          />
+        )}
       </ChatProvider>
     </PlatformContext.Provider>
   )
