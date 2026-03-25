@@ -125,3 +125,73 @@ body {
 .custom-scrollbar .dark ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.5 0 0 / 0.35);
 }
+
+@keyframes sidebar-invitation-sheen {
+  0%, 18% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0;
+  }
+
+  28% {
+    opacity: 0.45;
+  }
+
+  48% {
+    transform: translateX(260%) skewX(-18deg);
+    opacity: 0.1;
+  }
+
+  100% {
+    transform: translateX(260%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes sidebar-invitation-glow {
+  0%, 100% {
+    transform: translateY(-50%) scale(0.92);
+    opacity: 0.24;
+  }
+
+  50% {
+    transform: translateY(-50%) scale(1.08);
+    opacity: 0.42;
+  }
+}
+
+.sidebar-invitation-card {
+  isolation: isolate;
+}
+
+.sidebar-invitation-card::before {
+  content: '';
+  position: absolute;
+  inset: -6px auto -6px -24px;
+  width: 56px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 0.04) 30%, oklch(1 0 0 / 0.18) 50%, transparent 100%);
+  filter: blur(8px);
+  pointer-events: none;
+  animation: sidebar-invitation-sheen 5.6s ease-in-out infinite;
+}
+
+.sidebar-invitation-card::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -22px;
+  width: 84px;
+  height: 84px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--primary) 0%, transparent 68%);
+  filter: blur(16px);
+  pointer-events: none;
+  animation: sidebar-invitation-glow 4.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-invitation-card::before,
+  .sidebar-invitation-card::after {
+    animation: none;
+  }
+}

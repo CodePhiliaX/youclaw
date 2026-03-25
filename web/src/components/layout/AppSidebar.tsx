@@ -14,6 +14,8 @@ import {
   BookOpen,
   User,
   Puzzle,
+  Gift,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
@@ -82,7 +84,7 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
           "shrink-0 flex flex-col overflow-hidden",
           "bg-muted/30 border-r",
           "border-[var(--subtle-border)]",
-          "transition-[width] duration-200 ease-[var(--ease-soft)]",
+          "transition-[width] duration-300 ease-[var(--ease-soft)]",
           isCollapsed ? "w-[52px]" : "w-[220px]",
         )}
         aria-expanded={!isCollapsed}
@@ -192,8 +194,53 @@ export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
         {/* Spacer — draggable for window movement */}
         <div className="flex-1" {...drag} />
 
-        {/* Bottom: user avatar popup menu */}
-        <div className="border-t border-[var(--subtle-border)] py-2 px-1.5">
+        {/* Bottom actions */}
+        <div className="border-t border-[var(--subtle-border)] py-2 px-1.5 space-y-2">
+          <button
+            type="button"
+            onClick={() => onOpenSettings("invitation")}
+            className={cn(
+              "relative flex w-full items-center overflow-hidden text-left",
+              "transition-[background-color,border-color] duration-300 ease-[var(--ease-soft)]",
+              isCollapsed
+                ? "h-10 justify-center rounded-[10px] border border-transparent bg-transparent px-0.5 text-primary hover:bg-[var(--surface-hover)]"
+                : "sidebar-invitation-card h-14 justify-start rounded-[14px] border border-primary/15 bg-gradient-to-br from-primary/10 via-background to-amber-500/8 px-3",
+            )}
+            aria-label={t.sidebar.invitationReward}
+            title={t.sidebar.invitationReward}
+          >
+            <div className={cn(
+              "relative z-[1] flex w-full items-center",
+              isCollapsed ? "justify-center" : "justify-start",
+            )}>
+              <Gift className={cn(
+                "shrink-0",
+                isCollapsed ? "h-[18px] w-[18px]" : "h-[18px] w-[18px] text-primary",
+              )} />
+              <div
+                className={cn(
+                  "min-w-0 overflow-hidden transition-[max-width,opacity,transform,margin] duration-300 ease-[var(--ease-soft)]",
+                  isCollapsed ? "ml-0 max-w-0 translate-x-1.5 opacity-0" : "ml-2.5 max-w-[134px] translate-x-0 opacity-100",
+                )}
+              >
+                <p className="truncate text-[12px] font-medium leading-[1.1] text-foreground">
+                  {t.sidebar.invitationTitle}
+                </p>
+                <p className="mt-1 truncate text-[11px] font-medium leading-none text-muted-foreground">
+                  {t.sidebar.invitationSubtitle}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "overflow-hidden transition-[max-width,opacity,transform,margin] duration-300 ease-[var(--ease-soft)]",
+                  isCollapsed ? "ml-0 max-w-0 translate-x-1 opacity-0" : "ml-auto max-w-4 translate-x-0 opacity-70",
+                )}
+              >
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          </button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

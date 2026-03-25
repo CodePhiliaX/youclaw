@@ -39,6 +39,9 @@ export const zh: Translations = {
     newChat: '新建对话',
     search: '搜索对话...',
     more: '更多',
+    invitationReward: '与好友分享YouClaw 各得500积分',
+    invitationTitle: '与好友分享YouClaw',
+    invitationSubtitle: '各得500积分',
   },
   chat: {
     newChat: '新对话',
