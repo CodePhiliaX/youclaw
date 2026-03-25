@@ -1037,9 +1037,16 @@ export interface CustomModelDTO {
   modelId: string
 }
 
+export const ActiveModelProvider = {
+  Builtin: 'builtin',
+  Custom: 'custom',
+} as const
+
+export type ActiveModelProvider = typeof ActiveModelProvider[keyof typeof ActiveModelProvider]
+
 export interface SettingsDTO {
   activeModel: {
-    provider: 'builtin' | 'custom' | 'cloud'
+    provider: ActiveModelProvider
     id?: string
   }
   customModels: CustomModelDTO[]

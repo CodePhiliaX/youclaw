@@ -180,4 +180,44 @@ describe('settings routes', () => {
     expect(body.modelId).toBe('MiniMax-M2.5-highspeed')
     expect(body.baseUrl).toBe('https://proxy.example.com')
   })
+
+  test('PATCH /settings rewrites legacy cloud activeModel provider to builtin', async () => {
+    const db = getDatabase()
+    db.run(
+      'INSERT INTO kv_state (key, value) VALUES (?, ?)',
+      ['settings', JSON.stringify({
+        activeModel: { provider: 'cloud' },
+      })],
+    )
+
+    const app = createSettingsRoutes()
+    const res = await app.request('/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        registrySources: {
+          tencent: {
+            enabled: false,
+          },
+        },
+      }),
+    })
+    const body = await res.json() as {
+      activeModel: { provider: string }
+      registrySources: { tencent: { enabled: boolean } }
+    }
+
+    expect(res.status).toBe(200)
+    expect(body.activeModel.provider).toBe('builtin')
+    expect(body.registrySources.tencent.enabled).toBe(false)
+
+    const stored = getDatabase()
+      .query('SELECT value FROM kv_state WHERE key = ?')
+      .get('settings') as { value: string }
+    const parsed = JSON.parse(stored.value) as {
+      activeModel: { provider: string }
+    }
+
+    expect(parsed.activeModel.provider).toBe('builtin')
+  })
 })

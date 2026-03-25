@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import {
+  ActiveModelProvider,
   checkEnv,
   authLogout,
   getAuthLoginUrl,
@@ -313,10 +314,10 @@ export const useAppRuntimeStore = create<AppRuntimeState>((set, get) => ({
 
       const { provider } = settings.activeModel
 
-      if (!enabled && (provider === 'builtin' || provider === 'cloud')) {
-        await updateSettings({ activeModel: { provider: 'custom' } })
+      if (!enabled && provider === ActiveModelProvider.Builtin) {
+        await updateSettings({ activeModel: { provider: ActiveModelProvider.Custom } })
         set({ modelReady: settings.customModels.length > 0 })
-      } else if (provider === 'custom') {
+      } else if (provider === ActiveModelProvider.Custom) {
         const model = settings.activeModel.id
           ? settings.customModels.find((m) => m.id === settings.activeModel.id)
           : settings.customModels[0]

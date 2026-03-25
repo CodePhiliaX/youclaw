@@ -1,6 +1,7 @@
 import { getDatabase } from '../db/index.ts'
 import { getEnv } from '../config/index.ts'
 import {
+  ActiveModelProvider,
   RegistrySourceSettingSchema,
   SettingsSchema,
   type Settings,
@@ -79,7 +80,7 @@ export function getActiveModelConfig(): { apiKey: string; baseUrl: string; model
   const settings = getSettings()
   const env = getEnv()
 
-  if (settings.activeModel.provider === 'builtin' || settings.activeModel.provider === 'cloud') {
+  if (settings.activeModel.provider === ActiveModelProvider.Builtin) {
     const builtinUrl = env.YOUCLAW_BUILTIN_API_URL
     const builtinToken = env.YOUCLAW_BUILTIN_AUTH_TOKEN
     if (builtinUrl && builtinToken) {
@@ -101,7 +102,7 @@ export function getActiveModelConfig(): { apiKey: string; baseUrl: string; model
     return null
   }
 
-  if (settings.activeModel.provider === 'custom' && settings.activeModel.id) {
+  if (settings.activeModel.provider === ActiveModelProvider.Custom && settings.activeModel.id) {
     const model = settings.customModels.find((m: CustomModel) => m.id === settings.activeModel.id)
     if (model) {
       return {

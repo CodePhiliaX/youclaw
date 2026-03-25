@@ -4,7 +4,7 @@ import { parse as parseYaml } from 'yaml'
 import { getPaths } from '../config/index.ts'
 import { getEnv } from '../config/env.ts'
 import { getSettings } from '../settings/manager.ts'
-import type { CustomModel } from '../settings/schema.ts'
+import { ActiveModelProvider, type CustomModel } from '../settings/schema.ts'
 
 export interface RuntimeModelConfig {
   apiKey: string
@@ -106,7 +106,7 @@ function resolveCustomRuntimeModel(explicitModelId?: string): RuntimeModelResolu
   const models = settings.customModels
 
   if (!target) {
-    if (settings.activeModel.provider === 'custom' && settings.activeModel.id) {
+    if (settings.activeModel.provider === ActiveModelProvider.Custom && settings.activeModel.id) {
       const active = models.find((model) => model.id === settings.activeModel.id)
       if (active) {
         return {
@@ -193,11 +193,11 @@ export function resolveRuntimeModelConfig(params?: {
     }
   }
 
-  if (settings.activeModel.provider === 'builtin' || settings.activeModel.provider === 'cloud') {
+  if (settings.activeModel.provider === ActiveModelProvider.Builtin) {
     return resolveBuiltinRuntimeModel()
   }
 
-  if (settings.activeModel.provider === 'custom') {
+  if (settings.activeModel.provider === ActiveModelProvider.Custom) {
     return resolveCustomRuntimeModel()
   }
 

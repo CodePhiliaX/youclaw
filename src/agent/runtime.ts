@@ -55,6 +55,21 @@ type RuntimeAttachment = {
   size?: number
 }
 
+export function buildEmptyAssistantResponseErrorMessage(modelConfig: {
+  provider: string
+  modelId: string
+  baseUrl: string
+}): string {
+  const parts = [
+    `Model returned an empty response (provider=${modelConfig.provider}, model=${modelConfig.modelId})`,
+  ]
+  if (modelConfig.baseUrl) {
+    parts.push(`baseUrl=${modelConfig.baseUrl}`)
+  }
+  parts.push('Please check MODEL_PROVIDER, MODEL_ID, MODEL_BASE_URL, and model authentication.')
+  return parts.join('. ')
+}
+
 export class AgentRuntime {
   private config: AgentConfig
   private eventBus: EventBus
@@ -182,6 +197,10 @@ export class AgentRuntime {
         if (postCtx.modifiedPayload?.fullText) {
           finalText = postCtx.modifiedPayload.fullText as string
         }
+      }
+
+      if (!finalText.trim()) {
+        throw new Error(buildEmptyAssistantResponseErrorMessage(modelConfig))
       }
 
       this.eventBus.emit({
@@ -616,6 +635,12 @@ export class AgentRuntime {
 
     if (/request interrupted by user/i.test(raw) || /request was aborted/i.test(normalizedRaw)) {
       return { message: normalizedRaw, errorCode: ErrorCode.UNKNOWN }
+    }
+    if (/returned an empty response|empty response/i.test(raw) || /returned an empty response|empty response/i.test(normalizedRaw)) {
+      return {
+        message: 'Model returned an empty response. Please check MODEL_PROVIDER, MODEL_ID, MODEL_BASE_URL, and model authentication.',
+        errorCode: ErrorCode.MODEL_CONNECTION_FAILED,
+      }
     }
     if (/insufficient|credit|balance|quota|insufficient_credits/i.test(raw) || /insufficient|credit|balance|quota|insufficient_credits/i.test(normalizedRaw)) {
       return { message: 'Insufficient credits or API quota. Please check your account balance.', errorCode: ErrorCode.INSUFFICIENT_CREDITS }

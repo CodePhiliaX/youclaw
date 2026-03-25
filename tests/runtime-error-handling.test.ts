@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { SessionEntry } from '@mariozechner/pi-coding-agent'
-import { getLatestAssistantError, normalizeAssistantErrorMessage } from '../src/agent/runtime.ts'
+import { buildEmptyAssistantResponseErrorMessage, getLatestAssistantError, normalizeAssistantErrorMessage } from '../src/agent/runtime.ts'
 
 function createMessageEntry(id: string, message: Record<string, unknown>): SessionEntry {
   return {
@@ -51,5 +51,13 @@ describe('runtime error handling', () => {
     expect(
       normalizeAssistantErrorMessage('{"error":"Relay service error","message":"Group zoer_cc_01 has no members"}'),
     ).toBe('Relay service error: Group zoer_cc_01 has no members')
+  })
+
+  test('builds a readable error for empty assistant responses', () => {
+    expect(buildEmptyAssistantResponseErrorMessage({
+      provider: 'builtin',
+      modelId: 'MiniMax-M2.7-highspeed',
+      baseUrl: 'https://readmex.com/api',
+    })).toContain('Model returned an empty response')
   })
 })

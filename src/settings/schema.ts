@@ -3,6 +3,23 @@ import { z } from 'zod/v4'
 export const RegistrySourceSettingSchema = z.enum(['clawhub', 'tencent'])
 export type RegistrySourceSetting = z.infer<typeof RegistrySourceSettingSchema>
 
+export const ActiveModelProvider = {
+  Builtin: 'builtin',
+  Custom: 'custom',
+} as const
+
+export const ACTIVE_MODEL_PROVIDERS = [
+  ActiveModelProvider.Builtin,
+  ActiveModelProvider.Custom,
+] as const
+
+export type ActiveModelProvider = typeof ACTIVE_MODEL_PROVIDERS[number]
+
+export const ActiveModelProviderSchema = z.preprocess(
+  (value) => value === 'cloud' ? ActiveModelProvider.Builtin : value,
+  z.enum(ACTIVE_MODEL_PROVIDERS),
+)
+
 export const CustomModelProviderSchema = z.enum([
   'anthropic',
   'openai',
@@ -37,12 +54,13 @@ export const TencentRegistryConfigSchema = z.object({
 
 export const DEFAULT_CLAWHUB_REGISTRY_SOURCE = RegistrySourceConfigSchema.parse({})
 export const DEFAULT_TENCENT_REGISTRY_SOURCE = TencentRegistryConfigSchema.parse({})
+export const ActiveModelSchema = z.object({
+  provider: ActiveModelProviderSchema,
+  id: z.string().optional(),
+}).default({ provider: ActiveModelProvider.Builtin })
 
 export const SettingsSchema = z.object({
-  activeModel: z.object({
-    provider: z.enum(['builtin', 'custom', 'cloud']),
-    id: z.string().optional(),
-  }).default({ provider: 'builtin' }),
+  activeModel: ActiveModelSchema,
   customModels: z.array(CustomModelSchema).default([]),
   defaultRegistrySource: RegistrySourceSettingSchema.optional(),
   registrySources: z.object({
@@ -55,4 +73,5 @@ export const SettingsSchema = z.object({
 })
 
 export type Settings = z.infer<typeof SettingsSchema>
+export type ActiveModel = z.infer<typeof ActiveModelSchema>
 export type CustomModel = z.infer<typeof CustomModelSchema>

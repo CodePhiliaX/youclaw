@@ -10,7 +10,13 @@ import { useI18n } from "@/i18n"
 import { getOfficialDocsUrl } from "@/lib/external-links"
 import { cn } from "@/lib/utils"
 import { Plus, Pencil, Trash2, Check, Settings2, Cloud, Cpu, ExternalLink } from "lucide-react"
-import { getSettings, updateSettings as apiUpdateSettings, type SettingsDTO, type CustomModelDTO } from "@/api/client"
+import {
+  ActiveModelProvider,
+  getSettings,
+  updateSettings as apiUpdateSettings,
+  type SettingsDTO,
+  type CustomModelDTO,
+} from "@/api/client"
 import { useAppRuntimeStore } from "@/stores/app"
 
 // Built-in model definitions
@@ -32,10 +38,7 @@ const CUSTOM_MODEL_PROVIDER_OPTIONS: Array<{ value: CustomModelDTO['provider']; 
   { value: 'custom', label: 'Custom' },
 ]
 
-interface ActiveModel {
-  provider: "builtin" | "custom" | "cloud"
-  id?: string
-}
+type ActiveModel = SettingsDTO['activeModel']
 
 export function ModelsPanel() {
   const { t } = useI18n()
@@ -43,7 +46,7 @@ export function ModelsPanel() {
   const [builtinModel, setBuiltinModel] = useState("youclaw-pro")
   const [builtinModelId, setBuiltinModelId] = useState<string | null>(null)
   const [customModels, setCustomModels] = useState<CustomModelDTO[]>([])
-  const [activeModel, setActiveModel] = useState<ActiveModel>({ provider: "builtin" })
+  const [activeModel, setActiveModel] = useState<ActiveModel>({ provider: ActiveModelProvider.Builtin })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingModel, setEditingModel] = useState<CustomModelDTO | null>(null)
   // Form fields
@@ -56,6 +59,7 @@ export function ModelsPanel() {
   const [deleteModelId, setDeleteModelId] = useState<string | null>(null)
   // Form validation errors (shown only after field is touched)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const isBuiltinActive = activeModel.provider === ActiveModelProvider.Builtin
 
   // Load from backend API
   useEffect(() => {
@@ -77,7 +81,7 @@ export function ModelsPanel() {
 
       // Sync modelReady to global store
       const { provider, id } = updated.activeModel
-      if (provider === 'builtin' || provider === 'cloud') {
+      if (provider === ActiveModelProvider.Builtin) {
         useAppRuntimeStore.setState({ modelReady: cloudEnabled })
       } else {
         const model = id
@@ -91,14 +95,14 @@ export function ModelsPanel() {
   }, [cloudEnabled])
 
   // Switch active provider
-  const handleSetActiveProvider = async (provider: "builtin" | "custom") => {
+  const handleSetActiveProvider = async (provider: ActiveModelProvider) => {
     let newActive: ActiveModel
-    if (provider === "builtin") {
-      newActive = { provider: "builtin" }
+    if (provider === ActiveModelProvider.Builtin) {
+      newActive = { provider: ActiveModelProvider.Builtin }
     } else {
       const defaultModel = customModels[0]
       if (!defaultModel) return
-      newActive = { provider: "custom", id: defaultModel.id }
+      newActive = { provider: ActiveModelProvider.Custom, id: defaultModel.id }
     }
     setActiveModel(newActive)
     await saveSettings({ activeModel: newActive })
@@ -107,14 +111,14 @@ export function ModelsPanel() {
   // Select built-in model and switch provider
   const handleSelectBuiltin = async (id: string) => {
     setBuiltinModel(id)
-    const newActive: ActiveModel = { provider: "builtin" }
+    const newActive: ActiveModel = { provider: ActiveModelProvider.Builtin }
     setActiveModel(newActive)
     await saveSettings({ activeModel: newActive })
   }
 
   // Set custom model as active
   const handleSetCustomActive = async (id: string) => {
-    const newActive: ActiveModel = { provider: "custom", id }
+    const newActive: ActiveModel = { provider: ActiveModelProvider.Custom, id }
     setActiveModel(newActive)
     await saveSettings({ activeModel: newActive })
   }
@@ -206,8 +210,8 @@ export function ModelsPanel() {
     setCustomModels(updated)
 
     const partial: Partial<SettingsDTO> = { customModels: updated }
-    if (activeModel.provider === "custom" && activeModel.id === id) {
-      const newActive: ActiveModel = { provider: "builtin" }
+    if (activeModel.provider === ActiveModelProvider.Custom && activeModel.id === id) {
+      const newActive: ActiveModel = { provider: ActiveModelProvider.Builtin }
       setActiveModel(newActive)
       partial.activeModel = newActive
     }
@@ -215,7 +219,7 @@ export function ModelsPanel() {
   }
 
   // Check if a custom model is active
-  const isCustomActive = (id: string) => activeModel.provider === "custom" && activeModel.id === id
+  const isCustomActive = (id: string) => activeModel.provider === ActiveModelProvider.Custom && activeModel.id === id
 
   return (
     <div className="space-y-8">
@@ -228,17 +232,17 @@ export function ModelsPanel() {
           {/* Built-in model (cloud service) card -- hidden in offline mode */}
           {cloudEnabled && (
             <button
-              onClick={() => handleSetActiveProvider("builtin")}
+              onClick={() => handleSetActiveProvider(ActiveModelProvider.Builtin)}
               className={cn(
                 "relative flex items-start gap-4 p-5 rounded-2xl border-2 text-left transition-all",
-                activeModel.provider === "builtin" || activeModel.provider === "cloud"
+                isBuiltinActive
                   ? "border-primary bg-primary/5"
                   : "border-border hover:border-muted-foreground/30"
               )}
             >
               <div className={cn(
                 "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                activeModel.provider === "builtin" || activeModel.provider === "cloud"
+                isBuiltinActive
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground"
               )}>
@@ -250,7 +254,7 @@ export function ModelsPanel() {
                   {t.settings.cloudDesc}
                 </div>
               </div>
-              {(activeModel.provider === "builtin" || activeModel.provider === "cloud") && (
+              {isBuiltinActive && (
                 <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
               )}
             </button>
@@ -258,10 +262,10 @@ export function ModelsPanel() {
 
           {/* Custom API card */}
           <button
-            onClick={() => handleSetActiveProvider("custom")}
+            onClick={() => handleSetActiveProvider(ActiveModelProvider.Custom)}
             className={cn(
               "relative flex items-start gap-4 p-5 rounded-2xl border-2 text-left transition-all",
-              activeModel.provider === "custom"
+              activeModel.provider === ActiveModelProvider.Custom
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-muted-foreground/30",
               customModels.length === 0 && "opacity-50 cursor-not-allowed"
@@ -270,7 +274,7 @@ export function ModelsPanel() {
           >
             <div className={cn(
               "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-              activeModel.provider === "custom"
+              activeModel.provider === ActiveModelProvider.Custom
                 ? "bg-orange-500 text-white"
                 : "bg-muted text-muted-foreground"
             )}>
@@ -280,7 +284,7 @@ export function ModelsPanel() {
               <div className="text-sm font-semibold">{t.settings.customProvider}</div>
               <div className="text-xs text-muted-foreground mt-1">{t.settings.customDesc}</div>
             </div>
-            {activeModel.provider === "custom" && (
+            {activeModel.provider === ActiveModelProvider.Custom && (
               <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
             )}
           </button>
@@ -295,7 +299,7 @@ export function ModelsPanel() {
           </h4>
           <div className="space-y-2">
             {BUILTIN_MODELS.map((model) => {
-              const isActive = builtinModel === model.id && (activeModel.provider === "builtin" || activeModel.provider === "cloud")
+              const isActive = builtinModel === model.id && isBuiltinActive
               return (
                 <div
                   key={model.id}
