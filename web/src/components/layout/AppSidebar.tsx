@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { useSidebar } from "@/hooks/useSidebar";
 import { openExternal } from "@/api/transport";
-import { useAppStore } from "@/stores/app";
+import { useAppRuntimeStore } from "@/stores/app";
 import { usePlatform } from "@/hooks/usePlatform";
 import { useDragRegion } from "@/hooks/useDragRegion";
 import {
@@ -60,7 +60,7 @@ interface AppSidebarProps {
 export function AppSidebar({ onOpenSettings }: AppSidebarProps) {
   const { isCollapsed, toggle } = useSidebar();
   const { t } = useI18n();
-  const { user, isLoggedIn, authLoading, login, logout, cloudEnabled } = useAppStore();
+  const { user, isLoggedIn, authLoading, login, logout, cloudEnabled } = useAppRuntimeStore();
   const { isMac } = usePlatform();
   const drag = useDragRegion();
 

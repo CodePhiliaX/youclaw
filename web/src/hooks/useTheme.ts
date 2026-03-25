@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { useAppStore } from "@/stores/app"
+import { useAppPreferencesStore } from "@/stores/app"
 
 export type Theme = "dark" | "light" | "system"
 
@@ -32,7 +32,7 @@ export function applyThemeToDOM(theme: Theme): void {
 
 // Theme initialization hook (used in App root component)
 export function useTheme(): void {
-  const theme = useAppStore((s) => s.theme)
+  const theme = useAppPreferencesStore((s) => s.theme)
 
   useEffect(() => {
     applyThemeToDOM(theme)
@@ -42,7 +42,7 @@ export function useTheme(): void {
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)")
     const handler = () => {
-      const current = useAppStore.getState().theme
+      const current = useAppPreferencesStore.getState().theme
       if (current === "system") {
         applyThemeToDOM("system")
       }

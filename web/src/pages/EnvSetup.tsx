@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useI18n } from "@/i18n"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 import type { DependencyStatus } from "@/api/client"
 import { Download, Loader2, CheckCircle2, AlertTriangle, Terminal, Copy, Check, ChevronRight, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -121,8 +121,8 @@ interface EnvSetupProps {
 
 export function EnvSetup({ dependencies }: EnvSetupProps) {
   const { t } = useI18n()
-  const recheckEnv = useAppStore((s) => s.recheckEnv)
-  const envReady = useAppStore((s) => s.envReady)
+  const recheckEnv = useAppRuntimeStore((s) => s.recheckEnv)
+  const envReady = useAppRuntimeStore((s) => s.envReady)
   const [detected, setDetected] = useState(false)
   const isWindows = navigator.userAgent.includes("Windows")
 

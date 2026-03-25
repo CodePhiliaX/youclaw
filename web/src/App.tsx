@@ -13,13 +13,13 @@ import { PortConflictDialog } from './components/PortConflictDialog'
 import { GlobalBubble } from './components/GlobalBubble'
 import { CloseConfirmDialog } from './components/CloseConfirmDialog'
 import { useTheme } from './hooks/useTheme'
-import { useAppStore } from './stores/app'
+import { useAppRuntimeStore } from './stores/app'
 import { getTauriInvoke, isTauri, updateCachedBaseUrl } from './api/transport'
 import { saveAuthToken } from './api/client'
 
 function AuthGuard() {
-  const isLoggedIn = useAppStore((s) => s.isLoggedIn)
-  const cloudEnabled = useAppStore((s) => s.cloudEnabled)
+  const isLoggedIn = useAppRuntimeStore((s) => s.isLoggedIn)
+  const cloudEnabled = useAppRuntimeStore((s) => s.cloudEnabled)
   // Offline mode does not require login
   if (!cloudEnabled || isLoggedIn) return <Shell><Outlet /></Shell>
   return <Navigate to="/login" replace />
@@ -28,13 +28,13 @@ function AuthGuard() {
 // Tauri devUrl uses http protocol, so BrowserRouter works directly
 export default function App() {
   useTheme()
-  const isLoggedIn = useAppStore((s) => s.isLoggedIn)
-  const cloudEnabled = useAppStore((s) => s.cloudEnabled)
-  const envReady = useAppStore((s) => s.envReady)
-  const envChecked = useAppStore((s) => s.envChecked)
-  const envDependencies = useAppStore((s) => s.envDependencies)
-  const fetchUser = useAppStore((s) => s.fetchUser)
-  const fetchCreditBalance = useAppStore((s) => s.fetchCreditBalance)
+  const isLoggedIn = useAppRuntimeStore((s) => s.isLoggedIn)
+  const cloudEnabled = useAppRuntimeStore((s) => s.cloudEnabled)
+  const envReady = useAppRuntimeStore((s) => s.envReady)
+  const envChecked = useAppRuntimeStore((s) => s.envChecked)
+  const envDependencies = useAppRuntimeStore((s) => s.envDependencies)
+  const fetchUser = useAppRuntimeStore((s) => s.fetchUser)
+  const fetchCreditBalance = useAppRuntimeStore((s) => s.fetchCreditBalance)
   const canPass = !cloudEnabled || isLoggedIn
   const [portConflict, setPortConflict] = useState(false)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false)
@@ -52,7 +52,7 @@ export default function App() {
             updateCachedBaseUrl(`http://localhost:${match[1]}`)
           }
           // Re-hydrate if initial hydrate failed (e.g. backend wasn't ready yet)
-          const { modelReady, hydrate } = useAppStore.getState()
+          const { modelReady, hydrate } = useAppRuntimeStore.getState()
           if (!modelReady) {
             hydrate()
           }

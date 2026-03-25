@@ -9,7 +9,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useI18n } from "@/i18n"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 import { Coins } from "lucide-react"
 
 interface Props {
@@ -19,7 +19,7 @@ interface Props {
 
 export function InsufficientCreditsDialog({ open, onOpenChange }: Props) {
   const { t } = useI18n()
-  const { openPayPage, creditBalance } = useAppStore()
+  const { openPayPage, creditBalance } = useAppRuntimeStore()
 
   const handleTopUp = async () => {
     onOpenChange(false)

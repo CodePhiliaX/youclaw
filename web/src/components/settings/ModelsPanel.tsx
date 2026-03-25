@@ -11,7 +11,7 @@ import { getOfficialDocsUrl } from "@/lib/external-links"
 import { cn } from "@/lib/utils"
 import { Plus, Pencil, Trash2, Check, Settings2, Cloud, Cpu, ExternalLink } from "lucide-react"
 import { getSettings, updateSettings as apiUpdateSettings, type SettingsDTO, type CustomModelDTO } from "@/api/client"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 
 // Built-in model definitions
 const BUILTIN_MODELS = [
@@ -39,7 +39,7 @@ interface ActiveModel {
 
 export function ModelsPanel() {
   const { t } = useI18n()
-  const { cloudEnabled } = useAppStore()
+  const { cloudEnabled } = useAppRuntimeStore()
   const [builtinModel, setBuiltinModel] = useState("youclaw-pro")
   const [builtinModelId, setBuiltinModelId] = useState<string | null>(null)
   const [customModels, setCustomModels] = useState<CustomModelDTO[]>([])
@@ -78,12 +78,12 @@ export function ModelsPanel() {
       // Sync modelReady to global store
       const { provider, id } = updated.activeModel
       if (provider === 'builtin' || provider === 'cloud') {
-        useAppStore.setState({ modelReady: cloudEnabled })
+        useAppRuntimeStore.setState({ modelReady: cloudEnabled })
       } else {
         const model = id
           ? updated.customModels.find((m) => m.id === id)
           : updated.customModels[0]
-        useAppStore.setState({ modelReady: !!model })
+        useAppRuntimeStore.setState({ modelReady: !!model })
       }
     } catch (err) {
       console.error('Failed to save settings:', err)

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 import {
   AlertTriangle,
   Check,
@@ -121,7 +121,7 @@ export function SkillListItem({
 
 export function EnvConfigRow({ envName, configured, onSaved }: { envName: string; configured: boolean; onSaved: () => void }) {
   const { t } = useI18n()
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [editing, setEditing] = useState(!configured)
   const [value, setValue] = useState('')
   const [status, setStatus] = useState<'idle' | 'saving'>('idle')
@@ -207,7 +207,7 @@ export function EnvConfigRow({ envName, configured, onSaved }: { envName: string
 
 export function InstallButton({ method, command, skillName, onInstalled }: { method: string; command: string; skillName: string; onInstalled: () => void }) {
   const { t } = useI18n()
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [copied, setCopied] = useState(false)
   const [status, setStatus] = useState<'idle' | 'installing'>('idle')
 
@@ -330,7 +330,7 @@ export function resolveEnvTools(missingDeps: string[]): string[] {
  */
 export function EnvToolInstallButton({ tool, onInstalled }: { tool: string; onInstalled: () => void }) {
   const { t } = useI18n()
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [status, setStatus] = useState<'idle' | 'installing'>('idle')
 
   const handleInstall = async () => {

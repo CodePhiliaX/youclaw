@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useI18n } from "@/i18n"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 import { LogIn, Loader2, Calendar, MessageSquare, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { isTauri } from "@/api/transport"
@@ -8,7 +8,7 @@ import logoUrl from "@/assets/logo.png"
 
 export function Login() {
   const { t, locale, setLocale } = useI18n()
-  const { authLoading, login } = useAppStore()
+  const { authLoading, login } = useAppRuntimeStore()
   const [version, setVersion] = useState("")
 
   useEffect(() => {

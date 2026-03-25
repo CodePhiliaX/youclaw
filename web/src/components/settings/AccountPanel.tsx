@@ -19,13 +19,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { useI18n } from "@/i18n"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 import { getCreditTransactions, uploadFile, redeemInvitationCode, type CreditTransaction } from "@/api/client"
 import { LogIn, LogOut, Coins, ExternalLink, ChevronRight, Pencil, Camera, Check, X, Loader2, Sparkles, Gift, Copy } from "lucide-react"
 
 export function AccountPanel() {
   const { t } = useI18n()
-  const { user, isLoggedIn, authLoading, login, logout, updateProfile, creditBalance, fetchCreditBalance, openPayPage, cloudEnabled } = useAppStore()
+  const { user, isLoggedIn, authLoading, login, logout, updateProfile, creditBalance, fetchCreditBalance, openPayPage, cloudEnabled } = useAppRuntimeStore()
   const [transactions, setTransactions] = useState<CreditTransaction[] | null>(null)
   const [logoutOpen, setLogoutOpen] = useState(false)
 

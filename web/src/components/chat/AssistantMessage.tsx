@@ -10,12 +10,12 @@ import {
 } from '@/components/ai-elements/message'
 import { ToolUseBlock } from './ToolUseBlock'
 import { useI18n } from '@/i18n'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 import type { Message } from '@/hooks/useChat'
 
 function InsufficientCreditsMessage() {
   const { t } = useI18n()
-  const { openPayPage, creditBalance } = useAppStore()
+  const { openPayPage, creditBalance } = useAppRuntimeStore()
 
   return (
     <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useI18n } from '@/i18n'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,7 +11,7 @@ import {
 
 export function MarketplacePanel() {
   const { t } = useI18n()
-  const refreshRegistrySources = useAppStore((s) => s.refreshRegistrySources)
+  const refreshRegistrySources = useAppRuntimeStore((s) => s.refreshRegistrySources)
   const [settingsState, setSettingsState] = useState<SettingsDTO | null>(null)
   const [tokenValue, setTokenValue] = useState('')
   const [hasConfiguredToken, setHasConfiguredToken] = useState(false)

@@ -13,7 +13,7 @@ import {
   type BrowserProfileDTO,
 } from "../api/client";
 import { ChatContext } from "./chatCtx";
-import { useAppStore } from "@/stores/app";
+import { useAppPreferencesStore } from "@/stores/app";
 import { useChatStore } from "@/stores/chat";
 import { sseManager } from "@/lib/sse-manager";
 import type { ChatItem } from "@/lib/chat-utils";
@@ -21,8 +21,8 @@ import type { ChatItem } from "@/lib/chat-utils";
 type Agent = { id: string; name: string };
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const agentId = useAppStore((s) => s.lastAgentId);
-  const setAgentId = useAppStore((s) => s.setLastAgentId);
+  const agentId = useAppPreferencesStore((s) => s.lastAgentId);
+  const setAgentId = useAppPreferencesStore((s) => s.setLastAgentId);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [chatList, setChatList] = useState<ChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");

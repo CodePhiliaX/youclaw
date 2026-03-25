@@ -16,7 +16,7 @@ import {
   resolveImportModeFromUrl,
 } from '@/lib/skill-import'
 import { cn } from '@/lib/utils'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 import { Download, FolderGit2, Link2, Loader2, Sparkles, Wand2 } from 'lucide-react'
 
 export type SkillImportProviderId = 'raw-url' | 'github'
@@ -60,7 +60,7 @@ export function SkillImportPanel({
   existingSkillNames?: string[]
 }) {
   const { t } = useI18n()
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [forms, setForms] = useState<Record<SkillImportProviderId, ProviderFormValues>>(initialForms)
   const [probeResult, setProbeResult] = useState<ProbeResult | null>(null)
   const [actionStatus, setActionStatus] = useState<'idle' | 'probing' | 'importing'>('idle')

@@ -4,7 +4,7 @@ import App from './App'
 import { StartupError } from './pages/StartupError'
 import { I18nProvider } from './i18n'
 import { initBaseUrl } from './api/transport'
-import { useAppStore } from './stores/app'
+import { useAppRuntimeStore } from './stores/app'
 import './index.css'
 import 'streamdown/styles.css'
 
@@ -41,7 +41,7 @@ async function startup() {
     renderError()
     return
   }
-  await useAppStore.getState().hydrate()
+  await useAppRuntimeStore.getState().hydrate()
   renderApp()
 }
 

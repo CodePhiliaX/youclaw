@@ -26,7 +26,7 @@ import { uploadChatAttachment } from "@/api/client";
 import { useChatContext } from "@/hooks/chatCtx";
 import { useI18n } from "@/i18n";
 import { resolveChatAttachments } from "@/lib/chat-attachments";
-import { useAppStore } from "@/stores/app";
+import { useAppRuntimeStore } from "@/stores/app";
 import { Bot, Globe, PlusIcon } from "lucide-react";
 
 const MAX_FILES = 10;
@@ -84,7 +84,7 @@ export function ChatInput() {
     selectedProfileId,
     setSelectedProfileId,
   } = useChatContext();
-  const modelReady = useAppStore((s) => s.modelReady);
+  const modelReady = useAppRuntimeStore((s) => s.modelReady);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {

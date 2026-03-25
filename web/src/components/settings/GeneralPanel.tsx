@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useI18n } from '@/i18n'
-import { useAppStore, type CloseAction } from '@/stores/app'
+import { useAppPreferencesStore, type CloseAction } from '@/stores/app'
 import type { Theme } from '@/hooks/useTheme'
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -27,12 +27,12 @@ const closeBehaviorOptions: { value: CloseAction; titleKey: 'closeBehaviorAsk' |
 
 export function GeneralPanel() {
   const { t } = useI18n()
-  const theme = useAppStore((s) => s.theme)
-  const setTheme = useAppStore((s) => s.setTheme)
-  const locale = useAppStore((s) => s.locale)
-  const setLocale = useAppStore((s) => s.setLocale)
-  const closeAction = useAppStore((s) => s.closeAction)
-  const setCloseAction = useAppStore((s) => s.setCloseAction)
+  const theme = useAppPreferencesStore((s) => s.theme)
+  const setTheme = useAppPreferencesStore((s) => s.setTheme)
+  const locale = useAppPreferencesStore((s) => s.locale)
+  const setLocale = useAppPreferencesStore((s) => s.setLocale)
+  const closeAction = useAppPreferencesStore((s) => s.closeAction)
+  const setCloseAction = useAppPreferencesStore((s) => s.setCloseAction)
   const [portValue, setPortValue] = useState('62601')
   const [portSaved, setPortSaved] = useState(false)
   const [portRestarting, setPortRestarting] = useState(false)

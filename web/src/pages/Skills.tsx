@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 
 type TabType = 'installed' | 'marketplace'
 type MarketplaceLoadMode = 'replace' | 'refresh' | 'append'
@@ -44,11 +44,11 @@ type InstalledWorkspace =
 
 export function Skills() {
   const { t } = useI18n()
-  const registrySource = useAppStore((state) => state.registrySource)
-  const registrySources = useAppStore((state) => state.registrySources)
-  const setRegistrySource = useAppStore((state) => state.setRegistrySource)
-  const refreshRegistrySources = useAppStore((state) => state.refreshRegistrySources)
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const registrySource = useAppRuntimeStore((state) => state.registrySource)
+  const registrySources = useAppRuntimeStore((state) => state.registrySources)
+  const setRegistrySource = useAppRuntimeStore((state) => state.setRegistrySource)
+  const refreshRegistrySources = useAppRuntimeStore((state) => state.refreshRegistrySources)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [tab, setTab] = useState<TabType>('installed')
   const [installedWorkspace, setInstalledWorkspace] = useState<InstalledWorkspace>({ kind: 'detail', skillName: null })
 

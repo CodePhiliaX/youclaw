@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useI18n } from '@/i18n'
-import { useAppStore, type CloseAction } from '@/stores/app'
+import { useAppPreferencesStore, type CloseAction } from '@/stores/app'
 
 interface CloseConfirmDialogProps {
   open: boolean
@@ -21,7 +21,7 @@ interface CloseConfirmDialogProps {
 
 export function CloseConfirmDialog({ open, onOpenChange }: CloseConfirmDialogProps) {
   const { t } = useI18n()
-  const setCloseAction = useAppStore((s) => s.setCloseAction)
+  const setCloseAction = useAppPreferencesStore((s) => s.setCloseAction)
   const [selectedAction, setSelectedAction] = useState<Exclude<CloseAction, ''>>('minimize')
 
   useEffect(() => {

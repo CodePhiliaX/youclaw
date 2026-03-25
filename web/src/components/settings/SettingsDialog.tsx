@@ -12,7 +12,7 @@ import { BrowserProfiles } from "@/pages/BrowserProfiles"
 import { X, User, Palette, Cpu, Radio, Globe, Info, UserPlus, Store, Terminal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/i18n"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 
 type Tab = "account" | "general" | "marketplace" | "models" | "channels" | "browser" | "environment" | "invitation" | "about"
 
@@ -26,7 +26,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
   const { t } = useI18n()
-  const cloudEnabled = useAppStore((s) => s.cloudEnabled)
+  const cloudEnabled = useAppRuntimeStore((s) => s.cloudEnabled)
   const [currentTab, setCurrentTab] = useState<Tab>(initialTab ?? (cloudEnabled ? "account" : "general"))
 
   // Sync with initialTab when dialog opens

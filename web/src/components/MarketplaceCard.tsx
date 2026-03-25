@@ -12,7 +12,7 @@ import {
   type MarketplaceInstallDialogViewModel,
 } from '../lib/marketplace-view-model'
 import type { MarketplaceChangeEvent } from '../lib/marketplace-updates'
-import { useAppStore } from '../stores/app'
+import { useAppRuntimeStore } from '../stores/app'
 import { Puzzle, Download, Loader2, Trash2, RefreshCw } from 'lucide-react'
 
 function normalizeMarketplaceActionError(message: string, fallback: string, skillNotFoundLabel: string) {
@@ -50,7 +50,7 @@ export function MarketplaceCard({
   registrySource?: RegistrySelectableSource
 }) {
   const { t } = useI18n()
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [status, setStatus] = useState<'idle' | 'installing' | 'updating' | 'uninstalling'>('idle')
   const [confirmDetailViewModel, setConfirmDetailViewModel] = useState<MarketplaceInstallDialogViewModel | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)

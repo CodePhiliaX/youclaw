@@ -10,11 +10,11 @@ import {
   AttachmentInfo,
 } from "@/components/ai-elements/attachments";
 import { localAssetUrl } from "@/api/transport";
-import { useAppStore } from "@/stores/app";
+import { useAppRuntimeStore } from "@/stores/app";
 import type { Message } from "@/hooks/useChat";
 
 function UserAvatar() {
-  const { user, isLoggedIn } = useAppStore();
+  const { user, isLoggedIn } = useAppRuntimeStore();
   const sizeClass = "w-8 h-8 text-xs";
 
   if (isLoggedIn && user?.avatar) {

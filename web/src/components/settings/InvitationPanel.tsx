@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n"
-import { useAppStore } from "@/stores/app"
+import { useAppRuntimeStore } from "@/stores/app"
 import { getReferralCode, getReferralStats, type ReferralCode, type ReferralStats } from "@/api/client"
 import { Copy, Check, Users, Coins, Loader2, UserPlus, Gift } from "lucide-react"
 
 export function InvitationPanel() {
   const { t } = useI18n()
-  const { isLoggedIn, cloudEnabled } = useAppStore()
+  const { isLoggedIn, cloudEnabled } = useAppRuntimeStore()
   const [referralCode, setReferralCode] = useState<ReferralCode | null>(null)
   const [stats, setStats] = useState<ReferralStats | null>(null)
   const [loading, setLoading] = useState(true)

@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { bumpDraftVersion, normalizeSlug, stringifySkillMarkdownLocal } from '@/components/skills/authoring-helpers'
 import { useI18n } from '@/i18n'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 import { CheckCircle2, PencilLine, Rocket, Trash2 } from 'lucide-react'
 
 interface SkillEditorProps {
@@ -67,7 +67,7 @@ function resolveSelectedBindingIds(detail: ManagedSkillDetail | null) {
 
 export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkillsChanged }: SkillEditorProps) {
   const { t, locale } = useI18n()
-  const showGlobalBubble = useAppStore((state) => state.showGlobalBubble)
+  const showGlobalBubble = useAppRuntimeStore((state) => state.showGlobalBubble)
   const [detail, setDetail] = useState<ManagedSkillDetail | null>(null)
   const [draft, setDraft] = useState<SkillAuthoringDraft>(createEmptyDraft(locale))
   const [validation, setValidation] = useState<SkillValidationResult | null>(null)

@@ -24,7 +24,7 @@ import { MarketplaceDisclaimer } from '@/components/MarketplaceDisclaimer'
 import { MarketplaceInstallDialog } from '@/components/MarketplaceInstallDialog'
 import { RegistrySourceSelect } from '@/components/RegistrySourceSelect'
 import { toMarketplaceCardViewModel, toMarketplaceInstallDialogViewModel } from '@/lib/marketplace-view-model'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 import { useDragRegion } from "@/hooks/useDragRegion"
 import {
   AgentMarketplaceSkillState,
@@ -828,10 +828,10 @@ function AgentSkillsSection({
   onUpdate: () => void
 }) {
   const { t } = useI18n()
-  const registrySource = useAppStore((s) => s.registrySource)
-  const registrySources = useAppStore((s) => s.registrySources)
-  const setRegistrySource = useAppStore((s) => s.setRegistrySource)
-  const showGlobalBubble = useAppStore((s) => s.showGlobalBubble)
+  const registrySource = useAppRuntimeStore((s) => s.registrySource)
+  const registrySources = useAppRuntimeStore((s) => s.registrySources)
+  const setRegistrySource = useAppRuntimeStore((s) => s.setRegistrySource)
+  const showGlobalBubble = useAppRuntimeStore((s) => s.showGlobalBubble)
   const [search, setSearch] = useState('')
 
   // Marketplace dialog state

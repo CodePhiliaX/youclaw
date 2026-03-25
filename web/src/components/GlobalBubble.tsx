@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom'
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { useAppStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 
 export function GlobalBubble() {
   const { t } = useI18n()
-  const bubble = useAppStore((state) => state.globalBubble)
-  const dismissGlobalBubble = useAppStore((state) => state.dismissGlobalBubble)
+  const bubble = useAppRuntimeStore((state) => state.globalBubble)
+  const dismissGlobalBubble = useAppRuntimeStore((state) => state.dismissGlobalBubble)
 
   useEffect(() => {
     if (!bubble) return
