@@ -8,12 +8,19 @@ export enum ErrorCode {
   UNKNOWN = 'UNKNOWN',
 }
 
+export type AgentToolUse = {
+  id: string
+  name: string
+  input?: string
+  status: 'done'
+}
+
 // Agent event types
 export type AgentEvent =
   | { type: 'stream'; agentId: string; chatId: string; text: string; turnId?: string }
   | { type: 'tool_use'; agentId: string; chatId: string; tool: string; input?: string; turnId?: string }
-  | { type: 'complete'; agentId: string; chatId: string; fullText: string; sessionId: string; turnId?: string }
-  | { type: 'error'; agentId: string; chatId: string; error: string; errorCode?: ErrorCode; turnId?: string }
+  | { type: 'complete'; agentId: string; chatId: string; fullText: string; sessionId: string; turnId?: string; toolUse?: AgentToolUse[] }
+  | { type: 'error'; agentId: string; chatId: string; error: string; errorCode?: ErrorCode; turnId?: string; toolUse?: AgentToolUse[] }
   | { type: 'processing'; agentId: string; chatId: string; isProcessing: boolean; turnId?: string }
   | { type: 'document_status'; agentId: string; chatId: string; documentId: string; filename: string; status: 'parsing' | 'parsed' | 'failed'; error?: string; turnId?: string }
   // Phase 3: Sub-agent events

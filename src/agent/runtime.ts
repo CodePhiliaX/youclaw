@@ -9,6 +9,7 @@ import { getLogger } from '../logger/index.ts'
 import { deleteSession, getSession, saveSession } from '../db/index.ts'
 import type { EventBus } from '../events/index.ts'
 import { ErrorCode } from '../events/types.ts'
+import type { AgentToolUse } from '../events/types.ts'
 import type { PromptBuilder } from './prompt-builder.ts'
 import type { AgentCompiler } from './compiler.ts'
 import type { HooksManager } from './hooks.ts'
@@ -416,6 +417,7 @@ export class AgentRuntime {
     }, 'Processing message')
 
     const startTime = Date.now()
+    let toolUse: AgentToolUse[] = []
     try {
       // pre_process hook
       let finalPrompt = prompt
@@ -580,7 +582,7 @@ export class AgentRuntime {
         category: 'agent',
       }, 'SDK env config before query')
 
-      const { fullText, sessionId, aborted } = await this.executeQuery(
+      const queryResult = await this.executeQuery(
         finalPrompt,
         agentId,
         chatId,
@@ -591,6 +593,8 @@ export class AgentRuntime {
         params.browserProfileId,
         params.attachments,
       )
+      const { fullText, sessionId, aborted } = queryResult
+      toolUse = queryResult.toolUse
 
       // Save or clear session
       if (aborted) {
@@ -624,6 +628,7 @@ export class AgentRuntime {
           fullText: finalText,
           sessionId,
           turnId,
+          toolUse,
         })
       }
 
@@ -666,6 +671,7 @@ export class AgentRuntime {
         error: userError,
         errorCode,
         turnId,
+        toolUse,
       })
 
       return `Error: ${userError}`
@@ -689,12 +695,13 @@ export class AgentRuntime {
     requestedSkills?: string[],
     browserProfileId?: string | null,
     attachments?: Array<{ filename: string; mediaType: string; filePath: string }>,
-  ): Promise<{ fullText: string; sessionId: string; aborted: boolean }> {
+  ): Promise<{ fullText: string; sessionId: string; aborted: boolean; toolUse: AgentToolUse[] }> {
     const logger = getLogger()
     const abortController = new AbortController()
     abortRegistry.register(chatId, abortController)
     let fullText = ''
     let sessionId = existingSessionId ?? ''
+    const toolUse: AgentToolUse[] = []
     const browserDisabled = browserProfileId === null
     const resolvedBrowserProfile = this.browserManager
       ? (browserDisabled
@@ -984,13 +991,13 @@ export class AgentRuntime {
           fullText += text
         }, (sid) => {
           sessionId = sid
-        }, turnId, browserDisabled, browserDisabledNotice)
+        }, toolUse, turnId, browserDisabled, browserDisabledNotice)
       }
     } catch (err) {
       // User-initiated abort — return partial text gracefully instead of throwing
       if (abortController.signal.aborted) {
         logger.info({ agentId, chatId, category: 'agent' }, 'SDK query aborted by user, returning partial text')
-        return { fullText, sessionId, aborted: true }
+        return { fullText, sessionId, aborted: true, toolUse }
       }
 
       // When SDK process crashes, fullText may contain actual error info from upstream API
@@ -1055,7 +1062,7 @@ export class AgentRuntime {
       category: 'agent',
     }, 'SDK query finished')
 
-    return { fullText, sessionId, aborted: false }
+    return { fullText, sessionId, aborted: false, toolUse }
   }
 
   /**
@@ -1067,6 +1074,7 @@ export class AgentRuntime {
     chatId: string,
     appendText: (text: string) => void,
     setSessionId: (sid: string) => void,
+    toolUseHistory: AgentToolUse[],
     turnId: string | undefined,
     browserDisabled = false,
     browserDisabledNotice: { sent: boolean },
@@ -1114,6 +1122,12 @@ export class AgentRuntime {
               input: JSON.stringify(block.input).slice(0, 500),
               category: 'tool_use',
             }, `Tool call: ${block.name}`)
+            toolUseHistory.push({
+              id: `tool:${turnId ?? 'turnless'}:${toolUseHistory.length + 1}`,
+              name: block.name,
+              input: JSON.stringify(block.input).slice(0, 200),
+              status: 'done',
+            })
             this.emitToolUse(agentId, chatId, block.name, block.input, turnId)
           }
         }

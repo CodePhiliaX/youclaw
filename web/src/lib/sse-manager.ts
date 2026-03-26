@@ -9,6 +9,7 @@ type SSEEvent = {
   agentId: string
   chatId: string
   turnId?: string
+  toolUse?: Array<{ id: string; name: string; input?: string; status: 'done' }>
   documentId?: string
   filename?: string
   status?: 'parsing' | 'parsed' | 'failed'
@@ -260,7 +261,7 @@ class SSEManager {
         break
       case 'complete': {
         const chatState = store.chats[chatId]
-        const finalToolUse = (chatState?.pendingToolUse ?? []).map((t) => ({
+        const finalToolUse = event.toolUse ?? (chatState?.pendingToolUse ?? []).map((t) => ({
           ...t,
           status: 'done' as const,
         }))

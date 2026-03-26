@@ -8,25 +8,12 @@ import type { MemoryManager } from '../memory/index.ts'
 import type { SkillsLoader } from '../skills/index.ts'
 import { parseSkillInvocations } from '../skills/invoke.ts'
 import type { InboundMessage, Channel } from './types.ts'
-
-type PendingReplyState = {
-  agentId: string
-  senderName: string
-  turnId: string
-  userContent: string
-  toolUse: Array<{
-    id: string
-    name: string
-    input?: string
-    status: 'done'
-  }>
-}
+import type { AgentToolUse } from '../events/types.ts'
 
 export class MessageRouter {
   private channels: Channel[] = []
   private memoryManager: MemoryManager | null = null
   private skillsLoader: SkillsLoader | null = null
-  private pendingReplies: Map<string, PendingReplyState[]> = new Map()
 
   constructor(
     private agentManager: AgentManager,
@@ -41,20 +28,15 @@ export class MessageRouter {
     if (skillsLoader) {
       this.skillsLoader = skillsLoader
     }
-    this.eventBus.subscribe({ types: ['tool_use'] }, (event) => {
-      if (event.type === 'tool_use') {
-        this.recordToolUse(event.chatId, event.turnId, event.tool, event.input)
-      }
-    })
     this.eventBus.subscribe({ types: ['complete'] }, (event) => {
       if (event.type === 'complete') {
-        this.persistCompletedReply(event.chatId, event.agentId, event.fullText, event.sessionId, event.turnId)
+        this.persistCompletedReply(event.chatId, event.agentId, event.fullText, event.sessionId, event.turnId, event.toolUse)
         this.handleOutbound(event.chatId, event.fullText)
       }
     })
     this.eventBus.subscribe({ types: ['error'] }, (event) => {
       if (event.type === 'error') {
-        this.persistErroredReply(event.chatId, event.agentId, event.error, event.errorCode, event.turnId)
+        this.persistErroredReply(event.chatId, event.agentId, event.error, event.errorCode, event.turnId, event.toolUse)
       }
     })
   }
@@ -142,14 +124,6 @@ export class MessageRouter {
       messageId: message.id, content: message.content, senderName: message.senderName, timestamp: message.timestamp,
     })
 
-    this.enqueuePendingReply(message.chatId, {
-      agentId: config.id,
-      senderName: config.name,
-      turnId: message.id,
-      userContent: message.content,
-      toolUse: [],
-    })
-
     logger.info({ agentId: config.id, chatId: message.chatId, requestedSkills }, 'Routing message to agent')
 
     // Enqueue for processing (pass requestedSkills)
@@ -173,7 +147,6 @@ export class MessageRouter {
         }
       }
     } catch (err) {
-      this.removePendingReply(message.chatId, message.id)
       logger.error({ error: err, chatId: message.chatId }, 'Message processing failed')
     }
   }
@@ -208,75 +181,29 @@ export class MessageRouter {
     }
   }
 
-  private enqueuePendingReply(chatId: string, pending: PendingReplyState): void {
-    const queue = this.pendingReplies.get(chatId) ?? []
-    queue.push(pending)
-    this.pendingReplies.set(chatId, queue)
-  }
-
-  private findPendingReply(chatId: string, turnId?: string): PendingReplyState | undefined {
-    const queue = this.pendingReplies.get(chatId)
-    if (!queue || queue.length === 0) return undefined
-    if (!turnId) return queue[0]
-    return queue.find((item) => item.turnId === turnId) ?? queue[0]
-  }
-
-  private removePendingReply(chatId: string, turnId?: string): PendingReplyState | undefined {
-    const queue = this.pendingReplies.get(chatId)
-    if (!queue || queue.length === 0) return undefined
-
-    if (!turnId || queue[0]?.turnId === turnId) {
-      const pending = queue.shift()
-      if (queue.length === 0) {
-        this.pendingReplies.delete(chatId)
-      }
-      return pending
-    }
-
-    const index = queue.findIndex((item) => item.turnId === turnId)
-    if (index < 0) return undefined
-
-    const [pending] = queue.splice(index, 1)
-    if (queue.length === 0) {
-      this.pendingReplies.delete(chatId)
-    }
-    return pending
-  }
-
-  private recordToolUse(chatId: string, turnId: string | undefined, tool: string, input?: string): void {
-    const pending = this.findPendingReply(chatId, turnId)
-    if (!pending) return
-
-    pending.toolUse.push({
-      id: `tool:${pending.turnId}:${pending.toolUse.length + 1}`,
-      name: tool,
-      input,
-      status: 'done',
-    })
-  }
-
   private persistCompletedReply(
     chatId: string,
     agentId: string,
     fullText: string,
     sessionId: string,
     turnId?: string,
+    toolUse?: AgentToolUse[],
   ): void {
-    const pending = this.removePendingReply(chatId, turnId)
-    if (!pending) return
+    if (!turnId || this.hasAssistantMessageForTurn(chatId, turnId)) return
+    const senderName = this.getAgentDisplayName(agentId, chatId)
 
     saveMessage({
       id: randomUUID(),
       chatId,
       sender: 'assistant',
-      senderName: pending.senderName,
+      senderName,
       content: fullText,
       timestamp: new Date().toISOString(),
       isFromMe: true,
       isBotMessage: true,
-      toolUse: pending.toolUse.length > 0 ? JSON.stringify(pending.toolUse) : undefined,
+      toolUse: toolUse && toolUse.length > 0 ? JSON.stringify(toolUse) : undefined,
       sessionId: sessionId || undefined,
-      turnId: pending.turnId,
+      turnId,
     })
     upsertChat(chatId, agentId)
   }
@@ -287,23 +214,44 @@ export class MessageRouter {
     error: string,
     errorCode?: string,
     turnId?: string,
+    toolUse?: AgentToolUse[],
   ): void {
-    const pending = this.removePendingReply(chatId, turnId)
-    if (!pending) return
+    if (!turnId || this.hasAssistantMessageForTurn(chatId, turnId)) return
+    const senderName = this.getAgentDisplayName(agentId, chatId)
 
     saveMessage({
       id: randomUUID(),
       chatId,
       sender: 'assistant',
-      senderName: pending.senderName,
+      senderName,
       content: errorCode === 'INSUFFICIENT_CREDITS' ? '' : `⚠️ ${error}`,
       timestamp: new Date().toISOString(),
       isFromMe: true,
       isBotMessage: true,
-      toolUse: pending.toolUse.length > 0 ? JSON.stringify(pending.toolUse) : undefined,
-      turnId: pending.turnId,
+      toolUse: toolUse && toolUse.length > 0 ? JSON.stringify(toolUse) : undefined,
+      turnId,
       errorCode,
     })
     upsertChat(chatId, agentId)
+  }
+
+  private hasAssistantMessageForTurn(chatId: string, turnId: string): boolean {
+    const db = getDatabase()
+    const existing = db.query(
+      'SELECT 1 FROM messages WHERE chat_id = ? AND turn_id = ? AND is_bot_message = 1 LIMIT 1',
+    ).get(chatId, turnId)
+    return !!existing
+  }
+
+  private getAgentDisplayName(agentId: string, chatId: string): string {
+    const direct = 'getAgent' in this.agentManager && typeof this.agentManager.getAgent === 'function'
+      ? this.agentManager.getAgent(agentId)
+      : undefined
+    if (direct?.config.name) return direct.config.name
+
+    const resolved = 'resolveAgent' in this.agentManager && typeof this.agentManager.resolveAgent === 'function'
+      ? this.agentManager.resolveAgent(chatId)
+      : undefined
+    return resolved?.config.name ?? agentId
   }
 }
