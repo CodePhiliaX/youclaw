@@ -107,7 +107,7 @@ export const AgentConfigSchema = z.object({
     maxSessionBytes: z.number().default(262144),
   }).optional(),
   skills: z.array(z.string()).optional(),
-  maxConcurrency: z.number().default(1),
+  maxConcurrency: z.number().default(10),
   // Sub-agent config (supports ref references and inline definitions)
   agents: z.record(z.string(), AgentEntrySchema).optional(),
   // Phase 4: Agent capability enhancements
