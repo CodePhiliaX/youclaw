@@ -1,4 +1,6 @@
 export type BrowserDriver = 'managed' | 'remote-cdp' | 'extension-relay'
+export type BrowserTarget = 'host' | 'sandbox'
+export type BrowserRefAction = 'click' | 'type' | 'select' | 'check' | 'uncheck'
 
 export type BrowserRuntimeStatus = 'starting' | 'running' | 'stopped' | 'error'
 

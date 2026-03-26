@@ -24,7 +24,7 @@ describe('browser profile sync wiring', () => {
     expect(browserProfilesPage).toContain('useChatContext()')
     expect(browserProfilesPage).toContain('browserProfiles: profiles')
     expect(browserProfilesPage).not.toContain('getBrowserProfiles')
-    expect(browserProfilesPage).toContain('if (selectedProfileId === id) setSelectedProfileId(null)')
+    expect(browserProfilesPage).not.toContain('selectedProfileId')
   })
 
   test('agents page also reuses shared browser profile state', () => {

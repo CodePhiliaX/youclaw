@@ -239,7 +239,7 @@ export function Chat() {
                   key={chat.chat_id}
                   chat={chat}
                   isActive={chatCtx.chatId === chat.chat_id}
-                  onSelect={() => chatCtx.loadChat(chat.chat_id)}
+                  onSelect={() => chatCtx.loadChat(chat.chat_id, chat.agent_id)}
                   onDelete={(id) => setDeleteTarget(id)}
                   onUpdateAvatar={(id, avatar) => chatCtx.updateChat(id, { avatar })}
                   onUpdateName={(id, name) => chatCtx.updateChat(id, { name })}

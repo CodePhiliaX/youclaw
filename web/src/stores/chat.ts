@@ -75,6 +75,7 @@ export type RealtimeChatSnapshot = {
 
 export interface ChatState {
   chatId: string
+  boundAgentId: string | null
   messages: Message[]
   timelineItems: TimelineItem[]
   streamingText: string
@@ -219,6 +220,7 @@ function buildMergedTimeline(
 function defaultChatState(chatId: string): ChatState {
   return {
     chatId,
+    boundAgentId: null,
     messages: [],
     timelineItems: [],
     streamingText: '',
@@ -248,6 +250,7 @@ interface ChatStore {
   activeChatId: string | null
 
   initChat(chatId: string): void
+  setChatAgent(chatId: string, agentId: string): void
   appendStreamText(chatId: string, text: string): void
   setProcessing(chatId: string, isProcessing: boolean): void
   addToolUse(chatId: string, tool: ToolUseItem): void
@@ -273,6 +276,13 @@ export const useChatStore = create<ChatStore>((set) => ({
       if (state.chats[chatId]) return state
       return { chats: { ...state.chats, [chatId]: defaultChatState(chatId) } }
     }),
+
+  setChatAgent: (chatId, agentId) =>
+    set((state) => ({
+      chats: updateChat(state.chats, chatId, () => ({
+        boundAgentId: agentId,
+      })),
+    })),
 
   appendStreamText: (chatId, text) =>
     set((state) => ({

@@ -1,6 +1,7 @@
 export { BrowserManager } from './manager.ts'
 export { createBrowserRoutes } from './routes.ts'
 export { createBrowserMcpServer, logBrowserToolRegistration } from './mcp.ts'
+export { createBrowserActionRouter } from './router.ts'
 export { disconnectAllBrowserSessions } from './pw-session.ts'
 export {
   createBrowserProfile,
@@ -22,8 +23,10 @@ export {
 export type {
   BrowserDriver,
   BrowserProfile,
+  BrowserRefAction,
   BrowserProfileRuntime,
   BrowserRuntimeStatus,
+  BrowserTarget,
   ChatBrowserState,
   CreateBrowserProfileInput,
   UpdateBrowserProfileInput,

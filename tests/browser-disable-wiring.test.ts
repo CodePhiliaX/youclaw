@@ -9,9 +9,10 @@ function read(relativePath: string) {
 }
 
 describe('browser disable wiring', () => {
-  test('chat input forwards null when the user selects no browser profile', () => {
+  test('chat input no longer forwards a chat-scoped browser profile override', () => {
     const chatInput = read('web/src/components/chat/ChatInput.tsx')
-    expect(chatInput).toContain('send(\n      text,\n      selectedProfileId,')
+    expect(chatInput).toContain('send(text, attachments.length > 0 ? attachments : undefined);')
+    expect(chatInput).not.toContain('chat-browser-profile-trigger')
   })
 
   test('messages route accepts nullable browserProfileId to represent explicit disable', () => {

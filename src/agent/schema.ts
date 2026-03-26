@@ -83,6 +83,7 @@ export const SecurityConfigSchema = z.object({
 export const BrowserConfigSchema = z.object({
   enabled: z.boolean().default(true),
   defaultProfile: z.string().optional(),
+  target: z.enum(['host', 'sandbox']).default('host'),
   allowChatOverride: z.boolean().default(true),
 })
 

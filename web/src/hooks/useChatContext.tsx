@@ -29,14 +29,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [browserProfiles, setBrowserProfiles] = useState<BrowserProfileDTO[]>(
     [],
   );
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
-    null,
-  );
 
   const activeChatState = useActiveChatState();
   const actions = useChatActions(agentId);
 
-  // Load agents
   const refreshAgents = useCallback(() => {
     getAgents()
       .then((list) => {
@@ -69,25 +65,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, []);
 
-  // Load browser profiles
   useEffect(() => {
     refreshBrowserProfiles();
   }, [refreshBrowserProfiles]);
 
-  // Load chat list
   const refreshChats = useCallback(() => {
     getChats()
       .then(setChatList)
       .catch(() => {});
   }, []);
 
-  // Refresh on active chat change
   const activeChatId = useChatStore((s) => s.activeChatId);
+  const activeChatListItem = activeChatId
+    ? chatList.find((chat) => chat.chat_id === activeChatId) ?? null
+    : null;
+  const currentChatAgentId =
+    activeChatState?.boundAgentId ?? activeChatListItem?.agent_id ?? null;
+  const canChangeAgent = !activeChatId;
+
   useEffect(() => {
     refreshChats();
   }, [activeChatId, refreshChats]);
 
-  // Debounced refresh on chat updates (completeMessage, addUserMessage)
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = onChatUpdate(() => {
@@ -103,7 +102,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshChats]);
 
-  // Connect the global realtime socket for chat and system events
   useEffect(() => {
     socketManager.connect();
     const unsubscribe = socketManager.onNewChat(() => {
@@ -139,6 +137,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     <ChatContext.Provider
       value={{
         chatId: activeChatState?.chatId ?? null,
+        currentChatAgentId,
+        canChangeAgent,
         messages: activeChatState?.messages ?? [],
         timelineItems: activeChatState?.timelineItems ?? [],
         streamingText: activeChatState?.streamingText ?? "",
@@ -161,8 +161,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         refreshAgents,
         browserProfiles,
         refreshBrowserProfiles,
-        selectedProfileId,
-        setSelectedProfileId,
       }}
     >
       {children}

@@ -3,7 +3,7 @@ import { createBuiltinImageTool } from './builtin-mcp.ts'
 import { createMessageTool } from './message-mcp.ts'
 import { createDocumentTools } from './document-mcp.ts'
 import { createTaskTools } from './task-mcp.ts'
-import type { BrowserManager } from '../browser/index.ts'
+import type { BrowserManager, BrowserTarget } from '../browser/index.ts'
 import { createBrowserMcpServer, logBrowserToolRegistration } from '../browser/index.ts'
 import type { SecretsManager } from './secrets.ts'
 import { createExternalMcpToolRuntime } from './mcp-tools.ts'
@@ -41,6 +41,7 @@ export async function buildRuntimeCustomTools(params: {
   chatId: string
   agentId: string
   browserProfileId?: string
+  browserTarget?: BrowserTarget
   reservedToolNames?: string[]
 }): Promise<{
   tools: ToolDefinition[]
@@ -60,9 +61,10 @@ export async function buildRuntimeCustomTools(params: {
       chatId: params.chatId,
       agentId: params.agentId,
       profileId: params.browserProfileId,
+      target: params.browserTarget ?? 'host',
     })
     customTools.push(...browserTools)
-    logBrowserToolRegistration(params.browserProfileId)
+    logBrowserToolRegistration(params.browserProfileId, params.browserTarget ?? 'host')
   }
 
   if (params.config.mcpServers) {
