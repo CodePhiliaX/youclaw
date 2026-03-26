@@ -133,6 +133,7 @@ jobs:
           releaseBody: ""
           releaseDraft: ${{ env.IS_BETA == 'true' }}
           prerelease: ${{ env.IS_BETA == 'true' }}
+          tauriScript: bun tauri
           args: ${{ matrix.tauri_args }}
           includeUpdaterJson: ${{ env.IS_BETA != 'true' }}
 
@@ -198,6 +199,7 @@ jobs:
           releaseBody: ""
           releaseDraft: ${{ env.IS_BETA == 'true' }}
           prerelease: ${{ env.IS_BETA == 'true' }}
+          tauriScript: bun tauri
           includeUpdaterJson: ${{ env.IS_BETA != 'true' }}
 
       - name: Notify Feishu
@@ -360,6 +362,7 @@ jobs:
           releaseBody: ""
           releaseDraft: false
           prerelease: false
+          tauriScript: bun tauri
           includeUpdaterJson: true
 
       - name: Notify Feishu
