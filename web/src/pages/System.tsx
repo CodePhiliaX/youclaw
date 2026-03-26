@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Clock, Bot, Send, Database, Server, Cpu, HardDrive, Calendar } from 'lucide-react'
 import { getSystemStatus } from '../api/system'
+import { socketManager } from '../lib/socket-manager'
 import type { SystemStatus } from '../api/system'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
@@ -81,7 +82,6 @@ export function System() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const logIdRef = useRef(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
-  const eventSourceRef = useRef<EventSource | null>(null)
 
   // Fetch system status
   const fetchStatus = useCallback(() => {
@@ -94,47 +94,48 @@ export function System() {
     return () => clearInterval(interval)
   }, [fetchStatus])
 
-  // Connect to SSE log stream
+  // Subscribe to the global realtime socket event stream
   useEffect(() => {
-    const es = new EventSource('/api/stream/system')
-    eventSourceRef.current = es
+    socketManager.ensureConnected()
 
-    const handleEvent = (e: Event) => {
-      try {
-        const me = e as MessageEvent
-        const data = JSON.parse(me.data) as Record<string, unknown>
-        logIdRef.current += 1
-        const entry: LogEntry = {
+    const unsubscribe = socketManager.onEnvelope((envelope) => {
+      const entry = (() => {
+        switch (envelope.kind) {
+          case 'connected':
+            return {
+              eventType: 'connected',
+              content: 'WebSocket connection established',
+            }
+          case 'snapshot':
+            return {
+              eventType: 'snapshot',
+              content: `Recovered ${envelope.chats.length} in-flight chat${envelope.chats.length === 1 ? '' : 's'}`,
+            }
+          case 'pong':
+            return null
+          case 'agent_event':
+            return {
+              eventType: envelope.event.type,
+              content: summarizeEvent(envelope.event as Record<string, unknown>),
+            }
+        }
+      })()
+
+      if (!entry) return
+
+      logIdRef.current += 1
+      setLogs((prev) => {
+        const next = [...prev, {
           id: logIdRef.current,
           time: new Date().toLocaleTimeString(),
-          eventType: (data.type as string) ?? e.type,
-          content: summarizeEvent(data),
-        }
-        setLogs((prev) => {
-          const next = [...prev, entry]
-          // Keep last 200 entries
-          return next.length > 200 ? next.slice(-200) : next
-        })
-      } catch {
-        // ignore parse errors
-      }
-    }
-
-    es.addEventListener('stream', handleEvent)
-    es.addEventListener('complete', handleEvent)
-    es.addEventListener('error', handleEvent)
-    es.addEventListener('processing', handleEvent)
-    es.addEventListener('tool_use', handleEvent)
-    es.addEventListener('document_status', handleEvent)
-    es.addEventListener('connected', handleEvent)
-
-    es.onerror = () => {
-      // EventSource auto-reconnects
-    }
+          ...entry,
+        }]
+        return next.length > 200 ? next.slice(-200) : next
+      })
+    })
 
     return () => {
-      es.close()
-      eventSourceRef.current = null
+      unsubscribe()
     }
   }, [])
 
@@ -294,7 +295,7 @@ function summarizeEvent(data: Record<string, unknown>): string {
       return `${prefix} document ${filename} -> ${status}${error ? ` (${error})` : ''}`
     }
     case 'connected':
-      return 'SSE connection established'
+      return 'WebSocket connection established'
     default:
       return JSON.stringify(data).slice(0, 120)
   }

@@ -3,7 +3,6 @@ import { cors } from 'hono/cors'
 import { health } from './health.ts'
 import { createAgentsRoutes } from './agents.ts'
 import { createMessagesRoutes } from './messages.ts'
-import { createStreamRoutes } from './stream.ts'
 import { createSkillsRoutes } from './skills.ts'
 import { createMemoryRoutes } from './memory.ts'
 import { createTasksRoutes } from './tasks.ts'
@@ -17,6 +16,7 @@ import { createSettingsRoutes } from './settings.ts'
 import { createAuthRoutes } from './auth.ts'
 import { createCreditRoutes } from './credit.ts'
 import { createProxyRoutes } from './proxy.ts'
+import { createRealtimeRoutes } from './realtime.ts'
 import type { AgentManager, AgentQueue } from '../agent/index.ts'
 import type { EventBus } from '../events/index.ts'
 import type { MessageRouter, ChannelManager } from '../channel/index.ts'
@@ -26,6 +26,7 @@ import type { MemoryManager } from '../memory/index.ts'
 import type { MemoryIndexer } from '../memory/index.ts'
 import type { Scheduler } from '../scheduler/index.ts'
 import type { BrowserManager } from '../browser/index.ts'
+import type { RealtimeHub } from '../realtime/hub.ts'
 import { getEnv } from '../config/env.ts'
 
 interface AppDeps {
@@ -40,10 +41,11 @@ interface AppDeps {
   memoryIndexer: MemoryIndexer | null
   scheduler: Scheduler
   browserManager: BrowserManager
+  realtimeHub: RealtimeHub
 }
 
 export function createApp(deps: AppDeps) {
-  const { agentManager, agentQueue, eventBus, router, channelManager, skillsLoader, registryManager, memoryManager, memoryIndexer, scheduler, browserManager } = deps
+  const { agentManager, agentQueue, eventBus, router, channelManager, skillsLoader, registryManager, memoryManager, memoryIndexer, scheduler, browserManager, realtimeHub } = deps
   const app = new Hono()
 
   // CORS — allow Vite dev server + Tauri WebView
@@ -61,9 +63,9 @@ export function createApp(deps: AppDeps) {
 
   // Mount routes
   app.route('/api', health)
+  app.route('/api', createRealtimeRoutes(realtimeHub))
   app.route('/api', createAgentsRoutes(agentManager))
   app.route('/api', createMessagesRoutes(agentManager, agentQueue, router))
-  app.route('/api', createStreamRoutes(eventBus))
   app.route('/api', createSkillsRoutes(skillsLoader, agentManager))
   app.route('/api', createMemoryRoutes(memoryManager, agentManager, memoryIndexer))
   app.route('/api', createTasksRoutes(scheduler, agentManager, agentQueue))

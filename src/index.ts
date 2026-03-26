@@ -4,6 +4,7 @@ delete process.env.CLAUDECODE
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
+import { websocket } from 'hono/bun'
 import { loadEnv, getEnv, resolvePathInput } from './config/index.ts'
 import { initLogger, getLogger } from './logger/index.ts'
 import { initDatabase } from './db/index.ts'
@@ -16,6 +17,7 @@ import { MemoryManager, MemoryIndexer } from './memory/index.ts'
 import { Scheduler } from './scheduler/index.ts'
 import { BrowserManager } from './browser/index.ts'
 import { createApp } from './routes/index.ts'
+import { RealtimeHub } from './realtime/hub.ts'
 import { ensureBunRuntime } from './agent/runtime.ts'
 import { resetShellEnvCache } from './utils/shell-env.ts'
 
@@ -57,6 +59,7 @@ async function main() {
 
   // 4. Create EventBus
   const eventBus = new EventBus()
+  const realtimeHub = new RealtimeHub(eventBus)
 
   // 4b. Initialize browser subsystem and ensure the default managed profile exists
   const browserManager = new BrowserManager()
@@ -177,15 +180,16 @@ async function main() {
   }
 
   // 17. Create HTTP server
-  const app = createApp({ agentManager, agentQueue, eventBus, router, channelManager, skillsLoader, registryManager, memoryManager, memoryIndexer, scheduler, browserManager })
+  const app = createApp({ agentManager, agentQueue, eventBus, router, channelManager, skillsLoader, registryManager, memoryManager, memoryIndexer, scheduler, browserManager, realtimeHub })
 
   let server: ReturnType<typeof Bun.serve>
   try {
     server = Bun.serve({
-      fetch: app.fetch,
+      fetch: (request, server) => app.fetch(request, server),
       port: env.PORT,
       hostname: '127.0.0.1',  // Listen on localhost only to avoid Windows firewall prompts
       idleTimeout: 255,       // Max idle timeout (seconds) for SSE/long-running requests
+      websocket,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -211,6 +215,7 @@ async function main() {
     await browserManager.shutdown().catch(() => {})
     skillsWatcher.stop()
     scheduler.stop()
+    realtimeHub.destroy()
     server.stop()
     process.exit(0)
   }

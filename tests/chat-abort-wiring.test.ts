@@ -9,10 +9,10 @@ function read(relativePath: string) {
 }
 
 describe('chat abort wiring', () => {
-  test('stop keeps SSE connected until backend finishes abort cleanup', () => {
+  test('stop keeps realtime delivery connected until backend finishes abort cleanup', () => {
     const useChat = read('web/src/hooks/useChat.ts')
 
     expect(useChat).toContain('abortChat(chatId).catch(() => {})')
-    expect(useChat).not.toContain('sseManager.disconnect(chatId)\n    store.setProcessing(chatId, false)')
+    expect(useChat).not.toContain('socketManager.disconnect(')
   })
 })

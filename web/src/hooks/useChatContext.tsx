@@ -15,7 +15,7 @@ import {
 import { ChatContext } from "./chatCtx";
 import { useAppPreferencesStore } from "@/stores/app";
 import { useChatStore } from "@/stores/chat";
-import { sseManager } from "@/lib/sse-manager";
+import { socketManager } from "@/lib/socket-manager";
 import type { ChatItem } from "@/lib/chat-utils";
 
 type Agent = { id: string; name: string };
@@ -103,22 +103,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshChats]);
 
-  // Connect system SSE for real-time channel events (new_chat, inbound_message)
+  // Connect the global realtime socket for chat and system events
   useEffect(() => {
-    sseManager.connectSystem();
-    const unsubscribe = sseManager.onNewChat(() => {
+    socketManager.connect();
+    const unsubscribe = socketManager.onNewChat(() => {
       refreshChats();
     });
     return () => {
       unsubscribe();
-      sseManager.disconnectSystem();
+      socketManager.disconnect();
     };
   }, [refreshChats]);
 
   const deleteChat = useCallback(
     async (chatIdToDelete: string) => {
       await deleteChatApi(chatIdToDelete);
-      sseManager.disconnect(chatIdToDelete);
       useChatStore.getState().removeChat(chatIdToDelete);
       refreshChats();
     },

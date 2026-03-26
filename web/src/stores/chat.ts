@@ -55,6 +55,24 @@ export type Message = {
   turnId?: string
 }
 
+export type RealtimeDocumentStatus = {
+  documentKey: string
+  filename: string
+  status: 'parsing' | 'parsed' | 'failed'
+  error?: string
+}
+
+export type RealtimeChatSnapshot = {
+  agentId: string
+  chatId: string
+  turnId?: string
+  isProcessing: boolean
+  streamingText: string
+  pendingToolUse: ToolUseItem[]
+  documentStatuses: RealtimeDocumentStatus[]
+  updatedAt: string
+}
+
 export interface ChatState {
   chatId: string
   messages: Message[]
@@ -135,6 +153,59 @@ function getLiveTimelineTail(items: TimelineItem[], messages: Message[]): Timeli
   return items.slice(tailStart).filter((item) => item.kind !== 'document_status')
 }
 
+function getCurrentTurnBaseTimeline(items: TimelineItem[]): TimelineItem[] {
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i]
+    if (item?.kind === 'message') {
+      return items.slice(0, i + 1)
+    }
+  }
+  return []
+}
+
+function buildDocumentStatusRecord(items: RealtimeDocumentStatus[]): Record<string, { filename: string; status: 'parsing' | 'parsed' | 'failed'; error?: string }> {
+  return Object.fromEntries(items.map((item) => [
+    item.documentKey,
+    {
+      filename: item.filename,
+      status: item.status,
+      error: item.error,
+    },
+  ]))
+}
+
+function buildLiveTimelineFromSnapshot(snapshot: RealtimeChatSnapshot): TimelineItem[] {
+  const documentItems = snapshot.documentStatuses.map((document) => ({
+    id: `document:${document.documentKey}:${snapshot.updatedAt}`,
+    kind: 'document_status' as const,
+    documentKey: document.documentKey,
+    filename: document.filename,
+    status: document.status,
+    error: document.error,
+    timestamp: snapshot.updatedAt,
+  }))
+
+  const toolItems = snapshot.pendingToolUse.map((tool) => ({
+    id: `tool:${tool.id}`,
+    kind: 'tool_use' as const,
+    name: tool.name,
+    input: tool.input,
+    status: tool.status,
+    timestamp: snapshot.updatedAt,
+  }))
+
+  const streamItem = snapshot.streamingText
+    ? [{
+      id: `assistant_stream:${snapshot.chatId}:${snapshot.turnId ?? snapshot.updatedAt}`,
+      kind: 'assistant_stream' as const,
+      content: snapshot.streamingText,
+      timestamp: snapshot.updatedAt,
+    }]
+    : []
+
+  return [...documentItems, ...toolItems, ...streamItem]
+}
+
 function buildMergedTimeline(
   messages: Message[],
   existingTimelineItems: TimelineItem[],
@@ -181,6 +252,7 @@ interface ChatStore {
   setProcessing(chatId: string, isProcessing: boolean): void
   addToolUse(chatId: string, tool: ToolUseItem): void
   setDocumentStatus(chatId: string, documentId: string, filename: string, status: 'parsing' | 'parsed' | 'failed', error?: string): void
+  applyRealtimeSnapshot(chatId: string, snapshot: RealtimeChatSnapshot): void
   completeMessage(chatId: string, fullText: string, toolUse: ToolUseItem[], sessionId?: string, turnId?: string): void
   addUserMessage(chatId: string, message: Message): void
   setMessages(chatId: string, messages: Message[]): void
@@ -349,6 +421,25 @@ export const useChatStore = create<ChatStore>((set) => ({
         return {
           documentStatuses: nextStatuses,
           timelineItems,
+        }
+      }),
+    })),
+
+  applyRealtimeSnapshot: (chatId, snapshot) =>
+    set((state) => ({
+      chats: updateChat(state.chats, chatId, (chat) => {
+        const baseTimelineItems = getCurrentTurnBaseTimeline(chat.timelineItems)
+        return {
+          isProcessing: snapshot.isProcessing,
+          ignoreLateAssistantEvents: false,
+          streamingText: snapshot.streamingText,
+          pendingToolUse: snapshot.pendingToolUse.map((tool) => ({ ...tool })),
+          documentStatuses: buildDocumentStatusRecord(snapshot.documentStatuses),
+          timelineItems: [
+            ...baseTimelineItems,
+            ...buildLiveTimelineFromSnapshot(snapshot),
+          ],
+          chatStatus: snapshot.streamingText ? 'streaming' as const : 'submitted' as const,
         }
       }),
     })),

@@ -82,6 +82,18 @@ export function getBaseUrlSync(): string {
   return _cachedBaseUrl ?? 'http://localhost:62601'
 }
 
+export function getWebSocketUrlSync(path = '/api/ws'): string {
+  if (typeof window === 'undefined') return path
+
+  const base = isTauri
+    ? (getBaseUrlSync() || 'http://localhost:62601')
+    : window.location.origin
+
+  const url = new URL(path, base)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
+}
+
 /**
  * Open a URL in the system default browser.
  * Tauri mode: uses @tauri-apps/plugin-opener

@@ -98,4 +98,52 @@ describe('chat store completion flow', () => {
     const chat = useChatStore.getState().chats['chat-1']
     expect(chat?.messages).toHaveLength(2)
   })
+
+  test('applyRealtimeSnapshot restores an in-flight turn', () => {
+    const store = useChatStore.getState()
+
+    store.initChat('chat-1')
+    store.addUserMessage('chat-1', {
+      id: 'user-1',
+      role: 'user',
+      content: 'hello',
+      timestamp: '2026-03-20T10:00:00.000Z',
+    })
+
+    store.applyRealtimeSnapshot('chat-1', {
+      agentId: 'agent-1',
+      chatId: 'chat-1',
+      turnId: 'turn-1',
+      isProcessing: true,
+      streamingText: 'partial answer',
+      pendingToolUse: [
+        {
+          id: 'tool-1',
+          name: 'read_file',
+          input: '{"path":"README.md"}',
+          status: 'running',
+        },
+      ],
+      documentStatuses: [
+        {
+          documentKey: 'doc-1',
+          filename: 'README.md',
+          status: 'parsed',
+        },
+      ],
+      updatedAt: '2026-03-20T10:01:00.000Z',
+    })
+
+    const chat = useChatStore.getState().chats['chat-1']
+    expect(chat?.isProcessing).toBe(true)
+    expect(chat?.streamingText).toBe('partial answer')
+    expect(chat?.pendingToolUse[0]?.name).toBe('read_file')
+    expect(chat?.documentStatuses['doc-1']?.status).toBe('parsed')
+    expect(chat?.timelineItems.map((item) => item.kind)).toEqual([
+      'message',
+      'document_status',
+      'tool_use',
+      'assistant_stream',
+    ])
+  })
 })

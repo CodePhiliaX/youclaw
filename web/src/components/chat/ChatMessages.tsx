@@ -26,6 +26,11 @@ export function ChatMessages() {
   const { t } = useI18n()
   const { timelineItems, streamingText, isProcessing, pendingToolUse } = useChatContext()
   const renderableItems = buildRenderableTimeline(timelineItems)
+  const latestRenderableItem = renderableItems[renderableItems.length - 1]
+  const showThinkingState = isProcessing
+    && !streamingText
+    && pendingToolUse.length === 0
+    && !(latestRenderableItem?.kind === 'message' && latestRenderableItem.role === 'assistant')
 
   return (
     <Conversation data-testid="message-list">
@@ -35,7 +40,7 @@ export function ChatMessages() {
         )}
 
         {/* Thinking state */}
-        {isProcessing && !streamingText && pendingToolUse.length === 0 && (
+        {showThinkingState && (
           <div className="flex gap-3 py-3">
             <Avatar className="h-8 w-8 mt-0.5">
               <AvatarImage src="/icon.svg" alt="YouClaw" />
