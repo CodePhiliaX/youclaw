@@ -8,6 +8,8 @@ type Agent = { id: string; name: string }
 
 export interface ChatContextType {
   chatId: string | null
+  currentChatAgentId: string | null
+  canChangeAgent: boolean
   messages: Message[]
   timelineItems: TimelineItem[]
   streamingText: string
@@ -15,8 +17,8 @@ export interface ChatContextType {
   pendingToolUse: ToolUseItem[]
   documentStatuses: Record<string, { filename: string; status: 'parsing' | 'parsed' | 'failed'; error?: string }>
   chatStatus: 'submitted' | 'streaming' | 'ready' | 'error'
-  send: (prompt: string, browserProfileId?: string | null, attachments?: Attachment[]) => Promise<void>
-  loadChat: (chatId: string) => Promise<void>
+  send: (prompt: string, attachments?: Attachment[]) => Promise<void>
+  loadChat: (chatId: string, agentId?: string) => Promise<void>
   newChat: () => void
   stop: () => void
   showInsufficientCredits: boolean
@@ -36,8 +38,6 @@ export interface ChatContextType {
 
   browserProfiles: BrowserProfileDTO[]
   refreshBrowserProfiles: () => void
-  selectedProfileId: string | null
-  setSelectedProfileId: (id: string | null) => void
 }
 
 export const ChatContext = createContext<ChatContextType | null>(null)

@@ -5,9 +5,9 @@ import { inferChannelType } from '../channel/config-schema.ts'
 import { getLogger } from '../logger/index.ts'
 import type { SkillsLoader } from '../skills/index.ts'
 import type { MemoryManager } from '../memory/index.ts'
-import type { BrowserDriver } from '../browser/index.ts'
 import type { AgentConfig } from './types.ts'
 import { getOrLoadBootstrapDocs } from './bootstrap-cache.ts'
+import type { BrowserDriver, BrowserTarget } from '../browser/index.ts'
 
 const WORKSPACE_FILES = [
   { filename: 'AGENTS.md' },
@@ -47,6 +47,7 @@ export class PromptBuilder {
       memoryContext?: string
       browserProfileId?: string
       browserDisabled?: boolean
+      browserTarget?: BrowserTarget
       browserProfile?: {
         id: string
         driver: BrowserDriver
@@ -98,11 +99,11 @@ export class PromptBuilder {
     if (context?.browserDisabled) {
       parts.push(
         `## Browser Policy\n` +
-        `Browser use is explicitly disabled for this chat. ` +
+        `Browser use is explicitly disabled for this request. ` +
         `Do NOT use the built-in \`mcp__browser__*\` tools. ` +
         `Do NOT invoke the legacy \`agent-browser\` skill and do NOT run \`agent-browser\` from Bash. ` +
         `Solve the task without browser automation by default. ` +
-        `If web search, WebFetch, or other non-browser methods are blocked by login walls, CAPTCHA, 2FA, device verification, bot checks, or other site verification, stop trying browser tools and reply with a short, user-facing explanation that browser mode is currently off and can be enabled by switching this chat from "None" to a browser profile, then retrying in browser mode.`
+        `If web search, WebFetch, or other non-browser methods are blocked by login walls, CAPTCHA, 2FA, device verification, bot checks, or other site verification, stop trying browser tools and reply with a short, user-facing explanation that browser mode is currently off and can be enabled by configuring a browser profile for this agent or request, then retrying in browser mode.`
       )
     } else if (context?.browserProfileId) {
       const fallbackHint = context.browserProfile?.driver === 'managed' && context.browserProfile.userDataDir
@@ -115,7 +116,10 @@ export class PromptBuilder {
       parts.push(
         `## Browser Tools\n` +
         `This chat is connected to browser profile "${context.browserProfileId}". ` +
-        `Prefer the built-in \`mcp__browser__*\` tools for common browser interaction: status, list_tabs, open_tab, navigate, snapshot, screenshot, click, type, press_key, and close_tab.\n` +
+        `Browser tools for this chat are routed to target "${context.browserTarget ?? 'host'}". ` +
+        `Prefer the built-in \`mcp__browser__*\` tools for common browser interaction: status, list_tabs, open_tab, navigate, snapshot, act, screenshot, click, type, press_key, and close_tab.\n` +
+        `For page interaction, prefer taking a fresh \`snapshot\` first and then using \`act\` with element refs returned by the snapshot. Use raw CSS selector tools only as a fallback when ref-based interaction is insufficient.\n` +
+        `If the current browser target reports that it is not implemented, do not keep retrying the same browser tool calls blindly. Explain the limitation briefly and continue with another approach when possible.\n` +
         `Use the legacy \`agent-browser\` skill only when you need capabilities not yet covered by the built-in browser tools, such as interactive element refs, explicit waits, select/check, get text, PDF export, visual diff, or state import/export.\n` +
         `Manual login is the default and recommended flow for sites that require authentication. Do NOT ask the user for credentials, passwords, 2FA codes, recovery codes, or session secrets. Ask the user to sign in manually in the browser profile instead.\n` +
         `Automated login attempts often trigger anti-bot or account-security defenses. If the site shows CAPTCHA, 2FA, device verification, suspicious-login prompts, or other security checks, stop automated login attempts and ask the user to take over manually.\n` +

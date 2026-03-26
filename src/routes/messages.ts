@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { basename, extname, resolve } from 'node:path'
 import { z } from 'zod/v4'
-import { getMessages, getChats, deleteChat, updateChatFields } from '../db/index.ts'
+import { getMessages, getChats, deleteChat, updateChatFields, getDatabase } from '../db/index.ts'
 import type { AgentManager, AgentQueue } from '../agent/index.ts'
 import { abortRegistry } from '../agent/abort-registry.ts'
 import type { MessageRouter } from '../channel/index.ts'
@@ -120,6 +120,17 @@ export function createMessagesRoutes(agentManager: AgentManager, agentQueue: Age
 
     const chatId = body.chatId ?? `web:${randomUUID()}`
     const messageId = body.messageId ?? randomUUID()
+    if (body.chatId) {
+      const db = getDatabase()
+      const existingChat = db.query('SELECT agent_id FROM chats WHERE chat_id = ?').get(chatId) as { agent_id?: string } | null
+      if (existingChat?.agent_id && existingChat.agent_id !== agentId) {
+        return c.json({
+          error: 'Chat is bound to another agent',
+          chatId,
+          boundAgentId: existingChat.agent_id,
+        }, 409)
+      }
+    }
 
     const inbound: InboundMessage = {
       id: messageId,

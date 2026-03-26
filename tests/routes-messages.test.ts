@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { cleanTables } from './setup.ts'
 import {
   getChats,
+  getDatabase,
   getMessages,
   saveMessage,
   upsertChat,
@@ -83,6 +84,33 @@ describe('messages routes', () => {
     expect(res.status).toBe(200)
     expect(handleInbound).toHaveBeenCalledTimes(1)
     expect(handleInbound.mock.calls[0]?.[0]?.id).toBe('client-msg-1')
+  })
+
+  test('POST /agents/:id/message rejects switching agent for an existing chat', async () => {
+    upsertChat('web:chat-1', 'agent-1', 'Existing Chat')
+    const db = getDatabase()
+    db.run('UPDATE chats SET agent_id = ? WHERE chat_id = ?', ['agent-1', 'web:chat-1'])
+
+    const handleInbound = mock(() => Promise.resolve())
+    const app = createMessagesRoutes(
+      {
+        getAgent: (id: string) => ({ id }),
+      } as any,
+      {} as any,
+      { handleInbound } as any,
+    )
+
+    const res = await app.request('/agents/agent-2/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello', chatId: 'web:chat-1' }),
+    })
+
+    const body = await res.json() as { error: string; boundAgentId: string }
+    expect(res.status).toBe(409)
+    expect(body.error).toBe('Chat is bound to another agent')
+    expect(body.boundAgentId).toBe('agent-1')
+    expect(handleInbound).not.toHaveBeenCalled()
   })
 
   test('GET /chats/:chatId/messages returns in chronological order', async () => {

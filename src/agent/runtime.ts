@@ -295,6 +295,7 @@ export class AgentRuntime {
     const invocationId = randomUUID()
     const toolUse: AgentToolUse[] = []
     const browserDisabled = browserProfileId === null
+    const browserTarget = this.config.browser?.target ?? 'host'
     const resolvedBrowserProfile = this.browserManager
       ? (browserDisabled
           ? null
@@ -337,6 +338,7 @@ export class AgentRuntime {
         memoryContext,
         browserProfileId: effectiveBrowserProfileId,
         browserDisabled,
+        browserTarget,
         browserProfile: resolvedBrowserProfile
           ? {
               id: resolvedBrowserProfile.id,
@@ -376,6 +378,7 @@ export class AgentRuntime {
       chatId,
       agentId,
       browserProfileId: effectiveBrowserProfileId,
+      browserTarget,
       reservedToolNames: tools.map((tool) => tool.name),
     })
     const customTools = filterConfiguredTools(customToolRuntime.tools, this.config)
@@ -716,7 +719,7 @@ export class AgentRuntime {
   }
 
   private buildDisabledBrowserUserMessage(reason: string): string {
-    return `This chat is currently set to "No browser". ${reason}`
+    return `Browser automation is currently disabled for this request. ${reason}`
   }
 
   private buildRecoveredPrompt(chatId: string, prompt: string): string {
