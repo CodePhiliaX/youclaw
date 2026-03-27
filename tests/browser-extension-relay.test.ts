@@ -87,4 +87,57 @@ describe('browser extension relay', () => {
 
     await expect(manager.connectRelay(profile.id, initialRelay.token, 'http://127.0.0.1:9222')).rejects.toThrow('Invalid relay token')
   })
+
+  test('connectMainBridge creates a unified browser session with browser metadata', async () => {
+    const manager = new FakeRelayBrowserManager()
+    const profile = manager.createProfile({
+      name: 'Connected Main Browser',
+      driver: 'extension-relay',
+      executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    })
+
+    const relay = manager.getRelayState(profile.id)
+    const result = await manager.connectMainBridge(profile.id, {
+      token: relay.token,
+      cdpUrl: 'http://127.0.0.1:9222',
+      browserId: 'chrome',
+      browserName: 'Google Chrome',
+      browserKind: 'chrome',
+      tabId: 'tab-42',
+      tabUrl: 'https://example.com',
+      tabTitle: 'Example',
+    })
+
+    expect(result.state.status).toBe('connected')
+    expect(result.state.connectionMode).toBe('main-bridge')
+    expect(result.state.connectedBrowserName).toBe('Google Chrome')
+    expect(result.state.connectedTabUrl).toBe('https://example.com')
+  })
+
+  test('disconnectMainBridge clears both bridge session and relay runtime state', async () => {
+    const manager = new FakeRelayBrowserManager()
+    const profile = manager.createProfile({
+      name: 'Disconnect Main Browser',
+      driver: 'extension-relay',
+    })
+
+    const relay = manager.getRelayState(profile.id)
+    await manager.connectMainBridge(profile.id, {
+      token: relay.token,
+      cdpUrl: 'http://127.0.0.1:9222',
+      browserId: 'chrome',
+      browserName: 'Google Chrome',
+      browserKind: 'chrome',
+      tabId: 'tab-9',
+      tabUrl: 'https://example.com/dashboard',
+      tabTitle: 'Dashboard',
+    })
+
+    const result = await manager.disconnectMainBridge(profile.id)
+    expect(result.state.connectionMode).toBe('none')
+    expect(result.state.connectedBrowserName).toBeNull()
+    expect(result.state.connectedTabUrl).toBeNull()
+    expect(result.runtime.status).toBe('stopped')
+    expect(result.relay.connected).toBe(false)
+  })
 })
