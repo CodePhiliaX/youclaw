@@ -24,9 +24,22 @@ export const CustomModelProviderSchema = z.enum([
   'anthropic',
   'openai',
   'gemini',
-  'custom',
   'minimax',
   'minimax-cn',
+  'glm',
+  'deepseek',
+  'qwen',
+  'moonshot',
+  'doubao',
+  'siliconflow',
+  'openrouter',
+  'groq',
+  'xai',
+  'mistral',
+  'together',
+  'fireworks',
+  'ollama',
+  'custom',
 ])
 
 export const CustomModelSchema = z.object({

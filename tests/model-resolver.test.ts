@@ -30,4 +30,32 @@ describe('resolvePiModel', () => {
     expect(model.baseUrl).toBe('https://readmex.com/api')
     expect(model.id).toBe('minimax/MiniMax-M2.7-highspeed')
   })
+
+  test('uses the GLM OpenAI-compatible defaults for manual models', () => {
+    const model = resolvePiModel({
+      apiKey: 'token',
+      baseUrl: '',
+      modelId: 'glm-4.6',
+      provider: 'glm',
+    })
+
+    expect(model.provider).toBe('glm')
+    expect(model.api).toBe('openai-completions')
+    expect(model.baseUrl).toBe('https://open.bigmodel.cn/api/paas/v4')
+    expect(model.id).toBe('glm-4.6')
+  })
+
+  test('uses the OpenRouter v1 base url for manual models', () => {
+    const model = resolvePiModel({
+      apiKey: 'token',
+      baseUrl: '',
+      modelId: 'openai/gpt-4.1-mini',
+      provider: 'openrouter',
+    })
+
+    expect(model.provider).toBe('openrouter')
+    expect(model.api).toBe('openai-completions')
+    expect(model.baseUrl).toBe('https://openrouter.ai/api/v1')
+    expect(model.id).toBe('openai/gpt-4.1-mini')
+  })
 })

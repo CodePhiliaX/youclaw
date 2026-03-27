@@ -145,11 +145,58 @@ function inferCustomModelProvider(model: CustomModel): CustomModel['provider'] {
   if (lowerModelId.startsWith('minimax-cn/')) return 'minimax-cn'
   if (lowerModelId.startsWith('minimax/') || lowerModelId.startsWith('minimax-')) return 'minimax'
   if (modelId.startsWith('MiniMax-')) return 'minimax'
+  if (lowerModelId.startsWith('glm/') || lowerModelId.startsWith('glm-')) return 'glm'
+  if (lowerModelId.startsWith('deepseek/') || lowerModelId.startsWith('deepseek-')) return 'deepseek'
+  if (
+    lowerModelId.startsWith('qwen/')
+    || lowerModelId.startsWith('qwen-')
+    || lowerModelId.startsWith('qwen')
+    || lowerModelId.startsWith('qwq-')
+    || lowerModelId.startsWith('qvq-')
+  ) return 'qwen'
+  if (
+    lowerModelId.startsWith('moonshot/')
+    || lowerModelId.startsWith('moonshot-')
+    || lowerModelId.startsWith('kimi-')
+    || lowerModelId.startsWith('kimi/')
+  ) return 'moonshot'
+  if (lowerModelId.startsWith('doubao/') || lowerModelId.startsWith('doubao-')) return 'doubao'
+  if (lowerModelId.startsWith('siliconflow/')) return 'siliconflow'
+  if (lowerModelId.startsWith('openrouter/')) return 'openrouter'
+  if (lowerModelId.startsWith('groq/')) return 'groq'
+  if (lowerModelId.startsWith('xai/') || lowerModelId.startsWith('grok-') || lowerModelId.startsWith('grok/')) return 'xai'
+  if (
+    lowerModelId.startsWith('mistral/')
+    || lowerModelId.startsWith('mistral-')
+    || lowerModelId.startsWith('ministral-')
+    || lowerModelId.startsWith('magistral-')
+    || lowerModelId.startsWith('devstral-')
+  ) return 'mistral'
+  if (lowerModelId.startsWith('together/')) return 'together'
+  if (lowerModelId.startsWith('fireworks/')) return 'fireworks'
+  if (lowerModelId.startsWith('ollama/')) return 'ollama'
 
-  if (model.provider === 'anthropic' || model.provider === 'custom') {
-    if (lowerBaseUrl.includes('minimax')) {
-      return lowerBaseUrl.includes('/cn') ? 'minimax-cn' : 'minimax'
-    }
+  if (lowerBaseUrl.includes('minimax')) {
+    return lowerBaseUrl.includes('/cn') ? 'minimax-cn' : 'minimax'
+  }
+  if (lowerBaseUrl.includes('bigmodel.cn')) return 'glm'
+  if (lowerBaseUrl.includes('deepseek.com')) return 'deepseek'
+  if (lowerBaseUrl.includes('dashscope.aliyuncs.com') || lowerBaseUrl.includes('aliyuncs.com/compatible-mode')) return 'qwen'
+  if (lowerBaseUrl.includes('moonshot.cn')) return 'moonshot'
+  if (
+    lowerBaseUrl.includes('volces.com')
+    || lowerBaseUrl.includes('volcengine.com')
+    || lowerBaseUrl.includes('ark.cn-')
+  ) return 'doubao'
+  if (lowerBaseUrl.includes('siliconflow.cn')) return 'siliconflow'
+  if (lowerBaseUrl.includes('openrouter.ai')) return 'openrouter'
+  if (lowerBaseUrl.includes('groq.com')) return 'groq'
+  if (lowerBaseUrl.includes('api.x.ai') || lowerBaseUrl.includes('x.ai/v1')) return 'xai'
+  if (lowerBaseUrl.includes('mistral.ai')) return 'mistral'
+  if (lowerBaseUrl.includes('together.xyz') || lowerBaseUrl.includes('together.ai')) return 'together'
+  if (lowerBaseUrl.includes('fireworks.ai')) return 'fireworks'
+  if (lowerBaseUrl.includes('localhost:11434') || lowerBaseUrl.includes('127.0.0.1:11434') || lowerBaseUrl.includes('ollama')) {
+    return 'ollama'
   }
 
   return model.provider

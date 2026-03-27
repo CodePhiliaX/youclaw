@@ -4,16 +4,24 @@ import { getLogger } from '../logger/index.ts'
 
 // Known provider -> pi-ai provider mapping
 const PROVIDER_MAP: Record<string, string> = {
-  anthropic: 'anthropic',
+  minimax: 'minimax',
+  glm: 'glm',
+  qwen: 'qwen',
+  doubao: 'doubao',
+  ollama: 'ollama',
+  deepseek: 'deepseek',
   openai: 'openai',
   gemini: 'google',
-  google: 'google',
+  anthropic: 'anthropic',
+  moonshot: 'moonshot',
+  siliconflow: 'siliconflow',
   openrouter: 'openrouter',
   groq: 'groq',
   xai: 'xai',
   mistral: 'mistral',
-  minimax: 'minimax',
-  'minimax-cn': 'minimax-cn',
+  together: 'together',
+  fireworks: 'fireworks',
+
 }
 
 // Default model IDs per provider for fallback
@@ -122,8 +130,32 @@ function resolveDefaultBaseUrl(provider: string): string {
       return 'https://api.openai.com'
     case 'google':
       return 'https://generativelanguage.googleapis.com'
+    case 'glm':
+      return 'https://open.bigmodel.cn/api/paas/v4'
+    case 'deepseek':
+      return 'https://api.deepseek.com'
+    case 'qwen':
+      return 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    case 'moonshot':
+      return 'https://api.moonshot.cn/v1'
+    case 'doubao':
+      return 'https://ark.cn-beijing.volces.com/api/v3'
+    case 'siliconflow':
+      return 'https://api.siliconflow.cn/v1'
     case 'openrouter':
-      return 'https://openrouter.ai/api'
+      return 'https://openrouter.ai/api/v1'
+    case 'groq':
+      return 'https://api.groq.com/openai/v1'
+    case 'xai':
+      return 'https://api.x.ai/v1'
+    case 'mistral':
+      return 'https://api.mistral.ai'
+    case 'together':
+      return 'https://api.together.xyz/v1'
+    case 'fireworks':
+      return 'https://api.fireworks.ai/inference/v1'
+    case 'ollama':
+      return 'http://localhost:11434/v1'
     default:
       return ''
   }

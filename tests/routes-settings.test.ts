@@ -181,6 +181,60 @@ describe('settings routes', () => {
     expect(body.baseUrl).toBe('https://proxy.example.com')
   })
 
+  test('GET /settings normalizes GLM custom models away from custom/openai provider', async () => {
+    const db = getDatabase()
+    db.run(
+      'INSERT INTO kv_state (key, value) VALUES (?, ?)',
+      ['settings', JSON.stringify({
+        activeModel: { provider: 'custom', id: 'glm-1' },
+        customModels: [{
+          id: 'glm-1',
+          name: 'GLM',
+          provider: 'openai',
+          apiKey: 'secret-key',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          modelId: 'glm-4.6',
+        }],
+      })],
+    )
+
+    const app = createSettingsRoutes()
+    const res = await app.request('/settings')
+    const body = await res.json() as {
+      customModels: Array<{ provider: string; apiKey: string; modelId: string }>
+    }
+
+    expect(res.status).toBe(200)
+    expect(body.customModels[0]?.provider).toBe('glm')
+    expect(body.customModels[0]?.apiKey).toBe('****-key')
+  })
+
+  test('PATCH /settings accepts newly added mainstream providers', async () => {
+    const app = createSettingsRoutes()
+    const res = await app.request('/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customModels: [{
+          id: 'deepseek-1',
+          name: 'DeepSeek',
+          provider: 'deepseek',
+          apiKey: 'secret-key',
+          baseUrl: 'https://api.deepseek.com',
+          modelId: 'deepseek-chat',
+        }],
+      }),
+    })
+    const body = await res.json() as {
+      customModels: Array<{ provider: string; modelId: string; apiKey: string }>
+    }
+
+    expect(res.status).toBe(200)
+    expect(body.customModels[0]?.provider).toBe('deepseek')
+    expect(body.customModels[0]?.modelId).toBe('deepseek-chat')
+    expect(body.customModels[0]?.apiKey).toBe('****-key')
+  })
+
   test('PATCH /settings rewrites legacy cloud activeModel provider to builtin', async () => {
     const db = getDatabase()
     db.run(

@@ -1085,7 +1085,26 @@ export async function setPortConfig(port: string | null) {
 export interface CustomModelDTO {
   id: string
   name: string
-  provider: 'anthropic' | 'openai' | 'gemini' | 'custom' | 'minimax' | 'minimax-cn'
+  provider:
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'minimax'
+    | 'minimax-cn'
+    | 'glm'
+    | 'deepseek'
+    | 'qwen'
+    | 'moonshot'
+    | 'doubao'
+    | 'siliconflow'
+    | 'openrouter'
+    | 'groq'
+    | 'xai'
+    | 'mistral'
+    | 'together'
+    | 'fireworks'
+    | 'ollama'
+    | 'custom'
   apiKey: string
   baseUrl: string
   modelId: string

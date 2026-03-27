@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -29,14 +29,125 @@ const BUILTIN_MODELS = [
 ] as const
 
 const CUSTOM_MODEL_DOCS_URL = getOfficialDocsUrl('custom-models')
+const CUSTOM_MODEL_PROVIDER_META: Record<CustomModelDTO['provider'], { label: string; defaultBaseUrl: string; modelIdExample?: string }> = {
+  anthropic: {
+    label: 'Anthropic',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    modelIdExample: 'claude-sonnet-4-6',
+  },
+  openai: {
+    label: 'OpenAI',
+    defaultBaseUrl: 'https://api.openai.com',
+    modelIdExample: 'gpt-4.1',
+  },
+  gemini: {
+    label: 'Google Gemini',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com',
+    modelIdExample: 'gemini-2.5-flash',
+  },
+  minimax: {
+    label: 'MiniMax',
+    defaultBaseUrl: 'https://api.minimax.io/anthropic',
+    modelIdExample: 'MiniMax-M2.5-highspeed',
+  },
+  'minimax-cn': {
+    label: 'MiniMax CN',
+    defaultBaseUrl: '',
+    modelIdExample: 'MiniMax-M2.5-highspeed',
+  },
+  glm: {
+    label: 'GLM',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    modelIdExample: 'glm-4.6',
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    defaultBaseUrl: 'https://api.deepseek.com',
+    modelIdExample: 'deepseek-chat',
+  },
+  qwen: {
+    label: 'Qwen',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    modelIdExample: 'qwen-max',
+  },
+  moonshot: {
+    label: 'Moonshot',
+    defaultBaseUrl: 'https://api.moonshot.cn/v1',
+    modelIdExample: 'kimi-k2-0711-preview',
+  },
+  doubao: {
+    label: 'Doubao',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    modelIdExample: 'doubao-seed-1-6-thinking-250715',
+  },
+  siliconflow: {
+    label: 'SiliconFlow',
+    defaultBaseUrl: 'https://api.siliconflow.cn/v1',
+    modelIdExample: 'deepseek-ai/DeepSeek-V3',
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    defaultBaseUrl: 'https://openrouter.ai/api/v1',
+    modelIdExample: 'openai/gpt-4.1-mini',
+  },
+  groq: {
+    label: 'Groq',
+    defaultBaseUrl: 'https://api.groq.com/openai/v1',
+    modelIdExample: 'llama-3.3-70b-versatile',
+  },
+  xai: {
+    label: 'xAI',
+    defaultBaseUrl: 'https://api.x.ai/v1',
+    modelIdExample: 'grok-4',
+  },
+  mistral: {
+    label: 'Mistral',
+    defaultBaseUrl: 'https://api.mistral.ai',
+    modelIdExample: 'mistral-large-latest',
+  },
+  together: {
+    label: 'Together AI',
+    defaultBaseUrl: 'https://api.together.xyz/v1',
+    modelIdExample: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  },
+  fireworks: {
+    label: 'Fireworks AI',
+    defaultBaseUrl: 'https://api.fireworks.ai/inference/v1',
+    modelIdExample: 'accounts/fireworks/models/deepseek-v3',
+  },
+  ollama: {
+    label: 'Ollama',
+    defaultBaseUrl: 'http://localhost:11434/v1',
+    modelIdExample: 'qwen3:8b',
+  },
+  custom: {
+    label: 'Custom',
+    defaultBaseUrl: '',
+    modelIdExample: 'my-proxy/model-name',
+  },
+}
+
 const CUSTOM_MODEL_PROVIDER_OPTIONS: Array<{ value: CustomModelDTO['provider']; label: string }> = [
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'gemini', label: 'Google Gemini' },
-  { value: 'minimax', label: 'MiniMax' },
-  { value: 'minimax-cn', label: 'MiniMax CN' },
-  { value: 'custom', label: 'Custom' },
-]
+  'anthropic',
+  'openai',
+  'gemini',
+  'glm',
+  'deepseek',
+  'qwen',
+  'moonshot',
+  'doubao',
+  'siliconflow',
+  'openrouter',
+  'groq',
+  'xai',
+  'mistral',
+  'together',
+  'fireworks',
+  'ollama',
+  'minimax',
+  'minimax-cn',
+  'custom',
+].map((value) => ({ value, label: CUSTOM_MODEL_PROVIDER_META[value].label }))
 
 type ActiveModel = SettingsDTO['activeModel']
 
@@ -55,11 +166,13 @@ export function ModelsPanel() {
   const [formApiKey, setFormApiKey] = useState("")
   const [formBaseUrl, setFormBaseUrl] = useState("")
   const [formProvider, setFormProvider] = useState<CustomModelDTO['provider']>("anthropic")
+  const formProviderRef = useRef<CustomModelDTO['provider']>("anthropic")
   // Delete confirmation
   const [deleteModelId, setDeleteModelId] = useState<string | null>(null)
   // Form validation errors (shown only after field is touched)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const isBuiltinActive = activeModel.provider === ActiveModelProvider.Builtin
+  const currentProviderMeta = CUSTOM_MODEL_PROVIDER_META[formProvider]
 
   // Load from backend API
   useEffect(() => {
@@ -150,8 +263,9 @@ export function ModelsPanel() {
     setFormName("")
     setFormModelId("")
     setFormApiKey("")
-    setFormBaseUrl("")
+    setFormBaseUrl(CUSTOM_MODEL_PROVIDER_META.anthropic.defaultBaseUrl)
     setFormProvider("anthropic")
+    formProviderRef.current = "anthropic"
     setTouched({})
     setDialogOpen(true)
   }
@@ -164,8 +278,25 @@ export function ModelsPanel() {
     setFormApiKey("")
     setFormBaseUrl(model.baseUrl)
     setFormProvider(model.provider)
+    formProviderRef.current = model.provider
     setTouched({})
     setDialogOpen(true)
+  }
+
+  const handleProviderChange = (value: CustomModelDTO['provider']) => {
+    const previousProvider = formProvider
+    const previousDefaultBaseUrl = CUSTOM_MODEL_PROVIDER_META[previousProvider].defaultBaseUrl
+    const nextDefaultBaseUrl = CUSTOM_MODEL_PROVIDER_META[value].defaultBaseUrl
+
+    setFormProvider(value)
+    formProviderRef.current = value
+    setFormBaseUrl((current) => {
+      const trimmed = current.trim()
+      if (!trimmed || trimmed === previousDefaultBaseUrl) {
+        return nextDefaultBaseUrl
+      }
+      return current
+    })
   }
 
   // Save custom model (create or edit)
@@ -174,6 +305,7 @@ export function ModelsPanel() {
     setTouched({ name: true, modelId: true, apiKey: true, baseUrl: true })
     if (hasErrors) return
 
+    const provider = formProviderRef.current
     let updated: CustomModelDTO[]
     if (editingModel) {
       updated = customModels.map((m) =>
@@ -183,7 +315,7 @@ export function ModelsPanel() {
               name: formName,
               modelId: formModelId,
               baseUrl: formBaseUrl,
-              provider: formProvider,
+              provider,
               ...(formApiKey.trim() ? { apiKey: formApiKey } : {}),
             }
           : m
@@ -192,7 +324,7 @@ export function ModelsPanel() {
       const newModel: CustomModelDTO = {
         id: crypto.randomUUID(),
         name: formName,
-        provider: formProvider,
+        provider,
         modelId: formModelId,
         apiKey: formApiKey,
         baseUrl: formBaseUrl,
@@ -473,7 +605,7 @@ export function ModelsPanel() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>{t.settings.modelProvider ?? 'Provider'}</Label>
-              <Select value={formProvider} onValueChange={(value) => setFormProvider(value as CustomModelDTO['provider'])}>
+              <Select value={formProvider} onValueChange={(value) => handleProviderChange(value as CustomModelDTO['provider'])}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder={t.settings.modelProviderPlaceholder ?? 'Select a provider'} />
                 </SelectTrigger>
@@ -505,7 +637,7 @@ export function ModelsPanel() {
                 value={formModelId}
                 onChange={(e) => setFormModelId(e.target.value)}
                 onBlur={() => handleBlur('modelId')}
-                placeholder={t.settings.modelIdPlaceholder}
+                placeholder={currentProviderMeta.modelIdExample ?? t.settings.modelIdPlaceholder}
                 className={cn("rounded-xl", touched.modelId && formErrors.modelId ? 'border-destructive' : '')}
               />
               {touched.modelId && formErrors.modelId && (
