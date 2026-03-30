@@ -117,6 +117,23 @@ export function setExtensionBridgeSession(profileId: string, patch: {
   return next
 }
 
+export function syncExtensionBridgeSession(profileId: string, patch: {
+  browserId?: string | null
+  browserName?: string | null
+  browserKind?: BrowserDiscoveryKind | null
+  tabId?: string | null
+  tabUrl?: string | null
+  tabTitle?: string | null
+  extensionVersion?: string | null
+}): BrowserExtensionBridgeSession | null {
+  const current = extensionSessions.get(profileId)
+  if (!current) {
+    return null
+  }
+
+  return setExtensionBridgeSession(profileId, patch)
+}
+
 export function clearExtensionBridgeSession(profileId: string): void {
   extensionSessions.delete(profileId)
   pendingCommands.delete(profileId)

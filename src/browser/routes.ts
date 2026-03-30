@@ -71,6 +71,17 @@ const ExtensionMainBridgeResultSchema = z.object({
   error: z.string().nullable().optional(),
 })
 
+const ExtensionMainBridgeSyncSchema = z.object({
+  profileId: z.string().min(1),
+  browserId: z.string().nullable().optional(),
+  browserName: z.string().nullable().optional(),
+  browserKind: z.enum(['chrome', 'edge', 'brave', 'chromium', 'vivaldi', 'arc']).nullable().optional(),
+  tabId: z.string().nullable().optional(),
+  tabUrl: z.string().nullable().optional(),
+  tabTitle: z.string().nullable().optional(),
+  extensionVersion: z.string().nullable().optional(),
+})
+
 function routeErrorStatus(err: unknown): 400 | 401 | 404 | 500 {
   if (err instanceof BrowserRelayTokenError) return 401
   const message = err instanceof Error ? err.message : String(err)
@@ -325,6 +336,25 @@ export function createBrowserRoutes(browserManager: BrowserManager, _agentManage
 
     resolveExtensionBridgeCommand(parsed.data)
     return c.json({ ok: true }, { headers: extensionCorsHeaders() })
+  })
+
+  app.options('/browser/main-bridge/extension-sync', () => {
+    return new Response(null, { status: 204, headers: extensionCorsHeaders() })
+  })
+
+  app.post('/browser/main-bridge/extension-sync', async (c) => {
+    const parsed = ExtensionMainBridgeSyncSchema.safeParse(await c.req.json())
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid request', details: parsed.error.issues }, { status: 400, headers: extensionCorsHeaders() })
+    }
+
+    try {
+      const state = browserManager.syncExtensionMainBridge(parsed.data)
+      return c.json({ ok: true, state }, { headers: extensionCorsHeaders() })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, { status: routeErrorStatus(err), headers: extensionCorsHeaders() })
+    }
   })
 
   app.post('/browser/profiles/:id/relay/connect', async (c) => {

@@ -170,4 +170,47 @@ describe('browser extension relay', () => {
     expect(attached.connectedTabUrl).toBe('https://example.com/current')
     expect(attached.extensionVersion).toBe('0.1.0')
   })
+
+  test('syncExtensionMainBridge refreshes or clears the attached extension tab state', async () => {
+    const manager = new FakeRelayBrowserManager()
+    const profile = manager.createProfile({
+      name: 'Extension Sync',
+      driver: 'extension-relay',
+    })
+
+    const pairedState = manager.createMainBridgePairing(profile.id)
+    manager.attachExtensionMainBridge({
+      pairingCode: pairedState.pairingCode!,
+      browserId: 'chrome',
+      browserName: 'Google Chrome',
+      browserKind: 'chrome',
+      tabId: '9',
+      tabUrl: 'https://example.com/start',
+      tabTitle: 'Start',
+      extensionVersion: '0.1.0',
+    })
+
+    const refreshed = manager.syncExtensionMainBridge({
+      profileId: profile.id,
+      tabId: '9',
+      tabUrl: 'https://example.com/updated',
+      tabTitle: 'Updated',
+      extensionVersion: '0.1.1',
+    })
+
+    expect(refreshed.connectedTabUrl).toBe('https://example.com/updated')
+    expect(refreshed.connectedTabTitle).toBe('Updated')
+    expect(refreshed.extensionVersion).toBe('0.1.1')
+
+    const cleared = manager.syncExtensionMainBridge({
+      profileId: profile.id,
+      tabId: null,
+      tabUrl: null,
+      tabTitle: null,
+    })
+
+    expect(cleared.connectedTabUrl).toBeNull()
+    expect(cleared.connectedTabTitle).toBeNull()
+    expect(cleared.connectionMode).toBe('none')
+  })
 })

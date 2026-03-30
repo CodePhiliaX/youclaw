@@ -16,6 +16,7 @@ describe('browser extension bridge wiring', () => {
     expect(routes).toContain("app.post('/browser/main-bridge/extension-attach'")
     expect(routes).toContain("app.post('/browser/main-bridge/extension-poll'")
     expect(routes).toContain("app.post('/browser/main-bridge/extension-result'")
+    expect(routes).toContain("app.post('/browser/main-bridge/extension-sync'")
     expect(routes).toContain('extensionCorsHeaders()')
   })
 
@@ -35,7 +36,10 @@ describe('browser extension bridge wiring', () => {
     expect(popup).toContain('chrome.tabs.query')
     expect(worker).toContain('/api/browser/main-bridge/extension-poll')
     expect(worker).toContain('/api/browser/main-bridge/extension-result')
+    expect(worker).toContain('/api/browser/main-bridge/extension-sync')
     expect(worker).toContain('executeCommand(command)')
     expect(worker).toContain('bridgeTabId')
+    expect(worker).toContain('chrome.tabs.onUpdated.addListener')
+    expect(worker).toContain('chrome.tabs.onRemoved.addListener')
   })
 })

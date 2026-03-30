@@ -47,6 +47,7 @@ import {
   deleteExtensionBridgeProfile,
   consumeMainBridgePairingCode,
   setExtensionBridgeSession,
+  syncExtensionBridgeSession,
 } from './extension-bridge.ts'
 import type {
   BrowserMainBridgeState,
@@ -385,6 +386,39 @@ export class BrowserManager {
 
     clearExtensionBridgeSession(id)
     return buildBrowserMainBridgeState(profile, getBrowserRelayState(id))
+  }
+
+  syncExtensionMainBridge(params: {
+    profileId: string
+    browserId?: string | null
+    browserName?: string | null
+    browserKind?: BrowserDiscoveryKind | null
+    tabId?: string | null
+    tabUrl?: string | null
+    tabTitle?: string | null
+    extensionVersion?: string | null
+  }): BrowserMainBridgeState {
+    const profile = getBrowserProfile(params.profileId)
+    if (!profile) throw new Error('Browser profile not found')
+    if (profile.driver !== 'extension-relay') {
+      throw new Error('Browser profile does not use the extension-relay driver')
+    }
+
+    if (params.tabId === null) {
+      clearExtensionBridgeSession(params.profileId)
+    } else {
+      syncExtensionBridgeSession(params.profileId, {
+        browserId: params.browserId ?? null,
+        browserName: params.browserName ?? null,
+        browserKind: params.browserKind ?? null,
+        tabId: params.tabId ?? null,
+        tabUrl: params.tabUrl ?? null,
+        tabTitle: params.tabTitle ?? null,
+        extensionVersion: params.extensionVersion ?? null,
+      })
+    }
+
+    return buildBrowserMainBridgeState(profile, getBrowserRelayState(params.profileId))
   }
 
   async rotateRelayToken(id: string): Promise<{ relay: BrowserRelayState; runtime: BrowserProfileRuntime }> {

@@ -23,6 +23,23 @@ async function setBridgeTabId(tabId) {
   })
 }
 
+async function syncBridgeSession(patch = {}) {
+  const { backendUrl, profileId, tabId } = await getBridgeState()
+  if (!backendUrl || !profileId) return
+
+  const payload = {
+    profileId,
+    tabId,
+    ...patch,
+  }
+
+  await fetch(`${backendUrl}/api/browser/main-bridge/extension-sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
 async function executeInTab(tabId, fn, args = []) {
   const [result] = await chrome.scripting.executeScript({
     target: { tabId },
@@ -267,6 +284,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       bridgeProfileId: message.profileId ?? null,
       bridgeTabId: message.tabId ?? null,
     }).then(() => {
+      void syncBridgeSession({
+        tabId: message.tabId ?? null,
+      })
       ensurePolling()
       sendResponse({ ok: true })
     }).catch((error) => {
@@ -275,4 +295,36 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true
   }
   return false
+})
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url && !changeInfo.title && changeInfo.status !== 'complete') {
+    return
+  }
+
+  void getBridgeState().then((state) => {
+    if (!state.profileId || !state.tabId) return
+    if (String(tabId) !== String(state.tabId)) return
+
+    void syncBridgeSession({
+      tabId: String(tabId),
+      tabUrl: tab.url ?? null,
+      tabTitle: tab.title ?? null,
+    })
+  })
+})
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void getBridgeState().then((state) => {
+    if (!state.profileId || !state.tabId) return
+    if (String(tabId) !== String(state.tabId)) return
+
+    void setBridgeTabId(null).then(() =>
+      syncBridgeSession({
+        tabId: null,
+        tabUrl: null,
+        tabTitle: null,
+      }),
+    )
+  })
 })
