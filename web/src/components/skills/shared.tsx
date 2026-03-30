@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { notify } from '@/stores/app'
 import {
   AlertTriangle,
   Check,
@@ -22,6 +23,26 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { InstalledSkillListItem } from './skills-view-types'
+
+function getActionErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error) {
+    return error
+  }
+
+  return fallback
+}
+
+function getInstallFailureMessage(message: string | undefined, fallback: string) {
+  if (message && message.trim()) {
+    return message
+  }
+
+  return fallback
+}
 
 export function EligibilityIcon({ skill }: { skill: Skill }) {
   if (!skill.enabled) {
@@ -133,8 +154,10 @@ export function EnvConfigRow({ envName, configured, onSaved }: { envName: string
       setEditing(false)
       setValue('')
       onSaved()
-    } catch {
+      notify.success(t.skills.envSaveSuccess.replace('{key}', envName))
+    } catch (error) {
       setStatus('idle')
+      notify.error(getActionErrorMessage(error, t.skills.envSaveFailed.replace('{key}', envName)))
     }
   }
 
@@ -212,12 +235,15 @@ export function InstallButton({ method, command, skillName, onInstalled }: { met
       const result = await installSkill(skillName, method)
       if (result.ok) {
         setStatus('idle')
+        notify.success(t.skills.installSuccess)
         onInstalled()
       } else {
         setStatus('idle')
+        notify.error(getInstallFailureMessage(result.stderr, t.skills.installFailed))
       }
-    } catch {
+    } catch (error) {
       setStatus('idle')
+      notify.error(getActionErrorMessage(error, t.skills.installFailed))
     }
   }
 
@@ -288,10 +314,13 @@ export function EnvToolInstallButton({ tool, onInstalled }: { tool: string; onIn
     try {
       const result = await installTool(tool)
       if (result.ok) {
+        notify.success(`${tool} ${t.envSetup.installSuccess}`)
         onInstalled()
+      } else {
+        notify.error(result.stderr || t.envSetup.installFailed, { durationMs: 6000 })
       }
-    } catch {
-      return
+    } catch (error) {
+      notify.error(getActionErrorMessage(error, t.envSetup.installFailed), { durationMs: 6000 })
     } finally {
       setStatus('idle')
     }

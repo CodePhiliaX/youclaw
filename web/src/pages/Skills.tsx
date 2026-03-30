@@ -42,7 +42,7 @@ import {
   getRegistrySourceInfo,
   resolveMarketplaceSort,
 } from '@/lib/registry-source'
-import { useAppRuntimeStore } from '@/stores/app'
+import { notify, useAppRuntimeStore } from '@/stores/app'
 
 type TabType = 'installed' | 'marketplace'
 type InstalledWorkspace =
@@ -113,6 +113,15 @@ export function Skills() {
     builtin: t.skills.builtin,
     user: t.skills.user,
   }), [t.skills.builtin, t.skills.user, t.skills.workspace])
+  const formatSkillMessage = useCallback((template: string, skillName: string) => (
+    template.replace('{name}', skillName)
+  ), [])
+  const formatActionError = useCallback((error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) {
+      return error.message
+    }
+    return fallback
+  }, [])
   const refreshInstalledData = useCallback(async () => {
     const [nextSkills, nextMySkills] = await Promise.all([getSkills(), getMySkills()])
     setSkills(nextSkills)
@@ -341,8 +350,17 @@ export function Skills() {
           onToggleSkill={async (skillName, enabled) => {
             try {
               await toggleSkill(skillName, enabled)
-              await refreshInstalledData()
-            } catch {
+              if (enabled) {
+                notify.success(formatSkillMessage(t.skills.skillEnabledSuccess, skillName))
+              } else {
+                notify.success(formatSkillMessage(t.skills.skillDisabledSuccess, skillName))
+              }
+              await refreshInstalledData().catch(() => {})
+            } catch (error) {
+              notify.error(formatActionError(
+                error,
+                formatSkillMessage(enabled ? t.skills.skillEnableFailed : t.skills.skillDisableFailed, skillName),
+              ))
               return
             }
           }}
@@ -387,7 +405,7 @@ export function Skills() {
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent
-          className="h-[min(92vh,960px)] w-[min(96vw,1200px)] max-w-6xl overflow-hidden rounded-[28px] border border-border/70 bg-background p-0 shadow-2xl"
+          className="h-[min(92vh,960px)] w-[min(96vw,1200px)] max-w-6xl overflow-hidden rounded-[28px] border border-border/50 bg-background p-0 shadow-none"
           onPointerDownOutside={(event) => event.preventDefault()}
           onEscapeKeyDown={(event) => event.preventDefault()}
         >
@@ -443,8 +461,10 @@ export function Skills() {
                 try {
                   await deleteSkill(skillName)
                   setInstalledWorkspace({ kind: 'detail', skillName: null })
-                  await refreshInstalledData()
-                } catch {
+                  notify.success(formatSkillMessage(t.skills.skillDeleteSuccess, skillName))
+                  await refreshInstalledData().catch(() => {})
+                } catch (error) {
+                  notify.error(formatActionError(error, formatSkillMessage(t.skills.skillDeleteFailed, skillName)))
                   return
                 } finally {
                   closeDeleteDialog()

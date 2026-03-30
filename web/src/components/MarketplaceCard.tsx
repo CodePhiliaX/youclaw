@@ -15,10 +15,23 @@ import {
 import type { MarketplaceChangeEvent } from '../lib/marketplace-updates'
 import { resolveMarketplaceActionSource } from '../lib/registry-source'
 import { cn } from '../lib/utils'
-import { useAppRuntimeStore } from '../stores/app'
+import { notify, useAppRuntimeStore } from '../stores/app'
 import { CalendarDays, Download, Loader2, Package, Puzzle, RefreshCw, Star, Trash2 } from 'lucide-react'
 
 type MarketplaceCardViewMode = 'list' | 'grid'
+
+function normalizeMarketplaceActionError(message: string, fallback: string, skillNotFoundLabel: string) {
+  if (!message) {
+    return fallback
+  }
+
+  const skillNotFoundMatch = message.match(/^Skill "(.+)" was not found$/)
+  if (skillNotFoundMatch) {
+    return skillNotFoundLabel.replace('{name}', skillNotFoundMatch[1] ?? '')
+  }
+
+  return message
+}
 
 function formatMetricValue(metric: MarketplaceCardMetricViewModel, locale: 'zh' | 'en') {
   if (metric.kind === 'number' && typeof metric.value === 'number') {
@@ -131,6 +144,16 @@ export function MarketplaceCard({
     ),
     [locale, registrySource, registrySources],
   )
+  const buildMarketplaceMessage = useMemo(() => (
+    (template: string, skillLabel: string) => template.replace('{name}', skillLabel)
+  ), [])
+  const formatActionError = useMemo(() => (
+    (message: string | undefined, fallback: string) => normalizeMarketplaceActionError(
+      message ?? '',
+      fallback,
+      t.skills.marketplaceSkillNotFound,
+    )
+  ), [t.skills.marketplaceSkillNotFound])
 
   const handleInstall = async () => {
     setStatus('installing')
@@ -139,11 +162,14 @@ export function MarketplaceCard({
       if (result.ok) {
         setStatus('idle')
         onChanged({ type: 'install', slug: viewModel.slug, source: actionSource })
+        notify.success(buildMarketplaceMessage(t.skills.marketplaceInstallSuccess, viewModel.displayName))
       } else {
         setStatus('idle')
+        notify.error(formatActionError(result.error, t.skills.installFailed))
       }
-    } catch {
+    } catch (error) {
       setStatus('idle')
+      notify.error(formatActionError(error instanceof Error ? error.message : undefined, t.skills.installFailed))
     }
   }
 
@@ -154,11 +180,14 @@ export function MarketplaceCard({
       if (result.ok) {
         setStatus('idle')
         onChanged({ type: 'update', slug: viewModel.slug, source: actionSource })
+        notify.success(buildMarketplaceMessage(t.skills.marketplaceUpdateSuccess, viewModel.displayName))
       } else {
         setStatus('idle')
+        notify.error(formatActionError(result.error, t.skills.updateFailed))
       }
-    } catch {
+    } catch (error) {
       setStatus('idle')
+      notify.error(formatActionError(error instanceof Error ? error.message : undefined, t.skills.updateFailed))
     }
   }
 
@@ -181,11 +210,14 @@ export function MarketplaceCard({
       if (result.ok) {
         setStatus('idle')
         onChanged({ type: 'uninstall', slug: viewModel.slug, source: actionSource })
+        notify.success(buildMarketplaceMessage(t.skills.marketplaceUninstallSuccess, viewModel.displayName))
       } else {
         setStatus('idle')
+        notify.error(formatActionError(result.error, t.skills.uninstallFailed))
       }
-    } catch {
+    } catch (error) {
       setStatus('idle')
+      notify.error(formatActionError(error instanceof Error ? error.message : undefined, t.skills.uninstallFailed))
     }
   }
 
