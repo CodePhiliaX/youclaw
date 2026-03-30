@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "summarize",
+    "displayName": "Summarize",
+    "summary": "Summarize long documents and media into concise actionable takeaways.",
+    "category": "content-creation",
+    "tags": ["documents", "summary", "analysis"]
+  },
+  {
+    "slug": "youtube-api-skill",
+    "displayName": "YouTube",
+    "summary": "Search videos, manage playlists, and work with channel data through the YouTube API.",
+    "category": "content-creation",
+    "tags": ["media", "youtube", "api"]
+  }
+]

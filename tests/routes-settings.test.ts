@@ -8,7 +8,7 @@ beforeEach(() => {
 })
 
 describe('settings routes', () => {
-  test('GET /settings masks the clawhub token and preserves registry source config', async () => {
+  test('GET /settings masks the clawhub token and strips legacy clawhub endpoint fields', async () => {
     const db = getDatabase()
     db.run(
       'INSERT INTO kv_state (key, value) VALUES (?, ?)',
@@ -16,7 +16,6 @@ describe('settings routes', () => {
         defaultRegistrySource: 'tencent',
         registrySources: {
           clawhub: {
-            enabled: true,
             apiBaseUrl: 'https://registry.example/api',
             downloadUrl: 'https://registry.example/download',
             token: 'secret-token',
@@ -36,7 +35,7 @@ describe('settings routes', () => {
     const body = await res.json() as {
       defaultRegistrySource?: string
       registrySources: {
-        clawhub: { token: string; apiBaseUrl: string }
+        clawhub: { token: string }
         tencent: { enabled: boolean; indexUrl: string }
       }
     }
@@ -44,7 +43,7 @@ describe('settings routes', () => {
     expect(res.status).toBe(200)
     expect(body.defaultRegistrySource).toBe('tencent')
     expect(body.registrySources.clawhub.token).toBe('****oken')
-    expect(body.registrySources.clawhub.apiBaseUrl).toBe('https://registry.example/api')
+    expect(Object.keys(body.registrySources.clawhub)).toEqual(['token'])
     expect(body.registrySources.tencent.enabled).toBe(false)
     expect(body.registrySources.tencent.indexUrl).toBe('https://tencent.example/index.json')
   })
@@ -70,15 +69,12 @@ describe('settings routes', () => {
         defaultRegistrySource: 'tencent',
         registrySources: {
           clawhub: {
-            enabled: true,
-            apiBaseUrl: 'https://clawhub.ai/api/v1',
-            downloadUrl: 'https://clawhub.ai/api/v1/download',
             token: 'persist-me',
           },
           tencent: {
             enabled: true,
             indexUrl: 'https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/skills.json',
-            searchUrl: 'https://lightmake.site/api/v1/search',
+            searchUrl: 'https://lightmake.site/api/skills',
             downloadUrl: 'https://lightmake.site/api/v1/download',
           },
         },

@@ -18,7 +18,6 @@ app.get('/settings', (c) => {
     builtinModelId,
     registrySources: {
       clawhub: {
-        ...settings.registrySources.clawhub,
         token: settings.registrySources.clawhub.token ? `****${settings.registrySources.clawhub.token.slice(-4)}` : '',
       },
       tencent: settings.registrySources.tencent,
@@ -76,7 +75,6 @@ app.patch('/settings', async (c) => {
     if ('clawhub' in incoming && incoming.clawhub && typeof incoming.clawhub === 'object') {
       const clawhub = incoming.clawhub as Record<string, unknown>
       partialSources.clawhub = {
-        ...clawhub,
         token: typeof clawhub.token === 'string' && clawhub.token.startsWith('****')
           ? current.registrySources.clawhub.token
           : typeof clawhub.token === 'string'
@@ -99,7 +97,6 @@ app.patch('/settings', async (c) => {
     ...updated,
     registrySources: {
       clawhub: {
-        ...updated.registrySources.clawhub,
         token: updated.registrySources.clawhub.token ? `****${updated.registrySources.clawhub.token.slice(-4)}` : '',
       },
       tencent: updated.registrySources.tencent,

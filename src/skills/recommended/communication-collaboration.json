@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "himalaya",
+    "displayName": "Himalaya",
+    "summary": "Automate email workflows with structured inbox operations.",
+    "category": "communication-collaboration",
+    "tags": ["productivity", "email", "automation"]
+  },
+  {
+    "slug": "slack",
+    "displayName": "Slack",
+    "summary": "Send messages and manage reactions, pins, and conversations in Slack.",
+    "category": "communication-collaboration",
+    "tags": ["productivity", "chat", "slack"]
+  },
+  {
+    "slug": "google-meet",
+    "displayName": "Google Meet",
+    "summary": "Create meeting spaces, inspect conference records, and manage Google Meet participants.",
+    "category": "communication-collaboration",
+    "tags": ["productivity", "meetings", "google"]
+  },
+  {
+    "slug": "gmail",
+    "displayName": "Gmail",
+    "summary": "Read, send, and manage Gmail threads, labels, and drafts with managed OAuth.",
+    "category": "communication-collaboration",
+    "tags": ["productivity", "email", "gmail"]
+  },
+  {
+    "slug": "outlook-api",
+    "displayName": "Outlook",
+    "summary": "Read, send, and manage Outlook mail, folders, calendar events, and contacts via Microsoft Graph.",
+    "category": "communication-collaboration",
+    "tags": ["integrations", "microsoft", "email"]
+  }
+]

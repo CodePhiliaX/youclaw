@@ -85,11 +85,6 @@ export function MarketplaceInstallDialog({
                 <span>{t.skills.skillBlocked}</span>
               </div>
             )}
-
-            <div className="flex items-start gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-2 text-xs text-muted-foreground">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
-              <span>{t.skills.marketplaceInstallCaution}</span>
-            </div>
           </div>
         )}
         <AlertDialogFooter>

@@ -12,7 +12,6 @@ function applyMarketplaceChangeToSkill(skill: MarketplaceSkill, change: Marketpl
       return {
         ...skill,
         installed: true,
-        installSource: change.source,
         installedVersion: skill.latestVersion ?? skill.installedVersion,
         hasUpdate: false,
       }
@@ -20,7 +19,6 @@ function applyMarketplaceChangeToSkill(skill: MarketplaceSkill, change: Marketpl
       return {
         ...skill,
         installed: true,
-        installSource: change.source,
         installedVersion: skill.latestVersion ?? skill.installedVersion,
         hasUpdate: false,
       }
@@ -29,7 +27,6 @@ function applyMarketplaceChangeToSkill(skill: MarketplaceSkill, change: Marketpl
         ...skill,
         installed: false,
         installedSkillName: undefined,
-        installSource: undefined,
         installedVersion: undefined,
         hasUpdate: false,
       }

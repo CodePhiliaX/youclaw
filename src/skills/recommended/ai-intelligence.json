@@ -1,0 +1,65 @@
+[
+  {
+    "slug": "self-improving-agent",
+    "displayName": "Self Improving Agent",
+    "summary": "Capture failures and corrections to improve future task execution quality.",
+    "category": "ai-intelligence",
+    "tags": ["agent", "self-improvement", "reflection"]
+  },
+  {
+    "slug": "proactive-agent",
+    "displayName": "Proactive Agent",
+    "summary": "Turn reactive task execution into proactive planning, follow-through, and continuous improvement.",
+    "category": "ai-intelligence",
+    "tags": ["agent", "automation", "proactive"]
+  },
+  {
+    "slug": "self-improving",
+    "displayName": "Self-Improving + Proactive Agent",
+    "summary": "Combine self-reflection, long-term learning, and proactive behavior in a single agent workflow.",
+    "category": "ai-intelligence",
+    "tags": ["agent", "learning", "memory"]
+  },
+  {
+    "slug": "ontology",
+    "displayName": "Ontology",
+    "summary": "Build and query structured knowledge graphs for reusable task memory.",
+    "category": "ai-intelligence",
+    "tags": ["memory", "knowledge-graph", "reasoning"]
+  },
+  {
+    "slug": "byterover",
+    "displayName": "ByteRover",
+    "summary": "Store and retrieve project patterns, decisions, and context for knowledge-rich agent workflows.",
+    "category": "ai-intelligence",
+    "tags": ["memory", "knowledge-base", "retrieval"]
+  },
+  {
+    "slug": "memory-setup",
+    "displayName": "Memory Setup",
+    "summary": "Set up persistent memory search and fix weak recall in existing agents.",
+    "category": "ai-intelligence",
+    "tags": ["memory", "setup", "configuration"]
+  },
+  {
+    "slug": "nano-banana-pro",
+    "displayName": "Nano Banana Pro",
+    "summary": "Generate and edit images for creative and product content workflows.",
+    "category": "ai-intelligence",
+    "tags": ["media", "image-generation", "editing"]
+  },
+  {
+    "slug": "openai-whisper",
+    "displayName": "OpenAI Whisper",
+    "summary": "Transcribe audio and normalize transcripts for downstream automation.",
+    "category": "ai-intelligence",
+    "tags": ["media", "audio", "transcription"]
+  },
+  {
+    "slug": "tavily",
+    "displayName": "Tavily AI Search",
+    "summary": "Run AI-optimized web research with structured results and source-friendly summaries.",
+    "category": "ai-intelligence",
+    "tags": ["data", "research", "retrieval"]
+  }
+]

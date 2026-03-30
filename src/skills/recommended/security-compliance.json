@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "skill-vetter",
+    "displayName": "Skill Vetter",
+    "summary": "Review third-party skills for risk, permissions, and suspicious behavior before installation.",
+    "category": "security-compliance",
+    "tags": ["security", "review", "skills"]
+  },
+  {
+    "slug": "skill-scanner",
+    "displayName": "Skill Scanner",
+    "summary": "Scan skills for malware, exfiltration patterns, miners, and suspicious code before install.",
+    "category": "security-compliance",
+    "tags": ["security", "malware", "scanning"]
+  },
+  {
+    "slug": "security-auditor",
+    "displayName": "Security Auditor",
+    "summary": "Audit code and auth flows for common web vulnerabilities and OWASP-class issues.",
+    "category": "security-compliance",
+    "tags": ["security", "code-review", "owasp"]
+  },
+  {
+    "slug": "1password",
+    "displayName": "1Password",
+    "summary": "Set up 1Password CLI workflows for reading, injecting, and managing secrets.",
+    "category": "security-compliance",
+    "tags": ["security", "secrets", "1password"]
+  },
+  {
+    "slug": "moltguard",
+    "displayName": "MoltGuard",
+    "summary": "Add guardrails against prompt injection, data exfiltration, and other malicious skill behavior.",
+    "category": "security-compliance",
+    "tags": ["security", "guardrails", "injection"]
+  }
+]

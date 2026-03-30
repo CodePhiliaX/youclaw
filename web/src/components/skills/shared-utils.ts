@@ -1,36 +1,71 @@
 import type { ManagedSkill, Skill } from '@/api/client'
 import type { useI18n } from '@/i18n'
 
-function getSkillRegistryMeta(skill: Skill | ManagedSkill) {
-  return 'registryMeta' in skill ? skill.registryMeta : undefined
+export type RuntimeSkillAvailability = 'disabled' | 'usable' | 'enabledNotReady'
+
+export function isCustomEditableManagedSkill(managedSkill?: ManagedSkill | null) {
+  return Boolean(
+    managedSkill?.editable
+    && managedSkill.userSkillKind === 'custom',
+  )
+}
+
+export function getSkillDescription(
+  skill: Skill,
+  managedSkill: ManagedSkill | null | undefined,
+  t: ReturnType<typeof useI18n>['t'],
+) {
+  return skill.frontmatter.description || managedSkill?.description || t.skills.skillDescriptionFallback
 }
 
 export function getExternalSkillSourceLabel(skill: Skill | ManagedSkill, t: ReturnType<typeof useI18n>['t']) {
-  const registryMeta = getSkillRegistryMeta(skill)
+  const source = skill.registryMeta?.source
 
   if (skill.externalSource === 'marketplace') {
-    if (registryMeta?.source === 'clawhub') return t.settings.registrySourceClawhub
-    if (registryMeta?.source === 'tencent') return t.settings.registrySourceTencent
+    if (source === 'clawhub') return t.settings.registrySourceClawhub
+    if (source === 'tencent') return t.settings.registrySourceTencent
     return t.skills.sourceMarketplace
   }
 
-  if (skill.externalSource === 'imported') {
-    const importProvider = registryMeta && 'provider' in registryMeta ? registryMeta.provider : null
-    const importSource = registryMeta?.source === 'raw-url' || registryMeta?.source === 'github'
-      ? registryMeta.source
-      : null
-
-    if (importProvider === 'raw-url' || importSource === 'raw-url') {
+  if (skill.externalSource === 'url') {
+    if (source === 'raw-url') {
       return t.skills.sourceRawUrlImport
     }
-    if (importProvider === 'github' || importSource === 'github') {
+    if (source === 'github') {
       return t.skills.sourceGitHubImport
     }
     return t.skills.sourceImported
   }
 
-  if (skill.externalSource === 'manual') return t.skills.sourceManual
+  if (skill.externalSource === 'local') {
+    if (source === 'zip-upload') {
+      return t.skills.sourceZipUpload
+    }
+    if (source === 'folder-import') {
+      return t.skills.sourceFolderImport
+    }
+    return t.skills.sourceManual
+  }
+
   return t.skills.user
+}
+
+export function getInstalledSkillSourceLabel(
+  skill: Skill,
+  managedSkill: ManagedSkill | null | undefined,
+  t: ReturnType<typeof useI18n>['t'],
+) {
+  if (managedSkill?.userSkillKind === 'custom') return t.skills.sourceCustom
+  if (skill.source === 'builtin') return t.skills.builtin
+  return getExternalSkillSourceLabel(skill, t)
+}
+
+export function resolveRuntimeSkillAvailability(
+  skill: Pick<Skill, 'enabled' | 'usable'>,
+): RuntimeSkillAvailability {
+  if (!skill.enabled) return 'disabled'
+  if (skill.usable) return 'usable'
+  return 'enabledNotReady'
 }
 
 export function getSkillSourceBadges(skill: Skill | ManagedSkill, t: ReturnType<typeof useI18n>['t']) {

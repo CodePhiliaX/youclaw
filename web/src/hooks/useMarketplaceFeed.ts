@@ -1,54 +1,47 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getMarketplaceSkills,
+  type MarketplaceListRequest,
+  type MarketplaceLocale,
+  type MarketplaceOrder,
   type MarketplacePage,
   type MarketplaceSkill,
   type MarketplaceSort,
   type RegistrySelectableSource,
+  type TencentMarketplaceCategory,
 } from '@/api/client'
 import { applyMarketplaceChangeToPage, type MarketplaceChangeEvent } from '@/lib/marketplace-updates'
+import {
+  createEmptyMarketplacePage,
+  mergeMarketplaceItems,
+  resolveMarketplaceLoadFailure,
+  type MarketplaceFeedStatus,
+  type MarketplaceLoadMode,
+} from '@/lib/marketplace-feed'
 
-type MarketplaceLoadMode = 'replace' | 'refresh' | 'append'
-
-export type MarketplaceFeedStatus = 'idle' | 'loading' | 'refreshing' | 'loading-more' | 'error'
+export type { MarketplaceFeedStatus } from '@/lib/marketplace-feed'
 
 interface UseMarketplaceFeedOptions {
   enabled: boolean
   query: string
   sort?: MarketplaceSort
+  order?: MarketplaceOrder
   source?: RegistrySelectableSource
+  locale?: MarketplaceLocale
+  category?: TencentMarketplaceCategory
   limit?: number
   debounceMs?: number
   loadFailedMessage: string
 }
 
-function createEmptyMarketplacePage(
-  query: string,
-  sort: MarketplaceSort,
-  source?: RegistrySelectableSource,
-): MarketplacePage {
-  return {
-    items: [],
-    nextCursor: null,
-    source: source ?? 'fallback',
-    query,
-    sort,
-  }
-}
-
-function mergeMarketplaceItems(current: MarketplaceSkill[], next: MarketplaceSkill[]) {
-  const items = new Map(current.map((item) => [item.slug, item]))
-  for (const item of next) {
-    items.set(item.slug, item)
-  }
-  return [...items.values()]
-}
-
 export function useMarketplaceFeed({
   enabled,
   query,
-  sort = 'trending',
+  sort = 'downloads',
+  order = 'desc',
   source,
+  locale,
+  category,
   limit = 24,
   debounceMs = 300,
   loadFailedMessage,
@@ -56,7 +49,7 @@ export function useMarketplaceFeed({
   const normalizedQuery = query.trim()
   const [activeQuery, setActiveQuery] = useState(normalizedQuery)
   const [pageState, setPageState] = useState<MarketplacePage>(() => (
-    createEmptyMarketplacePage(normalizedQuery, sort, source)
+    createEmptyMarketplacePage(normalizedQuery, sort, order)
   ))
   const [statusState, setStatusState] = useState<MarketplaceFeedStatus>('idle')
   const [error, setError] = useState('')
@@ -64,7 +57,7 @@ export function useMarketplaceFeed({
 
   const pageRef = useRef(pageState)
   const statusRef = useRef(statusState)
-  const filtersRef = useRef({ query: normalizedQuery, sort, source })
+  const filtersRef = useRef({ query: normalizedQuery, sort, order, source, locale, category })
   const requestIdRef = useRef(0)
   const pendingCursorRef = useRef<string | null>(null)
   const wasEnabledRef = useRef(enabled)
@@ -89,7 +82,10 @@ export function useMarketplaceFeed({
     cursor?: string | null
     query?: string
     sort?: MarketplaceSort
+    order?: MarketplaceOrder
     source?: RegistrySelectableSource
+    locale?: MarketplaceLocale
+    category?: TencentMarketplaceCategory
   } = {}) => {
     if (!enabled) return
 
@@ -97,7 +93,10 @@ export function useMarketplaceFeed({
     const append = mode === 'append'
     const nextQuery = options.query ?? filtersRef.current.query
     const nextSort = options.sort ?? filtersRef.current.sort
+    const nextOrder = options.order ?? filtersRef.current.order
     const nextSource = options.source ?? filtersRef.current.source
+    const nextLocale = options.locale ?? filtersRef.current.locale
+    const nextCategory = options.category ?? filtersRef.current.category
     const cursor = append ? (options.cursor ?? pageRef.current.nextCursor) : null
 
     if (append) {
@@ -116,8 +115,13 @@ export function useMarketplaceFeed({
       pendingCursorRef.current = null
       setAppendError('')
       if (mode === 'replace') {
-        setPage(createEmptyMarketplacePage(nextQuery, nextSort, nextSource))
-        setStatus('loading')
+        const hasExistingItems = pageRef.current.items.length > 0
+        if (!hasExistingItems) {
+          setPage(createEmptyMarketplacePage(nextQuery, nextSort, nextOrder))
+          setStatus('loading')
+        } else {
+          setStatus('refreshing')
+        }
         setError('')
       } else {
         setStatus('refreshing')
@@ -128,13 +132,18 @@ export function useMarketplaceFeed({
     requestIdRef.current = requestId
 
     try {
-      const nextPage = await getMarketplaceSkills({
+      const request: MarketplaceListRequest = {
         source: nextSource,
         query: nextQuery,
         sort: nextSort,
+        order: nextOrder,
         cursor,
         limit,
-      })
+        locale: nextLocale,
+        category: nextCategory,
+      }
+
+      const nextPage = await getMarketplaceSkills(request)
 
       if (requestId !== requestIdRef.current) {
         return
@@ -157,19 +166,32 @@ export function useMarketplaceFeed({
       pendingCursorRef.current = null
 
       if (!append) {
-        if (mode === 'refresh') {
-          setStatus('idle')
-          return
-        }
+        const failure = resolveMarketplaceLoadFailure({
+          mode,
+          query: nextQuery,
+          sort: nextSort,
+          order: nextOrder,
+          errorMessage: nextError instanceof Error && nextError.message ? nextError.message : loadFailedMessage,
+        })
 
-        setPage(createEmptyMarketplacePage(nextQuery, nextSort, nextSource))
-        setStatus('error')
-        setError(nextError instanceof Error && nextError.message ? nextError.message : loadFailedMessage)
+        if (failure.page) {
+          setPage(failure.page)
+        }
+        setStatus(failure.status)
+        setError(failure.error)
+        setAppendError(failure.appendError)
         return
       }
 
-      setStatus('idle')
-      setAppendError(nextError instanceof Error && nextError.message ? nextError.message : loadFailedMessage)
+      const failure = resolveMarketplaceLoadFailure({
+        mode,
+        query: nextQuery,
+        sort: nextSort,
+        order: nextOrder,
+        errorMessage: nextError instanceof Error && nextError.message ? nextError.message : loadFailedMessage,
+      })
+      setStatus(failure.status)
+      setAppendError(failure.appendError)
     }
   }, [enabled, limit, loadFailedMessage, setPage, setStatus])
 
@@ -177,7 +199,7 @@ export function useMarketplaceFeed({
     const delay = enabled && wasEnabledRef.current ? debounceMs : 0
 
     const timer = window.setTimeout(() => {
-      filtersRef.current = { query: normalizedQuery, sort, source }
+      filtersRef.current = { query: normalizedQuery, sort, order, source, locale, category }
       setActiveQuery(normalizedQuery)
 
       if (!enabled) {
@@ -192,12 +214,15 @@ export function useMarketplaceFeed({
         mode: 'replace',
         query: normalizedQuery,
         sort,
+        order,
         source,
+        locale,
+        category,
       })
     }, delay)
 
     return () => window.clearTimeout(timer)
-  }, [debounceMs, enabled, load, normalizedQuery, sort, source])
+  }, [category, debounceMs, enabled, load, locale, normalizedQuery, order, sort, source])
 
   const loadMore = useCallback(() => load({ mode: 'append' }), [load])
   const refresh = useCallback(() => load({ mode: 'refresh' }), [load])
@@ -215,8 +240,8 @@ export function useMarketplaceFeed({
   }, [setPage])
 
   const listKey = useMemo(
-    () => `${source ?? 'fallback'}:${sort}:${activeQuery}`,
-    [activeQuery, sort, source],
+    () => `${source ?? 'recommended'}:${locale ?? 'zh'}:${category ?? 'all'}:${pageState.sort}:${pageState.order}:${pageState.query}`,
+    [category, locale, pageState.order, pageState.query, pageState.sort, source],
   )
 
   return {

@@ -24,6 +24,17 @@ export const SkillImportProvider = {
 export type SkillImportProvider = typeof SkillImportProvider[keyof typeof SkillImportProvider]
 export const SKILL_IMPORT_PROVIDERS = Object.values(SkillImportProvider)
 
+export const SkillInstallSource = {
+  ClawHub: 'clawhub',
+  Tencent: 'tencent',
+  RawUrl: 'raw-url',
+  GitHub: 'github',
+  ZipUpload: 'zip-upload',
+  FolderImport: 'folder-import',
+} as const
+
+export type SkillInstallSource = typeof SkillInstallSource[keyof typeof SkillInstallSource]
+
 export interface SkillFrontmatter {
   name: string
   description: string
@@ -119,18 +130,30 @@ export interface MarketplaceSkillRegistryMeta extends SkillRegistryMetaBase {
 }
 
 export interface RawUrlSkillRegistryMeta extends SkillRegistryMetaBase {
-  source: typeof SkillImportProvider.RawUrl
-  provider: typeof SkillImportProvider.RawUrl
+  source: typeof SkillInstallSource.RawUrl
+  provider: typeof SkillInstallSource.RawUrl
   sourceUrl: string
 }
 
 export interface GitHubSkillRegistryMeta extends SkillRegistryMetaBase {
-  source: typeof SkillImportProvider.GitHub
-  provider: typeof SkillImportProvider.GitHub
+  source: typeof SkillInstallSource.GitHub
+  provider: typeof SkillInstallSource.GitHub
   sourceUrl: string
   homepageUrl?: string
   ref?: string
   path?: string
+}
+
+export interface ZipUploadSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: typeof SkillInstallSource.ZipUpload
+  provider: typeof SkillInstallSource.ZipUpload
+  originalFilename?: string
+}
+
+export interface FolderImportSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: typeof SkillInstallSource.FolderImport
+  provider: typeof SkillInstallSource.FolderImport
+  sourcePath?: string
 }
 
 /** Registry metadata (.registry.json) */
@@ -138,10 +161,12 @@ export type SkillRegistryMeta =
   | MarketplaceSkillRegistryMeta
   | RawUrlSkillRegistryMeta
   | GitHubSkillRegistryMeta
+  | ZipUploadSkillRegistryMeta
+  | FolderImportSkillRegistryMeta
 
 export type SkillCatalogGroup = 'builtin' | 'user'
 export type UserSkillKind = 'external' | 'custom'
-export type ExternalSkillSource = 'marketplace' | 'imported' | 'manual'
+export type ExternalSkillSource = 'marketplace' | 'url' | 'local'
 
 export interface SkillCatalogInfo {
   catalogGroup: SkillCatalogGroup

@@ -1,7 +1,8 @@
 import { afterEach, describe, test, expect } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
+import { strToU8, zipSync } from 'fflate'
 import { stringify as stringifyYaml } from 'yaml'
 import { createSkillsRoutes, serializeManagedSkillDetail } from '../src/routes/skills.ts'
 import { loadEnv } from '../src/config/index.ts'
@@ -241,6 +242,62 @@ describe('skills routes', () => {
     expect(res.status).toBe(400)
   })
 
+  test('POST /skills/install-from-path installs the folder and writes folder-import metadata', async () => {
+    let refreshCount = 0
+    const root = mkdtempSync(resolve(tmpdir(), 'youclaw-route-folder-'))
+    tempDirs.push(root)
+    const sourcePath = resolve(root, 'folder-skill')
+    const targetDir = resolve(root, 'skills')
+
+    mkdirSync(resolve(sourcePath, 'scripts'), { recursive: true })
+    writeFileSync(resolve(sourcePath, 'SKILL.md'), '---\nname: folder-skill\ndescription: Folder import\n---\nHello\n', 'utf-8')
+    writeFileSync(resolve(sourcePath, 'README.md'), '# Folder import\n', 'utf-8')
+    writeFileSync(resolve(sourcePath, 'scripts/setup.sh'), 'echo setup\n', 'utf-8')
+
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => {
+          refreshCount += 1
+          return [baseSkill]
+        },
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const res = await app.request('/skills/install-from-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath, targetDir }),
+    })
+    const body = await res.json() as { ok: boolean }
+    const installedSkillDir = resolve(targetDir, 'folder-skill')
+    const projectMetaPath = resolve(installedSkillDir, '.youclaw-skill.json')
+    const registryMetaPath = resolve(installedSkillDir, '.registry.json')
+
+    expect(res.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(refreshCount).toBe(1)
+    expect(readFileSync(resolve(installedSkillDir, 'SKILL.md'), 'utf-8'))
+      .toBe('---\nname: folder-skill\ndescription: Folder import\n---\nHello\n')
+    expect(readFileSync(resolve(installedSkillDir, 'README.md'), 'utf-8')).toBe('# Folder import\n')
+    expect(readFileSync(resolve(installedSkillDir, 'scripts/setup.sh'), 'utf-8')).toBe('echo setup\n')
+    expect(JSON.parse(readFileSync(projectMetaPath, 'utf-8'))).toMatchObject({
+      schemaVersion: 1,
+      managed: false,
+      origin: 'manual',
+    })
+    expect(JSON.parse(readFileSync(registryMetaPath, 'utf-8'))).toMatchObject({
+      source: 'folder-import',
+      provider: 'folder-import',
+      sourcePath,
+      slug: 'folder-skill',
+    })
+  })
+
   test('POST /skills/install-from-url with invalid body returns 400', async () => {
     const app = createSkillsRoutes(
       {
@@ -260,6 +317,127 @@ describe('skills routes', () => {
     })
 
     expect(res.status).toBe(400)
+  })
+
+  test('POST /skills/install-from-archive installs uploaded zip and refreshes the loader', async () => {
+    let refreshCount = 0
+    const root = mkdtempSync(resolve(tmpdir(), 'youclaw-route-archive-'))
+    tempDirs.push(root)
+    const targetDir = resolve(root, 'skills')
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => {
+          refreshCount += 1
+          return [baseSkill]
+        },
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const archive = zipSync({
+      'bundle/SKILL.md': strToU8('---\nname: archive-skill\ndescription: Uploaded skill\n---\nHello\n'),
+      'bundle/README.md': strToU8('# Uploaded skill\n'),
+      'bundle/scripts/install.sh': strToU8('echo install\n'),
+    })
+    const formData = new FormData()
+    formData.set('file', new File([archive], 'archive-skill.zip', { type: 'application/zip' }))
+    formData.set('targetDir', targetDir)
+
+    const res = await app.request('/skills/install-from-archive', {
+      method: 'POST',
+      body: formData,
+    })
+    const body = await res.json() as { ok: boolean }
+    const installedSkillDir = resolve(targetDir, 'archive-skill')
+    const projectMetaPath = resolve(installedSkillDir, '.youclaw-skill.json')
+    const registryMetaPath = resolve(installedSkillDir, '.registry.json')
+
+    expect(res.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(refreshCount).toBe(1)
+    expect(basename(installedSkillDir)).toBe('archive-skill')
+    expect(readFileSync(resolve(installedSkillDir, 'SKILL.md'), 'utf-8'))
+      .toBe('---\nname: archive-skill\ndescription: Uploaded skill\n---\nHello\n')
+    expect(readFileSync(resolve(installedSkillDir, 'README.md'), 'utf-8')).toBe('# Uploaded skill\n')
+    expect(readFileSync(resolve(installedSkillDir, 'scripts/install.sh'), 'utf-8')).toBe('echo install\n')
+    expect(existsSync(projectMetaPath)).toBe(true)
+    expect(JSON.parse(readFileSync(projectMetaPath, 'utf-8'))).toMatchObject({
+      schemaVersion: 1,
+      managed: false,
+      origin: 'imported',
+    })
+    expect(JSON.parse(readFileSync(registryMetaPath, 'utf-8'))).toMatchObject({
+      source: 'zip-upload',
+      provider: 'zip-upload',
+      originalFilename: 'archive-skill.zip',
+      slug: 'archive-skill',
+    })
+  })
+
+  test('POST /skills/install-from-archive rejects archives without a root SKILL.md', async () => {
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const archive = zipSync({
+      'bundle/README.md': strToU8('# Missing skill entry\n'),
+    })
+    const formData = new FormData()
+    formData.set('file', new File([archive], 'broken-skill.zip', { type: 'application/zip' }))
+
+    const res = await app.request('/skills/install-from-archive', {
+      method: 'POST',
+      body: formData,
+    })
+    const body = await res.json() as { error: string }
+
+    expect(res.status).toBe(400)
+    expect(body.error).toBe('Archive does not contain a root SKILL.md')
+  })
+
+  test('POST /skills/install-from-archive rejects skill names that escape the staging directory', async () => {
+    const root = mkdtempSync(resolve(tmpdir(), 'youclaw-route-archive-unsafe-'))
+    tempDirs.push(root)
+    const targetDir = resolve(root, 'skills')
+    const app = createSkillsRoutes(
+      {
+        loadAllSkills: () => [baseSkill],
+        getCacheStats: () => ({}),
+        getConfig: () => ({}),
+        refresh: () => [baseSkill],
+        loadSkillsForAgent: () => [baseSkill],
+      } as any,
+      { getAgent: () => ({ config: { id: 'agent-1' } }) } as any,
+    )
+
+    const archive = zipSync({
+      'bundle/SKILL.md': strToU8('---\nname: ..\ndescription: Uploaded skill\n---\nHello\n'),
+    })
+    const formData = new FormData()
+    formData.set('file', new File([archive], 'unsafe-skill.zip', { type: 'application/zip' }))
+    formData.set('targetDir', targetDir)
+
+    const res = await app.request('/skills/install-from-archive', {
+      method: 'POST',
+      body: formData,
+    })
+    const body = await res.json() as { error: string }
+
+    expect(res.status).toBe(400)
+    expect(body.error).toBe('Skill name must resolve to a safe directory name')
+    expect(existsSync(targetDir)).toBe(false)
+    expect(existsSync(resolve(root, 'unsafe-skill'))).toBe(false)
   })
 
   test('GET /skills/import/providers returns the available import providers', async () => {
@@ -544,7 +722,7 @@ describe('skills routes', () => {
       name: 'gradio',
       catalogGroup: 'user',
       userSkillKind: 'external',
-      externalSource: 'imported',
+      externalSource: 'url',
     })
   })
 

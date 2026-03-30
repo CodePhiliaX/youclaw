@@ -1,6 +1,6 @@
 import { z } from 'zod/v4'
 
-export const RegistrySourceSettingSchema = z.enum(['clawhub', 'tencent'])
+export const RegistrySourceSettingSchema = z.enum(['clawhub', 'recommended', 'tencent'])
 export type RegistrySourceSetting = z.infer<typeof RegistrySourceSettingSchema>
 
 export const ActiveModelProvider = {
@@ -52,16 +52,13 @@ export const CustomModelSchema = z.object({
 })
 
 export const RegistrySourceConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  apiBaseUrl: z.string().default('https://clawhub.ai/api/v1'),
-  downloadUrl: z.string().default('https://clawhub.ai/api/v1/download'),
   token: z.string().default(''),
 })
 
 export const TencentRegistryConfigSchema = z.object({
   enabled: z.boolean().default(true),
   indexUrl: z.string().default('https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/skills.json'),
-  searchUrl: z.string().default('https://lightmake.site/api/v1/search'),
+  searchUrl: z.string().default('https://lightmake.site/api/skills'),
   downloadUrl: z.string().default('https://lightmake.site/api/v1/download'),
 })
 

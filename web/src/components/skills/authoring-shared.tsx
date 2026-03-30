@@ -256,20 +256,31 @@ export function MarkdownPreview({
   markdown,
   containerRef,
   plain = false,
+  scrollable = true,
 }: {
   markdown: string
   containerRef?: RefObject<HTMLDivElement | null>
   plain?: boolean
+  scrollable?: boolean
 }) {
   return (
     <div
       ref={containerRef}
       className={cn(
-        'max-h-[560px] overflow-auto',
+        scrollable && 'max-h-[560px] overflow-auto',
         plain ? '' : 'rounded-2xl border border-border bg-background/70 p-4',
       )}
     >
-      <MessageResponse className="text-sm leading-7">{markdown}</MessageResponse>
+      <MessageResponse
+        className={cn(
+          'text-sm leading-7',
+          '[&_h1]:text-xl [&_h1]:font-semibold [&_h1]:leading-8 [&_h1]:tracking-tight',
+          '[&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-7',
+          '[&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-7',
+        )}
+      >
+        {markdown}
+      </MessageResponse>
     </div>
   )
 }

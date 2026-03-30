@@ -1,0 +1,72 @@
+[
+  {
+    "slug": "skill-creator",
+    "displayName": "Skill Creator",
+    "summary": "Scaffold and refine new skills with consistent frontmatter and structure.",
+    "category": "developer-tools",
+    "tags": ["agent", "authoring", "templates"]
+  },
+  {
+    "slug": "video-frames",
+    "displayName": "Video Frames",
+    "summary": "Extract and process key frames or clips from videos for review and analysis.",
+    "category": "developer-tools",
+    "tags": ["media", "video", "frames"]
+  },
+  {
+    "slug": "github",
+    "displayName": "GitHub",
+    "summary": "Operate repositories, pull requests, issues, and CI flows through GitHub CLI.",
+    "category": "developer-tools",
+    "tags": ["coding", "github", "collaboration"]
+  },
+  {
+    "slug": "browser-use",
+    "displayName": "Browser Use",
+    "summary": "Automate browser testing, form filling, screenshots, and structured data extraction.",
+    "category": "developer-tools",
+    "tags": ["coding", "browser", "testing"]
+  },
+  {
+    "slug": "model-usage",
+    "displayName": "Model Usage",
+    "summary": "Summarize CodexBar model-level usage and cost data for Codex or Claude.",
+    "category": "developer-tools",
+    "tags": ["coding", "cost", "observability"]
+  },
+  {
+    "slug": "playwright-mcp",
+    "displayName": "Playwright MCP",
+    "summary": "Run full browser automation workflows through a Playwright MCP server.",
+    "category": "developer-tools",
+    "tags": ["coding", "playwright", "automation"]
+  },
+  {
+    "slug": "docker-essentials",
+    "displayName": "Docker Essentials",
+    "summary": "Use essential Docker workflows for container management, image operations, and debugging.",
+    "category": "developer-tools",
+    "tags": ["coding", "docker", "infrastructure"]
+  },
+  {
+    "slug": "api-gateway",
+    "displayName": "API Gateway",
+    "summary": "Connect to 100+ third-party APIs with managed OAuth and a single gateway workflow.",
+    "category": "developer-tools",
+    "tags": ["integrations", "oauth", "apis"]
+  },
+  {
+    "slug": "gog",
+    "displayName": "Google Workspace",
+    "summary": "Automate Gmail, Calendar, Drive, Docs, and Sheets workflows.",
+    "category": "developer-tools",
+    "tags": ["integrations", "google", "workspace"]
+  },
+  {
+    "slug": "mcporter",
+    "displayName": "MCPorter",
+    "summary": "Bridge and orchestrate MCP tools with clearer operator control.",
+    "category": "developer-tools",
+    "tags": ["integrations", "mcp", "tooling"]
+  }
+]

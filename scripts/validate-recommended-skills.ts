@@ -1,105 +1,21 @@
-import { readFileSync } from 'node:fs'
-import { unzipSync } from 'fflate'
+import {
+  MAX_ARCHIVE_BYTES,
+  unpackZipArchive,
+} from '../src/skills/archive.ts'
 import { parseFrontmatter } from '../src/skills/frontmatter.ts'
+import recommendedSkillsData, {
+  recommendedCategoryOrder,
+  type RecommendedEntry,
+} from '../src/skills/recommended/index.ts'
+import {
+  recommendationSourceEntries,
+  recommendationSourceIndex,
+} from '../src/skills/recommendation-sources/index.ts'
+import { existsSync, readdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-type RecommendedEntry = {
-  slug: string
-  displayName: string
-  summary: string
-  category: string
-}
-
-type SkillDetailResponse = {
-  skill?: {
-    slug?: string
-    displayName?: string
-    summary?: string | null
-  } | null
-  moderation?: {
-    isSuspicious?: boolean
-    isMalwareBlocked?: boolean
-    verdict?: string | null
-  } | null
-}
-
-type ArchiveEntry = {
-  archivePath: string
-  relativePath: string
-  content: Uint8Array
-}
-
-const CLAWHUB_API_BASE = 'https://clawhub.ai/api/v1'
-const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024
-const MAX_ZIP_ENTRY_COUNT = 200
-const MAX_ZIP_ENTRY_BYTES = 512 * 1024
-const VALID_CATEGORIES = new Set(['agent', 'search', 'browser', 'coding'])
-
-function normalizeArchiveSegments(filePath: string): string[] {
-  const normalized = filePath.replaceAll('\\', '/').replace(/^\.\/+/, '').replace(/\/+/g, '/')
-  if (!normalized) {
-    throw new Error('Archive contains an empty file path')
-  }
-  if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) {
-    throw new Error(`Archive contains an illegal file path: ${filePath}`)
-  }
-
-  const segments = normalized.split('/').filter(Boolean)
-  if (segments.length === 0) {
-    throw new Error(`Archive contains an illegal file path: ${filePath}`)
-  }
-  if (segments.some((segment) => segment === '.' || segment === '..')) {
-    throw new Error(`Archive contains an illegal file path: ${filePath}`)
-  }
-
-  return segments
-}
-
-function unpackSkillArchive(zipBuffer: Uint8Array): ArchiveEntry[] {
-  const archive = unzipSync(zipBuffer)
-  const rawEntries = Object.entries(archive).map(([archivePath, content]) => ({
-    archivePath,
-    segments: normalizeArchiveSegments(archivePath),
-    content,
-  }))
-
-  if (rawEntries.length === 0) {
-    throw new Error('Archive is empty')
-  }
-  if (rawEntries.length > MAX_ZIP_ENTRY_COUNT) {
-    throw new Error(`Archive contains too many files (>${MAX_ZIP_ENTRY_COUNT})`)
-  }
-
-  for (const entry of rawEntries) {
-    if (entry.content.byteLength > MAX_ZIP_ENTRY_BYTES) {
-      throw new Error(`Archive entry is too large: ${entry.archivePath}`)
-    }
-  }
-
-  const hasRootFiles = rawEntries.some((entry) => entry.segments.length === 1)
-  let stripPrefix: string | null = null
-
-  if (!hasRootFiles) {
-    const topLevelDirs = new Set(rawEntries.map((entry) => entry.segments[0]))
-    if (topLevelDirs.size !== 1) {
-      throw new Error('Archive contains multiple top-level skill roots')
-    }
-    stripPrefix = rawEntries[0]!.segments[0]!
-  }
-
-  return rawEntries.map((entry) => {
-    const relativeSegments = stripPrefix ? entry.segments.slice(1) : entry.segments
-
-    if (relativeSegments.length === 0) {
-      throw new Error(`Archive contains an invalid file path: ${entry.archivePath}`)
-    }
-
-    return {
-      archivePath: entry.archivePath,
-      relativePath: relativeSegments.join('/'),
-      content: entry.content,
-    }
-  })
-}
+const TENCENT_DOWNLOAD_URL = 'https://lightmake.site/api/v1/download'
+const VALID_CATEGORIES = new Set(recommendedCategoryOrder)
 
 async function fetchWithRetry(url: string): Promise<Response> {
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -126,49 +42,35 @@ async function validateEntry(entry: RecommendedEntry) {
     throw new Error(`Unsupported category "${entry.category}"`)
   }
 
-  const detailResponse = await fetchWithRetry(`${CLAWHUB_API_BASE}/skills/${encodeURIComponent(entry.slug)}`)
-  if (!detailResponse.ok) {
-    throw new Error(`Detail request failed: HTTP ${detailResponse.status}`)
+  if (!entry.slug.trim() || !entry.displayName.trim() || !entry.summary.trim()) {
+    throw new Error('Recommended entry is missing required text fields')
   }
 
-  const detail = await detailResponse.json() as SkillDetailResponse
-  const liveSkill = detail.skill
-  if (!liveSkill?.slug || !liveSkill.displayName || typeof liveSkill.summary !== 'string') {
-    throw new Error('Detail payload is missing required fields')
-  }
-  if (liveSkill.slug !== entry.slug) {
-    throw new Error(`Detail slug mismatch: ${liveSkill.slug}`)
-  }
-  if (liveSkill.displayName !== entry.displayName) {
-    throw new Error(`Display name mismatch: expected "${liveSkill.displayName}"`)
-  }
-  if (liveSkill.summary !== entry.summary) {
-    throw new Error('Summary mismatch with live marketplace detail')
+  if (!Array.isArray(entry.tags) || entry.tags.length === 0) {
+    throw new Error('Recommended entry must define at least one tag')
   }
 
-  if (detail.moderation?.isMalwareBlocked) {
-    throw new Error('Skill is malware-blocked and cannot be recommended')
-  }
-  if (detail.moderation?.isSuspicious) {
-    throw new Error('Skill is marked suspicious and cannot be recommended')
+  const sourceEntry = recommendationSourceIndex.get(entry.slug)
+  if (!sourceEntry) {
+    throw new Error('Recommended slug is missing from recommendation sources')
   }
 
-  const downloadResponse = await fetchWithRetry(`${CLAWHUB_API_BASE}/download?slug=${encodeURIComponent(entry.slug)}`)
+  const downloadResponse = await fetchWithRetry(`${TENCENT_DOWNLOAD_URL}?slug=${encodeURIComponent(entry.slug)}`)
   if (!downloadResponse.ok) {
     throw new Error(`Download request failed: HTTP ${downloadResponse.status}`)
   }
 
   const contentLength = Number.parseInt(downloadResponse.headers.get('content-length') || '0', 10)
-  if (Number.isFinite(contentLength) && contentLength > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`Archive exceeds ${MAX_DOWNLOAD_BYTES} bytes`)
+  if (Number.isFinite(contentLength) && contentLength > MAX_ARCHIVE_BYTES) {
+    throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes`)
   }
 
   const archiveBuffer = new Uint8Array(await downloadResponse.arrayBuffer())
-  if (archiveBuffer.byteLength > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`Archive exceeds ${MAX_DOWNLOAD_BYTES} bytes`)
+  if (archiveBuffer.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes`)
   }
 
-  const entries = unpackSkillArchive(archiveBuffer)
+  const entries = unpackZipArchive(archiveBuffer)
   const skillMd = entries.find((archiveEntry) => archiveEntry.relativePath === 'SKILL.md')
   if (!skillMd) {
     throw new Error('Archive does not contain a root SKILL.md')
@@ -178,16 +80,28 @@ async function validateEntry(entry: RecommendedEntry) {
 }
 
 async function main() {
-  const entries = JSON.parse(
-    readFileSync(new URL('../src/skills/recommended-skills.json', import.meta.url), 'utf-8'),
-  ) as RecommendedEntry[]
+  const entries = recommendedSkillsData
 
   const seen = new Set<string>()
   let hasFailure = false
+  const builtinSkillNames = new Set(
+    readdirSync(resolve(process.cwd(), 'skills'))
+      .filter((entry) => existsSync(resolve(process.cwd(), 'skills', entry, 'SKILL.md'))),
+  )
+
+  if (recommendationSourceIndex.size !== recommendationSourceEntries.length) {
+    console.error('FAIL recommendation-sources: duplicate slugs detected in source shards')
+    process.exit(1)
+  }
 
   for (const entry of entries) {
     if (seen.has(entry.slug)) {
       console.error(`FAIL ${entry.slug}: duplicate slug`)
+      hasFailure = true
+      continue
+    }
+    if (builtinSkillNames.has(entry.slug)) {
+      console.error(`FAIL ${entry.slug}: duplicates a builtin project skill`)
       hasFailure = true
       continue
     }

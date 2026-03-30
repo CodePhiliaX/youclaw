@@ -1,23 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   deleteSkill,
   getMySkills,
+  type MarketplaceSort,
   getSkillAgents,
   getSkills,
   toggleSkill,
   type ManagedSkill,
-  type MarketplaceSort,
   type Skill,
 } from '@/api/client'
 import { AlertTriangle, Store } from 'lucide-react'
-import { SkillImportPanel, type SkillImportProviderId } from '@/components/SkillImportPanel'
+import { SkillUrlImportDialog } from '@/components/SkillImportPanel'
+import { SkillUploadDialog } from '@/components/SkillUploadDialog'
 import { SkillEditor } from '@/components/skills/SkillEditor'
 import { InstalledSkillsView } from '@/components/skills/InstalledSkillsView'
 import { MarketplaceView } from '@/components/skills/MarketplaceView'
 import { getExternalSkillSourceLabel } from '@/components/skills/shared-utils'
-import { compareByNewestThenName, type InstalledSkillListItem } from '@/components/skills/skills-view-types'
+import {
+  compareByNewestThenName,
+  type InstalledSkillListItem,
+  type InstalledSkillSourceFilter,
+} from '@/components/skills/skills-view-types'
 import { type MarketplaceChangeEvent } from '@/lib/marketplace-updates'
 import { toMarketplaceResultsViewModel } from '@/lib/marketplace-view-model'
+import { type TencentMarketplaceCategoryFilter } from '@/lib/tencent-marketplace-category'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,20 +34,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useMarketplaceFeed } from '@/hooks/useMarketplaceFeed'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import {
+  getRegistrySourceInfo,
+  resolveMarketplaceSort,
+} from '@/lib/registry-source'
 import { notify, useAppRuntimeStore } from '@/stores/app'
 
 type TabType = 'installed' | 'marketplace'
 type InstalledWorkspace =
   | { kind: 'detail'; skillName: string | null }
-  | { kind: 'create' }
   | { kind: 'edit'; skillName: string }
-  | { kind: 'import'; provider: SkillImportProviderId }
 
 export function Skills() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const registrySource = useAppRuntimeStore((state) => state.registrySource)
   const registrySources = useAppRuntimeStore((state) => state.registrySources)
   const setRegistrySource = useAppRuntimeStore((state) => state.setRegistrySource)
@@ -54,16 +63,37 @@ export function Skills() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [deleteAffectedAgents, setDeleteAffectedAgents] = useState<Array<{ id: string; name: string }>>([])
 
-  const [marketplaceSort, setMarketplaceSort] = useState<MarketplaceSort>('trending')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [marketplaceSearchQuery, setMarketplaceSearchQuery] = useState('')
+  const [marketplaceSort, setMarketplaceSort] = useState<MarketplaceSort | undefined>(undefined)
+  const [marketplaceCategoryFilter, setMarketplaceCategoryFilter] = useState<TencentMarketplaceCategoryFilter>('all')
+  const [installedSearchQuery, setInstalledSearchQuery] = useState('')
+  const [installedSourceFilter, setInstalledSourceFilter] = useState<InstalledSkillSourceFilter>('all')
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
 
-  const listScrollRef = useRef<HTMLDivElement | null>(null)
+  const activeRegistrySourceInfo = useMemo(
+    () => getRegistrySourceInfo(registrySource, registrySources),
+    [registrySource, registrySources],
+  )
+  const activeMarketplaceSort = useMemo(
+    () => resolveMarketplaceSort(registrySource, registrySources, marketplaceSort),
+    [marketplaceSort, registrySource, registrySources],
+  )
+  const supportsMarketplaceCategoryFilter = registrySource === 'tencent' || registrySource === 'recommended'
+  const activeMarketplaceCategoryFilter = supportsMarketplaceCategoryFilter
+    ? marketplaceCategoryFilter
+    : 'all'
+  const activeMarketplaceOrder = 'desc' as const
 
   const marketplaceFeed = useMarketplaceFeed({
     enabled: tab === 'marketplace',
-    query: searchQuery,
-    sort: marketplaceSort,
+    query: marketplaceSearchQuery,
+    order: activeMarketplaceOrder,
+    sort: activeMarketplaceSort,
     source: registrySource,
+    locale,
+    category: activeMarketplaceCategoryFilter === 'all' ? undefined : activeMarketplaceCategoryFilter,
     loadFailedMessage: t.skills.marketplaceLoadFailed,
   })
   const {
@@ -113,54 +143,71 @@ export function Skills() {
 
   const selectedSkillName = installedWorkspace.kind === 'detail' ? installedWorkspace.skillName : null
   const selectedSkill = skills.find((skill) => skill.name === selectedSkillName)
-  const selectedManagedSkill = mySkills.find((skill) => skill.name === selectedSkillName) ?? null
-  const editableSkills = mySkills.filter((skill) => skill.editable)
-  const editableSkillNames = useMemo(() => new Set(editableSkills.map((skill) => skill.name)), [editableSkills])
+  const runtimeSkillsByName = useMemo(() => new Map(skills.map((skill) => [skill.name, skill])), [skills])
+  const managedSkillsByName = useMemo(() => new Map(mySkills.map((skill) => [skill.name, skill])), [mySkills])
+  const selectedManagedSkill = selectedSkillName ? managedSkillsByName.get(selectedSkillName) ?? null : null
+  const customManagedSkills = useMemo(
+    () => mySkills.filter((skill) => skill.userSkillKind === 'custom'),
+    [mySkills],
+  )
+  const customSkillNames = useMemo(
+    () => new Set(customManagedSkills.map((skill) => skill.name)),
+    [customManagedSkills],
+  )
 
   const customSkillItems = useMemo<InstalledSkillListItem[]>(() => (
-    [...editableSkills]
+    [...customManagedSkills]
       .sort(compareByNewestThenName)
       .map((skill) => ({
-        kind: 'editable',
+        kind: 'editable' as const,
         name: skill.name,
-        description: skill.description || t.skills.skillDescriptionFallback,
+        description: skill.description || runtimeSkillsByName.get(skill.name)?.frontmatter.description || t.skills.skillDescriptionFallback,
         sourceLabel: t.skills.sourceCustom,
         skill,
-        sortTimestamp: skill.sortTimestamp,
+        section: 'custom',
+        runtimeSkill: runtimeSkillsByName.get(skill.name) ?? null,
+        managedSkill: skill,
+        sortTimestamp: skill.sortTimestamp ?? runtimeSkillsByName.get(skill.name)?.sortTimestamp,
       }))
-  ), [editableSkills, t.skills.skillDescriptionFallback, t.skills.sourceCustom])
+  ), [customManagedSkills, runtimeSkillsByName, t.skills.skillDescriptionFallback, t.skills.sourceCustom])
 
   const externalSkillItems = useMemo<InstalledSkillListItem[]>(() => (
     skills
       .filter((skill) => (
         skill.catalogGroup === 'user'
         && skill.userSkillKind === 'external'
-        && !editableSkillNames.has(skill.name)
+        && !customSkillNames.has(skill.name)
       ))
       .sort(compareByNewestThenName)
       .map((skill) => ({
-        kind: 'installed',
+        kind: 'installed' as const,
         name: skill.name,
         description: skill.frontmatter.description || t.skills.skillDescriptionFallback,
         sourceLabel: getExternalSkillSourceLabel(skill, t),
         skill,
+        section: 'external',
+        runtimeSkill: skill,
+        managedSkill: managedSkillsByName.get(skill.name) ?? null,
         sortTimestamp: skill.sortTimestamp,
       }))
-  ), [editableSkillNames, skills, t])
+  ), [customSkillNames, managedSkillsByName, skills, t])
 
   const builtinSkillItems = useMemo<InstalledSkillListItem[]>(() => (
     skills
-      .filter((skill) => skill.catalogGroup === 'builtin' && !editableSkillNames.has(skill.name))
+      .filter((skill) => skill.catalogGroup === 'builtin' && !customSkillNames.has(skill.name))
       .sort(compareByNewestThenName)
       .map((skill) => ({
-        kind: 'installed',
+        kind: 'installed' as const,
         name: skill.name,
         description: skill.frontmatter.description || t.skills.skillDescriptionFallback,
         sourceLabel: sourceLabels[skill.source],
         skill,
+        section: 'builtin',
+        runtimeSkill: skill,
+        managedSkill: managedSkillsByName.get(skill.name) ?? null,
         sortTimestamp: skill.sortTimestamp,
       }))
-  ), [editableSkillNames, skills, sourceLabels, t.skills.skillDescriptionFallback])
+  ), [customSkillNames, managedSkillsByName, skills, sourceLabels, t.skills.skillDescriptionFallback])
 
   const marketplaceResultsViewModel = useMemo(
     () => toMarketplaceResultsViewModel(
@@ -169,7 +216,7 @@ export function Skills() {
       marketplaceAppendError,
       t,
     ),
-    [marketplaceActiveQuery, marketplaceAppendError, marketplacePage, t],
+    [marketplacePage, marketplaceActiveQuery, marketplaceAppendError, t],
   )
 
   const openSkillBuilder = useCallback((skillName: string) => {
@@ -188,8 +235,12 @@ export function Skills() {
     }
   }, [applyMarketplaceChange, refreshInstalledData, refreshMarketplace, tab])
 
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value)
+  const handleMarketplaceSearchChange = useCallback((value: string) => {
+    setMarketplaceSearchQuery(value)
+  }, [])
+
+  const handleMarketplaceSortChange = useCallback((value: MarketplaceSort) => {
+    setMarketplaceSort(value)
   }, [])
 
   const handleImportSuccess = useCallback(async () => {
@@ -211,28 +262,6 @@ export function Skills() {
   }, [])
 
   const installedWorkspaceContent = useMemo(() => {
-    if (installedWorkspace.kind === 'create') {
-      return (
-        <SkillEditor
-          mode="create"
-          skillName={null}
-          onBack={() => {
-            setInstalledWorkspace({ kind: 'detail', skillName: null })
-          }}
-          onSkillSelected={(skillName) => {
-            if (skillName) {
-              setInstalledWorkspace({ kind: 'edit', skillName })
-              return
-            }
-            setInstalledWorkspace({ kind: 'detail', skillName: null })
-          }}
-          onSkillsChanged={() => {
-            void refreshInstalledData()
-          }}
-        />
-      )
-    }
-
     if (installedWorkspace.kind === 'edit') {
       return (
         <SkillEditor
@@ -255,22 +284,12 @@ export function Skills() {
       )
     }
 
-    if (installedWorkspace.kind === 'import') {
-      return (
-        <SkillImportPanel
-          mode={installedWorkspace.provider}
-          onImported={handleImportSuccess}
-          existingSkillNames={skills.map((skill) => skill.name)}
-        />
-      )
-    }
-
     return undefined
-  }, [handleImportSuccess, installedWorkspace, refreshInstalledData, skills])
+  }, [installedWorkspace, refreshInstalledData])
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-3">
+      <div className="px-6 pt-4 pb-2">
         <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
           <button
             data-testid="skills-installed-tab"
@@ -309,12 +328,19 @@ export function Skills() {
           selectedManagedSkill={selectedManagedSkill}
           selected={selectedSkillName}
           setSelected={(skillName) => setInstalledWorkspace({ kind: 'detail', skillName })}
+          searchQuery={installedSearchQuery}
+          onSearchChange={setInstalledSearchQuery}
+          sourceFilter={installedSourceFilter}
+          onSourceFilterChange={setInstalledSourceFilter}
           onEditSkill={openSkillBuilder}
           onCreateSkill={() => {
-            setInstalledWorkspace({ kind: 'create' })
+            setIsCreateDialogOpen(true)
           }}
-          onImportSkill={(provider) => {
-            setInstalledWorkspace({ kind: 'import', provider })
+          onUploadSkill={() => {
+            setIsUploadDialogOpen(true)
+          }}
+          onImportFromUrl={() => {
+            setIsImportDialogOpen(true)
           }}
           onToggleSkill={async (skillName, enabled) => {
             try {
@@ -341,7 +367,6 @@ export function Skills() {
           onReloadSkills={() => {
             void refreshInstalledData()
           }}
-          listRef={listScrollRef}
           workspaceContent={installedWorkspaceContent}
         />
       )}
@@ -352,13 +377,16 @@ export function Skills() {
           marketplaceStatus={marketplaceStatus}
           marketplaceError={marketplaceError}
           marketplaceAppendError={marketplaceAppendError}
-          marketplaceSort={marketplaceSort}
-          setMarketplaceSort={setMarketplaceSort}
           registrySource={registrySource}
+          registrySourceInfo={activeRegistrySourceInfo}
           registrySources={registrySources}
           onRegistrySourceChange={setRegistrySource}
-          searchQuery={searchQuery}
-          handleSearchChange={handleSearchChange}
+          marketplaceSort={activeMarketplaceSort}
+          onMarketplaceSortChange={handleMarketplaceSortChange}
+          marketplaceCategoryFilter={activeMarketplaceCategoryFilter}
+          onMarketplaceCategoryFilterChange={setMarketplaceCategoryFilter}
+          searchQuery={marketplaceSearchQuery}
+          handleSearchChange={handleMarketplaceSearchChange}
           onChanged={handleMarketplaceChanged}
           onLoadMore={handleMarketplaceLoadMore}
           onRetryLoadMore={() => {
@@ -367,6 +395,41 @@ export function Skills() {
           listKey={marketplaceListKey}
         />
       )}
+
+      <SkillUploadDialog
+        open={isUploadDialogOpen}
+        onOpenChange={setIsUploadDialogOpen}
+        onUploaded={handleImportSuccess}
+      />
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent
+          className="h-[min(92vh,960px)] w-[min(96vw,1200px)] max-w-6xl overflow-hidden rounded-[28px] border border-border/70 bg-background p-0 shadow-2xl"
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+        >
+          <SkillEditor
+            mode="create"
+            skillName={null}
+            onBack={() => {
+              setIsCreateDialogOpen(false)
+            }}
+            onSkillSelected={(skillName) => {
+              setInstalledWorkspace({ kind: 'detail', skillName })
+            }}
+            onSkillsChanged={() => {
+              void refreshInstalledData()
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <SkillUrlImportDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onImported={handleImportSuccess}
+        existingSkillNames={skills.map((skill) => skill.name)}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && closeDeleteDialog()}>
         <AlertDialogContent>

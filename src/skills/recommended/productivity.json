@@ -1,0 +1,86 @@
+[
+  {
+    "slug": "notion",
+    "displayName": "Notion",
+    "summary": "Read and write Notion pages and databases for team knowledge workflows.",
+    "category": "productivity",
+    "tags": ["memory", "notes", "notion"]
+  },
+  {
+    "slug": "obsidian",
+    "displayName": "Obsidian",
+    "summary": "Operate Obsidian vaults for markdown-first personal knowledge management.",
+    "category": "productivity",
+    "tags": ["memory", "notes", "obsidian"]
+  },
+  {
+    "slug": "apple-notes",
+    "displayName": "Apple Notes",
+    "summary": "Access and organize Apple Notes as a lightweight memory backend.",
+    "category": "productivity",
+    "tags": ["memory", "notes", "apple"]
+  },
+  {
+    "slug": "nano-pdf",
+    "displayName": "Nano PDF",
+    "summary": "Inspect, annotate, and rewrite PDF content through natural language.",
+    "category": "productivity",
+    "tags": ["documents", "pdf", "editing"]
+  },
+  {
+    "slug": "word-docx",
+    "displayName": "Word / DOCX",
+    "summary": "Create, inspect, and edit Word and DOCX documents with reliable formatting and compatibility checks.",
+    "category": "productivity",
+    "tags": ["documents", "word", "docx"]
+  },
+  {
+    "slug": "youtube-watcher",
+    "displayName": "YouTube Watcher",
+    "summary": "Fetch and read YouTube transcripts for review, summarization, and extraction workflows.",
+    "category": "productivity",
+    "tags": ["media", "youtube", "transcripts"]
+  },
+  {
+    "slug": "trello",
+    "displayName": "Trello",
+    "summary": "Manage Trello boards, lists, and cards for lightweight project coordination.",
+    "category": "productivity",
+    "tags": ["productivity", "project-management", "trello"]
+  },
+  {
+    "slug": "automation-workflows",
+    "displayName": "Automation Workflows",
+    "summary": "Design and maintain cross-tool automations that reduce repetitive manual work.",
+    "category": "productivity",
+    "tags": ["productivity", "automation", "workflows"]
+  },
+  {
+    "slug": "weather",
+    "displayName": "Weather",
+    "summary": "Fetch current and forecast weather for location-based workflows.",
+    "category": "productivity",
+    "tags": ["data", "weather", "forecast"]
+  },
+  {
+    "slug": "multi-search-engine",
+    "displayName": "Multi Search Engine",
+    "summary": "Query multiple global and China-friendly search engines with advanced search operators.",
+    "category": "productivity",
+    "tags": ["data", "search", "research"]
+  },
+  {
+    "slug": "brave-search",
+    "displayName": "Brave Search",
+    "summary": "Search the web and extract content through the Brave Search API.",
+    "category": "productivity",
+    "tags": ["data", "search", "web"]
+  },
+  {
+    "slug": "baidu-search",
+    "displayName": "Baidu Web Search",
+    "summary": "Use Baidu AI Search for live web lookup, docs, and research topics.",
+    "category": "productivity",
+    "tags": ["data", "search", "china"]
+  }
+]

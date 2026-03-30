@@ -1,27 +1,33 @@
 import type {
   ExternalSkillSource,
   SkillCatalogInfo,
+  SkillInstallSource,
   SkillProject,
   SkillProjectMeta,
 } from './types.ts'
 
-const CLAWHUB_SOURCE = 'clawhub'
+const MARKETPLACE_INSTALL_SOURCES = new Set<SkillInstallSource>(['clawhub', 'tencent'])
+const URL_INSTALL_SOURCES = new Set<SkillInstallSource>(['raw-url', 'github'])
+const LOCAL_INSTALL_SOURCES = new Set<SkillInstallSource>(['zip-upload', 'folder-import'])
 
-function resolveExternalSkillSource(
+export function resolveExternalSkillSource(
   registryMeta?: { source?: string },
   projectMeta?: SkillProjectMeta | null,
 ): ExternalSkillSource | undefined {
-  if (registryMeta?.source === CLAWHUB_SOURCE) {
+  if (registryMeta?.source && MARKETPLACE_INSTALL_SOURCES.has(registryMeta.source as SkillInstallSource)) {
     return 'marketplace'
+  }
+  if (registryMeta?.source && URL_INSTALL_SOURCES.has(registryMeta.source as SkillInstallSource)) {
+    return 'url'
+  }
+  if (registryMeta?.source && LOCAL_INSTALL_SOURCES.has(registryMeta.source as SkillInstallSource)) {
+    return 'local'
   }
   if (projectMeta?.origin === 'marketplace') {
     return 'marketplace'
   }
-  if (projectMeta?.origin === 'imported') {
-    return 'imported'
-  }
-  if (projectMeta?.origin === 'manual') {
-    return 'manual'
+  if (projectMeta?.origin === 'imported' || projectMeta?.origin === 'manual') {
+    return 'local'
   }
   return undefined
 }

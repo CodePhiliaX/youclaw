@@ -72,7 +72,6 @@ export function MarketplaceVirtualList<Row>({
       ),
     )
 
-    MarketplaceResultsScroller.displayName = 'MarketplaceResultsScroller'
     return MarketplaceResultsScroller
   }, [scrollerClassName])
 
@@ -109,7 +108,6 @@ export function MarketplaceVirtualList<Row>({
       return <div className="h-3" />
     }
 
-    MarketplaceVirtualListFooter.displayName = 'MarketplaceVirtualListFooter'
     return MarketplaceVirtualListFooter
   }, [appendError, loadingLabel, onRetryLoadMore, retryLabel, status])
 

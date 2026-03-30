@@ -8,16 +8,15 @@ export type MarketplaceSkill = {
   displayName: string
   summary: string
   installed: boolean
-  installSource?: string
+  installedSkillName?: string
   installedVersion?: string
   latestVersion?: string | null
   hasUpdate: boolean
   downloads?: number | null
   stars?: number | null
-  installsCurrent?: number | null
-  installsAllTime?: number | null
-  tags: string[]
-  source: 'clawhub' | 'fallback'
+  installs?: number | null
+  ownerName?: string | null
+  url?: string | null
 }
 
 export function createMarketplaceSkill(
@@ -31,7 +30,7 @@ export function createMarketplaceSkill(
     displayName: overrides.displayName,
     summary: overrides.summary ?? `${overrides.displayName} summary`,
     installed: overrides.installed ?? false,
-    installSource: overrides.installSource,
+    installedSkillName: overrides.installedSkillName,
     installedVersion,
     latestVersion,
     hasUpdate:
@@ -39,10 +38,9 @@ export function createMarketplaceSkill(
       Boolean(installedVersion && latestVersion && installedVersion !== latestVersion),
     downloads: overrides.downloads ?? 42,
     stars: overrides.stars ?? 7,
-    installsCurrent: overrides.installsCurrent ?? 3,
-    installsAllTime: overrides.installsAllTime ?? 9,
-    tags: overrides.tags ?? ['coding'],
-    source: overrides.source ?? 'clawhub',
+    installs: overrides.installs ?? 3,
+    ownerName: overrides.ownerName ?? null,
+    url: overrides.url ?? null,
   }
 }
 

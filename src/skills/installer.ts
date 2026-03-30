@@ -4,32 +4,35 @@ import { tmpdir } from 'node:os'
 import { execSync } from 'node:child_process'
 import { getLogger } from '../logger/index.ts'
 import { getShellEnv } from '../utils/shell-env.ts'
-import { SkillImportProvider } from './types.ts'
+import { SkillInstallSource } from './types.ts'
 import type {
+  FolderImportSkillRegistryMeta,
   GitHubSkillRegistryMeta,
   MarketplaceSkillRegistryMeta,
   RawUrlSkillRegistryMeta,
-  RegistryMarketplaceSource,
   Skill,
   SkillProjectMeta,
   SkillRegistryMeta,
+  ZipUploadSkillRegistryMeta,
 } from './types.ts'
 
 const PROJECT_META_FILENAME = '.youclaw-skill.json'
 const SCHEMA_VERSION = 1
 
 export interface InstallMetadata {
-  source: RegistryMarketplaceSource | typeof SkillImportProvider.RawUrl | typeof SkillImportProvider.GitHub
+  source: typeof SkillInstallSource[keyof typeof SkillInstallSource]
   slug?: string
   installedAt?: string
   displayName?: string
   version?: string
-  provider?: typeof SkillImportProvider.RawUrl | typeof SkillImportProvider.GitHub
+  provider?: typeof SkillInstallSource[keyof typeof SkillInstallSource]
   sourceUrl?: string
   homepageUrl?: string
   ref?: string
   path?: string
   projectOrigin?: SkillProjectMeta['origin']
+  originalFilename?: string
+  sourcePath?: string
 }
 
 /**
@@ -208,25 +211,41 @@ export class SkillsInstaller {
     }
 
     let registryMeta: SkillRegistryMeta
-    if (metadata.source === SkillImportProvider.RawUrl) {
+    if (metadata.source === SkillInstallSource.RawUrl) {
       const rawUrlMeta: RawUrlSkillRegistryMeta = {
         ...base,
-        source: SkillImportProvider.RawUrl,
-        provider: SkillImportProvider.RawUrl,
+        source: SkillInstallSource.RawUrl,
+        provider: SkillInstallSource.RawUrl,
         sourceUrl: metadata.sourceUrl ?? '',
       }
       registryMeta = rawUrlMeta
-    } else if (metadata.source === SkillImportProvider.GitHub) {
+    } else if (metadata.source === SkillInstallSource.GitHub) {
       const githubMeta: GitHubSkillRegistryMeta = {
         ...base,
-        source: SkillImportProvider.GitHub,
-        provider: SkillImportProvider.GitHub,
+        source: SkillInstallSource.GitHub,
+        provider: SkillInstallSource.GitHub,
         sourceUrl: metadata.sourceUrl ?? '',
         homepageUrl: metadata.homepageUrl,
         ref: metadata.ref,
         path: metadata.path,
       }
       registryMeta = githubMeta
+    } else if (metadata.source === SkillInstallSource.ZipUpload) {
+      const zipUploadMeta: ZipUploadSkillRegistryMeta = {
+        ...base,
+        source: SkillInstallSource.ZipUpload,
+        provider: SkillInstallSource.ZipUpload,
+        originalFilename: metadata.originalFilename,
+      }
+      registryMeta = zipUploadMeta
+    } else if (metadata.source === SkillInstallSource.FolderImport) {
+      const folderImportMeta: FolderImportSkillRegistryMeta = {
+        ...base,
+        source: SkillInstallSource.FolderImport,
+        provider: SkillInstallSource.FolderImport,
+        sourcePath: metadata.sourcePath,
+      }
+      registryMeta = folderImportMeta
     } else {
       const marketplaceMeta: MarketplaceSkillRegistryMeta = {
         ...base,

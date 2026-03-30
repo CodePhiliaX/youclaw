@@ -22,13 +22,12 @@ test.describe('Skills marketplace', () => {
             createMarketplaceSkill({
               slug: 'browser-automation',
               displayName: 'Browser Automation',
-              tags: ['browser'],
             }),
           ],
           nextCursor: null,
-          source: 'clawhub',
           query: 'browser',
-          sort: 'trending',
+          sort: 'downloads',
+          order: 'desc',
         })
         return
       }
@@ -39,13 +38,12 @@ test.describe('Skills marketplace', () => {
             createMarketplaceSkill({
               slug: 'agent-browser',
               displayName: 'Agent Browser',
-              tags: ['browser'],
             }),
           ],
           nextCursor: 'page-2',
-          source: 'clawhub',
           query: 'browser',
-          sort: 'trending',
+          sort: 'downloads',
+          order: 'desc',
         })
         return
       }
@@ -53,16 +51,15 @@ test.describe('Skills marketplace', () => {
       await fulfillJson(route, {
         items: [createMarketplaceSkill({ slug: 'coding', displayName: 'Coding' })],
         nextCursor: null,
-        source: 'clawhub',
         query: '',
-        sort: 'trending',
+        sort: 'downloads',
+        order: 'desc',
       })
     })
 
     await openMarketplace(page)
 
     await expect(page.getByTestId('marketplace-card-coding')).toBeVisible()
-    await expect(page.getByTestId('marketplace-disclaimer')).toBeVisible()
 
     const searchResponsePromise = page.waitForResponse((response) => {
       const url = new URL(response.url())
@@ -110,13 +107,12 @@ test.describe('Skills marketplace', () => {
             createMarketplaceSkill({
               slug: 'agent-browser',
               displayName: 'Agent Browser',
-              tags: ['browser'],
             }),
           ],
           nextCursor: null,
-          source: 'clawhub',
           query: 'browser',
-          sort: 'trending',
+          sort: 'downloads',
+          order: 'desc',
         })
         return
       }
@@ -124,9 +120,9 @@ test.describe('Skills marketplace', () => {
       await fulfillJson(route, {
         items: [createMarketplaceSkill({ slug: 'coding', displayName: 'Coding' })],
         nextCursor: null,
-        source: 'clawhub',
         query: '',
-        sort: 'trending',
+        sort: 'downloads',
+        order: 'desc',
       })
     })
 
@@ -159,13 +155,12 @@ test.describe('Skills marketplace', () => {
             createMarketplaceSkill({
               slug: `browser-${index + 1}`,
               displayName: `Browser ${index + 1}`,
-              tags: ['browser'],
             })
           )),
           nextCursor: null,
-          source: 'clawhub',
           query: 'browser',
-          sort: 'trending',
+          sort: 'downloads',
+          order: 'desc',
         })
         return
       }
@@ -173,14 +168,13 @@ test.describe('Skills marketplace', () => {
       await fulfillJson(route, {
         items: [createMarketplaceSkill({ slug: 'coding', displayName: 'Coding' })],
         nextCursor: null,
-        source: 'clawhub',
         query: '',
-        sort: 'trending',
+        sort: 'downloads',
+        order: 'desc',
       })
     })
 
     await openMarketplace(page)
-    await expect(page.getByTestId('marketplace-disclaimer')).toBeVisible()
 
     const searchResponsePromise = page.waitForResponse((response) => {
       const url = new URL(response.url())
@@ -193,17 +187,12 @@ test.describe('Skills marketplace', () => {
     await page.getByTestId('marketplace-search-input').fill('browser')
     await searchResponsePromise
 
-    const disclaimer = page.getByTestId('marketplace-disclaimer')
     const scroller = page.getByTestId('marketplace-results-scroller')
-
-    await expect(disclaimer).toBeVisible()
 
     await scroller.evaluate((node) => {
       node.scrollTop = Math.max(0, node.scrollHeight / 2)
       node.dispatchEvent(new Event('scroll'))
     })
-
-    await expect(disclaimer).not.toBeInViewport()
   })
 
   test('installs and uninstalls a marketplace skill', async ({ page }) => {
@@ -216,14 +205,13 @@ test.describe('Skills marketplace', () => {
             slug: 'coding',
             displayName: 'Coding',
             installed,
-            installSource: installed ? 'clawhub' : undefined,
             installedVersion: installed ? '1.2.0' : undefined,
           }),
         ],
         nextCursor: null,
-        source: 'clawhub',
         query: '',
-        sort: 'trending',
+        sort: 'downloads',
+        order: 'desc',
       })
     })
 
@@ -258,16 +246,15 @@ test.describe('Skills marketplace', () => {
             slug: 'coding',
             displayName: 'Coding',
             installed: true,
-            installSource: 'clawhub',
             installedVersion,
             latestVersion,
             hasUpdate: installedVersion !== latestVersion,
           }),
         ],
         nextCursor: null,
-        source: 'clawhub',
         query: '',
-        sort: 'trending',
+        sort: 'downloads',
+        order: 'desc',
       })
     })
 
@@ -284,6 +271,6 @@ test.describe('Skills marketplace', () => {
     await page.getByTestId('marketplace-update-coding').click()
 
     await expect(page.getByTestId('marketplace-update-coding')).toHaveCount(0)
-    await expect(page.getByTestId('marketplace-installed-version-coding')).toContainText('1.2.0')
+    await expect(page.getByTestId('marketplace-update-badge-coding')).toHaveCount(0)
   })
 })

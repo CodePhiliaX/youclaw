@@ -36,6 +36,30 @@ describe('skill catalog classification', () => {
     expect(info.sortTimestamp).toBe('2026-03-19T08:00:00.000Z')
   })
 
+  test('classifies imported and manual user projects as local external skills', () => {
+    const importedInfo = resolveManagedSkillCatalogInfo({
+      source: 'user',
+      editable: false,
+      managed: false,
+      origin: 'imported',
+      createdAt: '2026-03-18T09:00:00.000Z',
+      updatedAt: '2026-03-18T10:00:00.000Z',
+      draftUpdatedAt: undefined,
+    })
+    const manualInfo = resolveManagedSkillCatalogInfo({
+      source: 'user',
+      editable: false,
+      managed: false,
+      origin: 'manual',
+      createdAt: '2026-03-17T09:00:00.000Z',
+      updatedAt: '2026-03-17T10:00:00.000Z',
+      draftUpdatedAt: undefined,
+    })
+
+    expect(importedInfo.externalSource).toBe('local')
+    expect(manualInfo.externalSource).toBe('local')
+  })
+
   test('sorts by newest timestamp and then by name', () => {
     const items = [
       { name: 'beta', sortTimestamp: '2026-03-19T09:00:00.000Z' },

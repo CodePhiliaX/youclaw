@@ -3,9 +3,15 @@ import type { Attachment } from '../types/attachment'
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const base = await getBackendBaseUrl()
+  const headers = new Headers(options?.headers)
+
+  if (options?.body != null && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
   const res = await fetch(`${base}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
+    headers,
   })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
@@ -284,6 +290,17 @@ export const SkillImportProvider = {
 
 export type SkillImportProvider = typeof SkillImportProvider[keyof typeof SkillImportProvider]
 
+export const SkillInstallSource = {
+  ClawHub: 'clawhub',
+  Tencent: 'tencent',
+  RawUrl: 'raw-url',
+  GitHub: 'github',
+  ZipUpload: 'zip-upload',
+  FolderImport: 'folder-import',
+} as const
+
+export type SkillInstallSource = typeof SkillInstallSource[keyof typeof SkillInstallSource]
+
 interface SkillRegistryMetaBase {
   slug: string
   installedAt: string
@@ -297,31 +314,45 @@ export interface MarketplaceSkillRegistryMeta extends SkillRegistryMetaBase {
 }
 
 export interface RawUrlSkillRegistryMeta extends SkillRegistryMetaBase {
-  source: typeof SkillImportProvider.RawUrl
-  provider: typeof SkillImportProvider.RawUrl
+  source: typeof SkillInstallSource.RawUrl
+  provider: typeof SkillInstallSource.RawUrl
   sourceUrl: string
 }
 
 export interface GitHubSkillRegistryMeta extends SkillRegistryMetaBase {
-  source: typeof SkillImportProvider.GitHub
-  provider: typeof SkillImportProvider.GitHub
+  source: typeof SkillInstallSource.GitHub
+  provider: typeof SkillInstallSource.GitHub
   sourceUrl: string
   homepageUrl?: string
   ref?: string
   path?: string
 }
 
+export interface ZipUploadSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: typeof SkillInstallSource.ZipUpload
+  provider: typeof SkillInstallSource.ZipUpload
+  originalFilename?: string
+}
+
+export interface FolderImportSkillRegistryMeta extends SkillRegistryMetaBase {
+  source: typeof SkillInstallSource.FolderImport
+  provider: typeof SkillInstallSource.FolderImport
+  sourcePath?: string
+}
+
 export type SkillRegistryMeta =
   | MarketplaceSkillRegistryMeta
   | RawUrlSkillRegistryMeta
   | GitHubSkillRegistryMeta
+  | ZipUploadSkillRegistryMeta
+  | FolderImportSkillRegistryMeta
 
 export interface Skill {
   name: string
   source: 'workspace' | 'builtin' | 'user'
   catalogGroup: 'builtin' | 'user'
   userSkillKind?: 'external' | 'custom'
-  externalSource?: 'marketplace' | 'imported' | 'manual'
+  externalSource?: 'marketplace' | 'url' | 'local'
   sortTimestamp?: string
   frontmatter: SkillFrontmatter
   content: string
@@ -369,7 +400,7 @@ export interface ManagedSkill {
   source: 'workspace' | 'builtin' | 'user'
   catalogGroup: 'builtin' | 'user'
   userSkillKind?: 'external' | 'custom'
-  externalSource?: 'marketplace' | 'imported' | 'manual'
+  externalSource?: 'marketplace' | 'url' | 'local'
   sortTimestamp?: string
   editable: boolean
   managed: boolean
@@ -381,6 +412,7 @@ export interface ManagedSkill {
   draftUpdatedAt?: string
   description?: string
   boundAgentIds: string[]
+  registryMeta?: SkillRegistryMeta
 }
 
 export interface ManagedSkillDetail {
@@ -557,6 +589,26 @@ export async function getImportProviders() {
   return apiFetch<ImportProviderInfoDTO[]>('/api/skills/import/providers')
 }
 
+export async function installSkillFromPath(data: { sourcePath: string; targetDir?: string }) {
+  return apiFetch<{ ok: boolean }>('/api/skills/install-from-path', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function installSkillFromArchive(file: File, targetDir?: string) {
+  const formData = new FormData()
+  formData.append('file', file, file.name || 'skill.zip')
+  if (targetDir) {
+    formData.append('targetDir', targetDir)
+  }
+
+  return apiFetch<{ ok: boolean }>('/api/skills/install-from-archive', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
 export async function probeRawUrlImport(data: { url: string; targetDir?: string }) {
   return apiFetch<ImportProbeResponse>(
     '/api/skills/import/raw-url/probe',
@@ -594,12 +646,25 @@ export async function importFromGitHub(data: { repoUrl: string; path?: string; r
 // ===== Skill Marketplace API =====
 
 export type MarketplaceSort =
+  | 'score'
+  | 'newest'
   | 'updated'
   | 'downloads'
+  | 'installs'
   | 'stars'
-  | 'installsCurrent'
-  | 'installsAllTime'
-  | 'trending'
+  | 'name'
+
+export type MarketplaceOrder = 'asc' | 'desc'
+export type MarketplaceLocale = 'en' | 'zh'
+
+export type TencentMarketplaceCategory =
+  | 'ai-intelligence'
+  | 'developer-tools'
+  | 'productivity'
+  | 'data-analysis'
+  | 'content-creation'
+  | 'security-compliance'
+  | 'communication-collaboration'
 
 export type MarketplaceCategory =
   | 'agent'
@@ -611,12 +676,13 @@ export type MarketplaceCategory =
   | 'integrations'
   | 'data'
   | 'coding'
+  | TencentMarketplaceCategory
   | 'other'
   | 'search'
   | 'browser'
 
-export type RegistrySourceId = 'clawhub' | 'tencent' | 'fallback'
-export type RegistrySelectableSource = Exclude<RegistrySourceId, 'fallback'>
+export type RegistrySourceId = 'clawhub' | 'recommended' | 'tencent'
+export type RegistrySelectableSource = RegistrySourceId
 
 export interface RegistrySourceInfo {
   id: RegistrySelectableSource
@@ -630,42 +696,36 @@ export interface RegistrySourceInfo {
     update: boolean
     auth: 'none' | 'optional' | 'required'
     cursorPagination: boolean
+    defaultSort?: MarketplaceSort
+    sortDirection: boolean
     sorts: MarketplaceSort[]
   }
 }
 
-export interface MarketplaceSkill {
+export interface MarketplaceListItemVO {
   slug: string
   displayName: string
   summary: string
+  latestVersion?: string | null
   installed: boolean
   installedSkillName?: string
-  score?: number
-  installSource?: string
   installedVersion?: string
-  latestVersion?: string | null
   hasUpdate: boolean
-  createdAt?: number | null
   updatedAt?: number | null
   downloads?: number | null
   stars?: number | null
-  installsCurrent?: number | null
-  installsAllTime?: number | null
-  tags: string[]
+  installs?: number | null
   category?: MarketplaceCategory
-  source: RegistrySourceId
-  detailUrl?: string | null
-  metadata?: {
-    os: string[]
-    systems: string[]
-  }
-  homepageUrl?: string | null
+  ownerName?: string | null
+  url?: string | null
 }
 
-export interface MarketplaceSkillDetail extends MarketplaceSkill {
-  ownerHandle?: string | null
-  ownerDisplayName?: string | null
-  ownerImage?: string | null
+export interface MarketplaceDetailVO extends MarketplaceListItemVO {
+  author?: {
+    name?: string | null
+    handle?: string | null
+    image?: string | null
+  }
   moderation?: {
     isSuspicious: boolean
     isMalwareBlocked: boolean
@@ -674,27 +734,57 @@ export interface MarketplaceSkillDetail extends MarketplaceSkill {
   } | null
 }
 
-export interface MarketplacePage {
-  items: MarketplaceSkill[]
+export interface MarketplacePageVO {
+  items: MarketplaceListItemVO[]
   nextCursor: string | null
-  source: RegistrySourceId
   query: string
   sort: MarketplaceSort
+  order: MarketplaceOrder
 }
 
-export async function getMarketplaceSkills(params: {
+export type MarketplaceSkill = MarketplaceListItemVO
+export type MarketplaceSkillDetail = MarketplaceDetailVO
+export type MarketplacePage = MarketplacePageVO
+
+export interface MarketplaceListRequest {
   source?: RegistrySelectableSource
   query?: string
   cursor?: string | null
   limit?: number
   sort?: MarketplaceSort
-} = {}) {
+  order?: MarketplaceOrder
+  locale?: MarketplaceLocale
+  category?: TencentMarketplaceCategory
+}
+
+export interface MarketplaceSkillDetailRequest {
+  slug: string
+  source?: RegistrySelectableSource
+  locale?: MarketplaceLocale
+}
+
+export type MarketplaceSkillDetailResponse = MarketplaceSkillDetail
+
+export interface MarketplaceSkillMutationRequest {
+  slug: string
+  source?: RegistrySelectableSource
+}
+
+export interface MarketplaceSkillMutationResponse {
+  ok: boolean
+  error?: string
+}
+
+export async function getMarketplaceSkills(request: MarketplaceListRequest = {}) {
   const search = new URLSearchParams()
-  if (params.source) search.set('source', params.source)
-  if (params.query) search.set('q', params.query)
-  if (params.cursor) search.set('cursor', params.cursor)
-  if (params.limit) search.set('limit', String(params.limit))
-  if (params.sort) search.set('sort', params.sort)
+  if (request.source) search.set('source', request.source)
+  if (request.query) search.set('q', request.query)
+  if (request.cursor) search.set('cursor', request.cursor)
+  if (request.limit) search.set('limit', String(request.limit))
+  if (request.sort) search.set('sort', request.sort)
+  if (request.order) search.set('order', request.order)
+  if (request.locale) search.set('locale', request.locale)
+  if (request.category) search.set('category', request.category)
   const suffix = search.toString() ? `?${search}` : ''
   return apiFetch<MarketplacePage>(`/api/registry/marketplace${suffix}`)
 }
@@ -707,35 +797,39 @@ export async function getRegistrySources() {
   return apiFetch<RegistrySourceInfo[]>('/api/registry/sources')
 }
 
-export async function getMarketplaceSkill(slug: string, source?: RegistrySelectableSource) {
-  const suffix = source ? `?source=${encodeURIComponent(source)}` : ''
-  return apiFetch<MarketplaceSkillDetail>(`/api/registry/marketplace/${encodeURIComponent(slug)}${suffix}`)
+export async function getMarketplaceSkill(request: MarketplaceSkillDetailRequest) {
+  const search = new URLSearchParams()
+  if (request.source) search.set('source', request.source)
+  if (request.locale) search.set('locale', request.locale)
+  const suffix = search.toString() ? `?${search.toString()}` : ''
+  return apiFetch<MarketplaceSkillDetailResponse>(`/api/registry/marketplace/${encodeURIComponent(request.slug)}${suffix}`)
 }
 
-export async function searchRegistrySkills(query: string, source?: RegistrySelectableSource) {
+export async function searchRegistrySkills(query: string, source?: RegistrySelectableSource, locale?: MarketplaceLocale) {
   const search = new URLSearchParams({ q: query })
   if (source) search.set('source', source)
+  if (locale) search.set('locale', locale)
   return apiFetch<MarketplaceSkill[]>(`/api/registry/search?${search.toString()}`)
 }
 
-export async function installRecommendedSkill(slug: string, source?: RegistrySelectableSource) {
-  return apiFetch<{ ok: boolean; error?: string }>('/api/registry/install', {
+export async function installRecommendedSkill(request: MarketplaceSkillMutationRequest) {
+  return apiFetch<MarketplaceSkillMutationResponse>('/api/registry/install', {
     method: 'POST',
-    body: JSON.stringify({ slug, source }),
+    body: JSON.stringify(request),
   })
 }
 
-export async function updateMarketplaceSkill(slug: string, source?: RegistrySelectableSource) {
-  return apiFetch<{ ok: boolean; error?: string }>('/api/registry/update', {
+export async function updateMarketplaceSkill(request: MarketplaceSkillMutationRequest) {
+  return apiFetch<MarketplaceSkillMutationResponse>('/api/registry/update', {
     method: 'POST',
-    body: JSON.stringify({ slug, source }),
+    body: JSON.stringify(request),
   })
 }
 
-export async function uninstallRecommendedSkill(slug: string, source?: RegistrySelectableSource) {
-  return apiFetch<{ ok: boolean; error?: string }>('/api/registry/uninstall', {
+export async function uninstallRecommendedSkill(request: MarketplaceSkillMutationRequest) {
+  return apiFetch<MarketplaceSkillMutationResponse>('/api/registry/uninstall', {
     method: 'POST',
-    body: JSON.stringify({ slug, source }),
+    body: JSON.stringify(request),
   })
 }
 
@@ -1126,9 +1220,6 @@ export interface SettingsDTO {
   defaultRegistrySource?: RegistrySelectableSource
   registrySources: {
     clawhub: {
-      enabled: boolean
-      apiBaseUrl: string
-      downloadUrl: string
       token: string
     }
     tencent: {

@@ -27,6 +27,11 @@ import {
   SectionTitle,
   resolveEnvTools,
 } from './shared'
+import {
+  getSkillDescription,
+  isCustomEditableManagedSkill,
+  resolveRuntimeSkillAvailability,
+} from './shared-utils'
 
 interface SkillDetailViewProps {
   skill: Skill
@@ -35,6 +40,8 @@ interface SkillDetailViewProps {
   onDeleteSkill: (skillName: string) => void
   onReloadSkills: () => void
   onToggleSkill: (skillName: string, enabled: boolean) => Promise<void>
+  className?: string
+  hideHeader?: boolean
 }
 
 function getSourceUrl(skill: Skill): string | null {
@@ -52,70 +59,83 @@ export function SkillDetailView({
   onDeleteSkill,
   onReloadSkills,
   onToggleSkill,
+  className,
+  hideHeader = false,
 }: SkillDetailViewProps) {
   const { t } = useI18n()
-  const showEditButton = Boolean(managedSkill?.editable && onEditSkill)
-  const showDeleteButton = !managedSkill?.editable && skill.source !== 'workspace'
+  const showEditButton = Boolean(isCustomEditableManagedSkill(managedSkill) && onEditSkill)
+  const showDeleteButton = skill.source !== 'workspace'
+  const description = getSkillDescription(skill, managedSkill, t)
   const sourceUrl = getSourceUrl(skill)
+  const availability = resolveRuntimeSkillAvailability(skill)
+  const envResults = skill.eligibilityDetail?.env.results ?? []
+  const dependencyResults = skill.eligibilityDetail?.dependencies.results ?? []
+  const missingDependencies = dependencyResults.filter((result) => !result.found).map((result) => result.name)
+  const envTools = resolveEnvTools(missingDependencies)
+  const manualInstallEntries = Object.entries(skill.frontmatter.install ?? {})
+  const showInstallActions = skill.eligibilityDetail?.dependencies.passed === false
+    && (envTools.length > 0 || manualInstallEntries.length > 0)
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div className="flex items-center gap-4">
-        <div className={cn(
-          'w-12 h-12 rounded-full flex items-center justify-center',
-          !skill.enabled ? 'bg-muted' : skill.usable ? 'bg-green-500/10' : 'bg-red-500/10'
-        )}>
-          <Puzzle className="h-6 w-6" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold truncate">{skill.name}</h1>
-            {managedSkill?.hasDraft && <Badge variant="outline" className="text-[10px]">{t.skills.draftBadge}</Badge>}
-            {managedSkill?.hasPublished && <Badge variant="secondary" className="text-[10px]">{t.skills.publishedBadge}</Badge>}
+    <div className={cn('max-w-2xl space-y-6', className)}>
+      {!hideHeader && (
+        <div className="flex items-center gap-4">
+          <div className={cn(
+            'w-12 h-12 rounded-full flex items-center justify-center',
+            !skill.enabled ? 'bg-muted' : skill.usable ? 'bg-green-500/10' : 'bg-red-500/10'
+          )}>
+            <Puzzle className="h-6 w-6" />
           </div>
-          <p className="text-sm text-muted-foreground">{skill.frontmatter.description}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {showEditButton && onEditSkill && (
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold truncate">{skill.name}</h1>
+              {managedSkill?.hasDraft && <Badge variant="outline" className="text-[10px]">{t.skills.draftBadge}</Badge>}
+              {managedSkill?.hasPublished && <Badge variant="secondary" className="text-[10px]">{t.skills.publishedBadge}</Badge>}
+            </div>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {showEditButton && onEditSkill && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEditSkill(skill.name)}
+              >
+                <PencilLine className="h-4 w-4" />
+                {t.common.edit}
+              </Button>
+            )}
             <Button
-              variant="outline"
+              data-testid="skill-toggle-btn"
+              variant={skill.enabled ? 'secondary' : 'default'}
               size="sm"
-              onClick={() => onEditSkill(skill.name)}
+              onClick={() => void onToggleSkill(skill.name, !skill.enabled)}
             >
-              <PencilLine className="h-4 w-4" />
-              {t.common.edit}
+              {skill.enabled ? t.skills.disable : t.skills.enable}
             </Button>
-          )}
-          <Button
-            data-testid="skill-toggle-btn"
-            variant={skill.enabled ? 'secondary' : 'default'}
-            size="sm"
-            onClick={() => void onToggleSkill(skill.name, !skill.enabled)}
-          >
-            {skill.enabled ? t.skills.disable : t.skills.enable}
-          </Button>
-          {showDeleteButton && (
-            <Button
-              data-testid="skill-delete-btn"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-red-400"
-              onClick={() => onDeleteSkill(skill.name)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
+            {showDeleteButton && (
+              <Button
+                data-testid="skill-delete-btn"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-red-400"
+                onClick={() => onDeleteSkill(skill.name)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="rounded-md border border-border p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium">
-          {!skill.enabled ? (
+          {availability === 'disabled' ? (
             <>
               <XCircle className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">{t.skills.disabled}</span>
             </>
-          ) : skill.usable ? (
+          ) : availability === 'usable' ? (
             <>
               <CheckCircle className="h-4 w-4 text-green-400" />
               <span className="text-green-400">{t.skills.usable}</span>
@@ -128,38 +148,33 @@ export function SkillDetailView({
           )}
         </div>
 
-        {skill.eligibilityDetail?.env.results.length > 0 && (
+        {envResults.length > 0 && (
           <div className="space-y-2">
-            {skill.eligibilityDetail.env.results.map((result) => (
+            {envResults.map((result) => (
               <EnvConfigRow key={result.name} envName={result.name} configured={result.found} onSaved={onReloadSkills} />
             ))}
           </div>
         )}
 
-        {skill.eligibilityDetail?.dependencies.passed === false && (() => {
-          const missingDeps = skill.eligibilityDetail?.dependencies.results.filter(r => !r.found).map(r => r.name) ?? []
-          const envTools = resolveEnvTools(missingDeps)
-          const hasManualInstall = skill.frontmatter.install && Object.keys(skill.frontmatter.install).length > 0
-          return (envTools.length > 0 || hasManualInstall) ? (
-            <div className="pt-2 border-t border-border/50 space-y-2">
-              <InstallSectionHeader onRefresh={onReloadSkills}>{t.skills.install}</InstallSectionHeader>
-              {envTools.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {envTools.map((tool) => (
-                    <EnvToolInstallButton key={tool} tool={tool} onInstalled={onReloadSkills} />
-                  ))}
-                </div>
-              )}
-              {hasManualInstall && (
-                <div className="space-y-1">
-                  {Object.entries(skill.frontmatter.install!).map(([method, command]) => (
-                    <InstallButton key={method} method={method} command={command} skillName={skill.name} onInstalled={onReloadSkills} />
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : null
-        })()}
+        {showInstallActions && (
+          <div className="pt-2 border-t border-border/50 space-y-2">
+            <InstallSectionHeader onRefresh={onReloadSkills}>{t.skills.install}</InstallSectionHeader>
+            {envTools.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {envTools.map((tool) => (
+                  <EnvToolInstallButton key={tool} tool={tool} onInstalled={onReloadSkills} />
+                ))}
+              </div>
+            )}
+            {manualInstallEntries.length > 0 && (
+              <div className="space-y-1">
+                {manualInstallEntries.map(([method, command]) => (
+                  <InstallButton key={method} method={method} command={command} skillName={skill.name} onInstalled={onReloadSkills} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4">
@@ -228,16 +243,19 @@ export function SkillDetailView({
 
       {skill.content && (
         <div className="space-y-2">
-          <SectionTitle icon={<Cpu className="h-4 w-4" />}>{t.skills.content}</SectionTitle>
+          {!hideHeader && (
+            <SectionTitle icon={<Cpu className="h-4 w-4" />}>{t.skills.content}</SectionTitle>
+          )}
           <MarkdownAuthoringEditor
             title={skill.name}
             version={skill.frontmatter.version}
-            description={skill.frontmatter.description}
+            description={description}
             value={skill.content}
             readOnly
             defaultMode="preview"
             hideHeader
             bare
+            contentScrollable={false}
           />
         </div>
       )}

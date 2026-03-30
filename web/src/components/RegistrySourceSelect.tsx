@@ -2,6 +2,7 @@ import type { RegistrySelectableSource, RegistrySourceInfo } from '@/api/client'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import { getRegistrySourceLabel } from '@/lib/registry-source'
+import { cn } from '@/lib/utils'
 
 export function RegistrySourceSelect({
   sources,
@@ -20,7 +21,7 @@ export function RegistrySourceSelect({
 
   return (
     <Select value={value} onValueChange={(next) => onValueChange(next as RegistrySelectableSource)} disabled={disabled}>
-      <SelectTrigger className={className}>
+      <SelectTrigger className={cn('w-full sm:w-auto sm:min-w-max', className)}>
         <SelectValue placeholder={t.skills.marketplaceSourceLabel} />
       </SelectTrigger>
       <SelectContent>

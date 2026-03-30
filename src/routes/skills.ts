@@ -1,14 +1,22 @@
 import { Hono } from 'hono'
 import { z } from 'zod/v4'
-import { resolve } from 'node:path'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { execSync } from 'node:child_process'
 import { ROOT_DIR } from '../config/index.ts'
 import { getShellEnv, resetShellEnvCache } from '../utils/shell-env.ts'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { getLogger } from '../logger/index.ts'
 import type { SkillsLoader } from '../skills/index.ts'
-import { ImportManager, SkillProjectService, SkillsInstaller, resolveManagedSkillCatalogInfo } from '../skills/index.ts'
+import {
+  ImportManager,
+  SkillInstallSource,
+  SkillProjectService,
+  SkillsInstaller,
+  resolveExternalSkillSource,
+  resolveManagedSkillCatalogInfo,
+} from '../skills/index.ts'
 import type { AgentManager } from '../agent/index.ts'
 import type {
   AgentSkillsView,
@@ -18,10 +26,10 @@ import type {
   SkillProjectMeta,
 } from '../skills/types.ts'
 import type { SkillProjectDetail } from '../skills/project-service.ts'
+import { parseFrontmatter } from '../skills/frontmatter.ts'
+import { MAX_ARCHIVE_BYTES, unpackZipArchive, writeArchiveEntries } from '../skills/archive.ts'
 
 const PROJECT_META_FILENAME = '.youclaw-skill.json'
-const MARKETPLACE_SOURCES = new Set(['clawhub', 'tencent'])
-
 const configureEnvSchema = z.object({
   key: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
   value: z.string(),
@@ -120,16 +128,10 @@ function resolveRuntimeSkillCatalogInfo(skill: Skill): SkillCatalogInfo {
     }
   }
 
-  const externalSource = skill.registryMeta?.source && MARKETPLACE_SOURCES.has(skill.registryMeta.source)
-    ? 'marketplace'
-    : skill.registryMeta?.source === 'raw-url' || skill.registryMeta?.source === 'github' || projectMeta?.origin === 'imported'
-      ? 'imported'
-      : 'manual'
-
   return {
     catalogGroup: 'user',
     userSkillKind: projectMeta?.managed ? 'custom' : 'external',
-    externalSource: projectMeta?.managed ? undefined : externalSource,
+    externalSource: projectMeta?.managed ? undefined : resolveExternalSkillSource(skill.registryMeta, projectMeta),
     sortTimestamp: skill.registryMeta?.installedAt ?? projectMeta?.updatedAt ?? projectMeta?.createdAt,
   }
 }
@@ -139,6 +141,36 @@ function serializeSkill(skill: Skill): SerializedSkill {
     ...skill,
     ...resolveRuntimeSkillCatalogInfo(skill),
   }
+}
+
+function sanitizeSkillDirectoryName(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/[\/\\]/g, '-')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[<>:"|?*]/g, '-')
+    .trim()
+}
+
+function resolveSafeSkillRoot(rootDir: string, rawName: string): string {
+  const skillDirName = sanitizeSkillDirectoryName(rawName)
+  if (!skillDirName || skillDirName === '.' || skillDirName === '..') {
+    throw new Error('Skill name must resolve to a safe directory name')
+  }
+
+  const skillRoot = resolve(rootDir, skillDirName)
+  const relativePath = relative(rootDir, skillRoot)
+  if (
+    !relativePath
+    || relativePath === '.'
+    || relativePath === '..'
+    || isAbsolute(relativePath)
+    || relativePath.startsWith(`..${sep}`)
+  ) {
+    throw new Error('Skill name must resolve to a safe directory name')
+  }
+
+  return skillRoot
 }
 
 function serializeAgentSkillsView(view: AgentSkillsView) {
@@ -464,12 +496,74 @@ export function createSkillsRoutes(
     const dest = targetDir ?? resolve(ROOT_DIR, 'skills')
 
     try {
-      await installer.installFromLocal(sourcePath, dest)
+      await installer.installFromLocal(sourcePath, dest, {
+        source: SkillInstallSource.FolderImport,
+        provider: SkillInstallSource.FolderImport,
+        sourcePath,
+        projectOrigin: 'manual',
+      })
       skillsLoader.refresh()
       return c.json({ ok: true })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return c.json({ error: msg }, 500)
+    }
+  })
+
+  // POST /api/skills/install-from-archive — install skill from uploaded zip
+  skills.post('/skills/install-from-archive', async (c) => {
+    const formData = await c.req.formData().catch(() => null)
+    const rawFile = formData?.get('file')
+    const rawTargetDir = formData?.get('targetDir')
+
+    if (!(rawFile instanceof File)) {
+      return c.json({ error: 'File is required' }, 400)
+    }
+
+    if (rawFile.size > MAX_ARCHIVE_BYTES) {
+      return c.json({ error: `File exceeds the ${(MAX_ARCHIVE_BYTES / 1024 / 1024).toFixed(0)}MB limit` }, 400)
+    }
+
+    const fileName = rawFile.name || 'skill.zip'
+    if (!fileName.toLowerCase().endsWith('.zip')) {
+      return c.json({ error: 'Uploaded file must be a .zip archive' }, 400)
+    }
+
+    const dest = typeof rawTargetDir === 'string' && rawTargetDir.trim()
+      ? rawTargetDir.trim()
+      : resolve(ROOT_DIR, 'skills')
+
+    const archive = new Uint8Array(await rawFile.arrayBuffer())
+    const stageRoot = mkdtempSync(resolve(tmpdir(), 'youclaw-skill-upload-'))
+
+    try {
+      const entries = unpackZipArchive(archive)
+      const skillEntry = entries.find((entry) => entry.relativePath === 'SKILL.md')
+      if (!skillEntry) {
+        throw new Error('Archive does not contain a root SKILL.md')
+      }
+
+      const markdown = Buffer.from(skillEntry.content).toString('utf-8')
+      const { frontmatter } = parseFrontmatter(markdown)
+      const fallbackDirName = fileName.replace(/\.zip$/i, '') || 'uploaded-skill'
+      const skillRoot = resolveSafeSkillRoot(stageRoot, frontmatter.name || fallbackDirName || 'uploaded-skill')
+
+      mkdirSync(skillRoot, { recursive: true })
+      writeArchiveEntries(skillRoot, entries)
+
+      await installer.installFromLocal(skillRoot, dest, {
+        source: SkillInstallSource.ZipUpload,
+        provider: SkillInstallSource.ZipUpload,
+        originalFilename: fileName,
+        projectOrigin: 'imported',
+      })
+      skillsLoader.refresh()
+      return c.json({ ok: true })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, 400)
+    } finally {
+      rmSync(stageRoot, { recursive: true, force: true })
     }
   })
 
@@ -485,7 +579,12 @@ export function createSkillsRoutes(
     const dest = targetDir ?? resolve(ROOT_DIR, 'skills')
 
     try {
-      await installer.installFromUrl(url, dest)
+      await installer.installFromUrl(url, dest, {
+        source: SkillInstallSource.RawUrl,
+        provider: SkillInstallSource.RawUrl,
+        sourceUrl: url,
+        projectOrigin: 'imported',
+      })
       skillsLoader.refresh()
       return c.json({ ok: true })
     } catch (err) {

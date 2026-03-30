@@ -1,0 +1,23 @@
+[
+  {
+    "slug": "find-skills",
+    "displayName": "Find Skills",
+    "summary": "Discover and install suitable skills for user goals and workflows.",
+    "category": "data-analysis",
+    "tags": ["agent", "discovery", "marketplace"]
+  },
+  {
+    "slug": "markdown-converter",
+    "displayName": "Markdown Converter",
+    "summary": "Convert PDFs, Office files, HTML, images, audio, and web content into Markdown for downstream analysis.",
+    "category": "data-analysis",
+    "tags": ["documents", "markdown", "conversion"]
+  },
+  {
+    "slug": "data-analyst",
+    "displayName": "Data Analyst",
+    "summary": "Turn raw data into reports, visualizations, SQL queries, and spreadsheet automations.",
+    "category": "data-analysis",
+    "tags": ["data", "analysis", "reporting"]
+  }
+]

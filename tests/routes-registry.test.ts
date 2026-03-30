@@ -11,6 +11,22 @@ describe('registry routes', () => {
     const app = createRegistryRoutes({
       listSources: () => [
         {
+          id: 'recommended',
+          label: 'Recommended',
+          description: 'Curated recommendations',
+          capabilities: {
+            search: true,
+            list: true,
+            detail: true,
+            download: false,
+            update: false,
+            auth: 'none',
+            cursorPagination: true,
+            sortDirection: false,
+            sorts: [],
+          },
+        },
+        {
           id: 'clawhub',
           label: 'ClawHub',
           description: 'Official registry',
@@ -22,7 +38,9 @@ describe('registry routes', () => {
             update: true,
             auth: 'optional',
             cursorPagination: true,
-            sorts: ['trending', 'updated'],
+            defaultSort: 'downloads',
+            sortDirection: true,
+            sorts: ['newest', 'updated', 'downloads', 'installs', 'stars', 'name'],
           },
         },
         {
@@ -37,7 +55,9 @@ describe('registry routes', () => {
             update: true,
             auth: 'none',
             cursorPagination: true,
-            sorts: ['trending'],
+            defaultSort: 'score',
+            sortDirection: true,
+            sorts: ['score', 'downloads', 'stars', 'installs'],
           },
         },
       ],
@@ -47,7 +67,7 @@ describe('registry routes', () => {
     const body = await res.json() as Array<{ id: string; label: string }>
 
     expect(res.status).toBe(200)
-    expect(body.map((item) => item.id)).toEqual(['clawhub', 'tencent'])
+    expect(body.map((item) => item.id)).toEqual(['recommended', 'clawhub', 'tencent'])
   })
 
   test('GET /registry/recommended returns recommended list', async () => {
@@ -60,8 +80,6 @@ describe('registry routes', () => {
           installed: true,
           installedSkillName: 'coding-helper',
           hasUpdate: false,
-          tags: [],
-          source: 'fallback',
         },
       ],
     } as any)
@@ -75,26 +93,34 @@ describe('registry routes', () => {
     expect(body[0]?.installedSkillName).toBe('coding-helper')
   })
 
-  test('GET /registry/marketplace forwards source-aware query params', async () => {
+  test('GET /registry/marketplace forwards source-aware query params including sort and order', async () => {
+    let receivedLocale = ''
+    let receivedCategory = ''
     const app = createRegistryRoutes({
-      listMarketplace: async ({ source, query, cursor, sort, limit }: any) => ({
-        items: [],
-        nextCursor: cursor ?? 'next-page',
-        source,
-        query,
-        sort,
-        limit,
-      }),
+      listMarketplace: async ({ source, query, cursor, sort, order, limit, locale, category }: any) => {
+        receivedLocale = locale
+        receivedCategory = category ?? ''
+        return {
+          items: [],
+          nextCursor: cursor ?? 'next-page',
+          query,
+          sort,
+          order,
+          limit,
+        }
+      },
     } as any)
 
-    const res = await app.request('/registry/marketplace?source=tencent&q=code&cursor=abc&sort=downloads&limit=10')
-    const body = await res.json() as { source: string; query: string; sort: string; nextCursor: string }
+    const res = await app.request('/registry/marketplace?source=tencent&q=code&cursor=abc&sort=downloads&order=asc&limit=10&locale=en&category=communication-collaboration')
+    const body = await res.json() as { query: string; sort: string; order: string; nextCursor: string }
 
     expect(res.status).toBe(200)
-    expect(body.source).toBe('tencent')
     expect(body.query).toBe('code')
     expect(body.sort).toBe('downloads')
+    expect(body.order).toBe('asc')
     expect(body.nextCursor).toBe('abc')
+    expect(receivedLocale).toBe('en')
+    expect(receivedCategory).toBe('communication-collaboration')
   })
 
   test('GET /registry/marketplace defaults to clawhub when source is missing', async () => {
@@ -102,7 +128,7 @@ describe('registry routes', () => {
     const app = createRegistryRoutes({
       listMarketplace: async ({ source }: any) => {
         receivedSource = source
-        return { items: [], nextCursor: null, source, query: '', sort: 'trending' }
+        return { items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }
       },
     } as any)
 
@@ -114,7 +140,7 @@ describe('registry routes', () => {
 
   test('GET /registry/marketplace rejects unknown sources', async () => {
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
     } as any)
 
     const res = await app.request('/registry/marketplace?source=unknown')
@@ -126,10 +152,12 @@ describe('registry routes', () => {
 
   test('GET /registry/marketplace/:slug returns detail', async () => {
     let receivedSource = ''
+    let receivedLocale = ''
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
-      getMarketplaceSkill: async (_slug: string, source: string) => {
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
+      getMarketplaceSkill: async (_slug: string, source: string, locale: string) => {
         receivedSource = source
+        receivedLocale = locale
         return {
           slug: 'coding',
           displayName: 'Coding',
@@ -137,27 +165,27 @@ describe('registry routes', () => {
           installed: false,
           hasUpdate: false,
           latestVersion: '1.0.0',
-          tags: ['coding'],
-          source: 'clawhub',
-          detailUrl: 'https://clawhub.ai/jerry/coding',
-          ownerHandle: 'jerry',
+          ownerName: 'jerry',
+          url: 'https://clawhub.ai/jerry/coding',
+          author: { handle: 'jerry' },
         }
       },
     } as any)
 
-    const res = await app.request('/registry/marketplace/coding?source=tencent')
-    const body = await res.json() as { slug: string; ownerHandle: string; detailUrl: string }
+    const res = await app.request('/registry/marketplace/coding?source=tencent&locale=en')
+    const body = await res.json() as { slug: string; url: string; author?: { handle?: string } }
 
     expect(res.status).toBe(200)
     expect(receivedSource).toBe('tencent')
+    expect(receivedLocale).toBe('en')
     expect(body.slug).toBe('coding')
-    expect(body.ownerHandle).toBe('jerry')
-    expect(body.detailUrl).toBe('https://clawhub.ai/jerry/coding')
+    expect(body.author?.handle).toBe('jerry')
+    expect(body.url).toBe('https://clawhub.ai/jerry/coding')
   })
 
   test('POST /registry/install returns 400 when slug is missing', async () => {
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
       installSkill: async () => {},
       updateSkill: async () => {},
       uninstallSkill: async () => {},
@@ -176,7 +204,7 @@ describe('registry routes', () => {
     let installedSlug = ''
     let installedSource = ''
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
       installSkill: async (slug: string, source: string) => {
         installedSlug = slug
         installedSource = source
@@ -200,7 +228,7 @@ describe('registry routes', () => {
 
   test('POST /registry/install maps upstream download failures to 502', async () => {
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
       installSkill: async () => {
         throw new Error('Download failed: 503 Service Unavailable')
       },
@@ -224,7 +252,7 @@ describe('registry routes', () => {
     let updatedSlug = ''
     let updatedSource = ''
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
       installSkill: async () => {},
       updateSkill: async (slug: string, source: string) => {
         updatedSlug = slug
@@ -250,7 +278,7 @@ describe('registry routes', () => {
     let uninstalledSlug = ''
     let uninstalledSource = ''
     const app = createRegistryRoutes({
-      listMarketplace: async () => ({ items: [], nextCursor: null, source: 'clawhub', query: '', sort: 'trending' }),
+      listMarketplace: async () => ({ items: [], nextCursor: null, query: '', sort: 'downloads', order: 'desc' }),
       installSkill: async () => {},
       updateSkill: async () => {},
       uninstallSkill: async (slug: string, source: string) => {
@@ -274,16 +302,19 @@ describe('registry routes', () => {
 
   test('GET /registry/search forwards the selected source', async () => {
     let receivedSource = ''
+    let receivedLocale = ''
     const app = createRegistryRoutes({
-      searchSkills: async (_query: string, source: string) => {
+      searchSkills: async (_query: string, source: string, locale: string) => {
         receivedSource = source
+        receivedLocale = locale
         return []
       },
     } as any)
 
-    const res = await app.request('/registry/search?q=browser&source=tencent')
+    const res = await app.request('/registry/search?q=browser&source=tencent&locale=en')
 
     expect(res.status).toBe(200)
     expect(receivedSource).toBe('tencent')
+    expect(receivedLocale).toBe('en')
   })
 })

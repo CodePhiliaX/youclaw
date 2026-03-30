@@ -1,7 +1,17 @@
 import type { MarketplaceCategory, MarketplaceSkill } from '@/api/client'
 import type { Translations } from '@/i18n/types'
 
-export type DisplayMarketplaceCategory = Exclude<MarketplaceCategory, 'search' | 'browser'>
+export type DisplayMarketplaceCategory =
+  | 'agent'
+  | 'memory'
+  | 'documents'
+  | 'productivity'
+  | 'security'
+  | 'integrations'
+  | 'media'
+  | 'data'
+  | 'coding'
+  | 'other'
 
 export const marketplaceCategoryOrder: DisplayMarketplaceCategory[] = [
   'agent',
