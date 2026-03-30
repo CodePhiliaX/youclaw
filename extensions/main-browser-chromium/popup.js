@@ -2,6 +2,7 @@ const backendInput = document.getElementById('backend')
 const pairingInput = document.getElementById('pairing')
 const connectButton = document.getElementById('connect')
 const disconnectButton = document.getElementById('disconnect')
+const backendStatusPanel = document.getElementById('backend-status')
 const currentTabPanel = document.getElementById('current-tab')
 const attachedTabPanel = document.getElementById('attached-tab')
 const status = document.getElementById('status')
@@ -13,6 +14,26 @@ function normalizeBackendUrl(url) {
 function setStatus(message, isError = false) {
   status.textContent = message
   status.style.color = isError ? '#c03a2b' : '#2f6f44'
+}
+
+function setBackendStatus(message, isError = false) {
+  backendStatusPanel.textContent = message
+  backendStatusPanel.style.color = isError ? '#c03a2b' : '#2f6f44'
+}
+
+function humanizeBridgeError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.toLowerCase()
+  if (normalized.includes('pairing code expired')) {
+    return 'The pairing code expired. Generate a new pairing code in YouClaw and try again.'
+  }
+  if (normalized.includes('invalid pairing code')) {
+    return 'The pairing code is invalid. Copy the latest code from YouClaw and try again.'
+  }
+  if (normalized.includes('failed to fetch') || normalized.includes('networkerror')) {
+    return 'Cannot reach the YouClaw backend. Check the backend URL and make sure the app is running.'
+  }
+  return message
 }
 
 function describeTab(tab) {
@@ -44,6 +65,27 @@ async function saveDefaults() {
     backendUrl: normalizeBackendUrl(backendInput.value),
     pairingCode: pairingInput.value.trim(),
   })
+}
+
+async function checkBackendHealth(backendUrl) {
+  const normalized = normalizeBackendUrl(backendUrl)
+  if (!normalized) {
+    setBackendStatus('Backend URL is empty.', true)
+    return false
+  }
+
+  try {
+    const res = await fetch(`${normalized}/api/health`)
+    if (!res.ok) {
+      setBackendStatus(`Backend responded with HTTP ${res.status}.`, true)
+      return false
+    }
+    setBackendStatus('Backend reachable.')
+    return true
+  } catch (error) {
+    setBackendStatus(humanizeBridgeError(error), true)
+    return false
+  }
 }
 
 async function getCurrentTab() {
@@ -103,6 +145,11 @@ async function connectCurrentTab() {
   const pairingCode = pairingInput.value.trim()
   if (!backendUrl || !pairingCode) {
     throw new Error('Backend URL and pairing code are required')
+  }
+
+  const reachable = await checkBackendHealth(backendUrl)
+  if (!reachable) {
+    throw new Error('Backend is not reachable')
   }
 
   const tab = await getCurrentTab()
@@ -199,7 +246,7 @@ connectButton.addEventListener('click', async () => {
     setStatus('Current tab connected to YouClaw.')
     await refreshUi()
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : String(error), true)
+    setStatus(humanizeBridgeError(error), true)
   } finally {
     connectButton.disabled = false
     await refreshUi()
@@ -215,7 +262,7 @@ disconnectButton.addEventListener('click', async () => {
     setStatus('Current tab disconnected from YouClaw.')
     await refreshUi()
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : String(error), true)
+    setStatus(humanizeBridgeError(error), true)
   } finally {
     connectButton.disabled = false
     await refreshUi()
@@ -223,7 +270,11 @@ disconnectButton.addEventListener('click', async () => {
 })
 
 loadDefaults()
-  .then(() => refreshUi())
+  .then(async () => {
+    await checkBackendHealth(backendInput.value)
+    await refreshUi()
+  })
   .catch(() => {
     setStatus('Failed to load extension defaults.', true)
+    setBackendStatus('Failed to load backend configuration.', true)
   })
