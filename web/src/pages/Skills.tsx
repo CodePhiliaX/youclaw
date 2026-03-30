@@ -42,7 +42,7 @@ import {
   getRegistrySourceInfo,
   resolveMarketplaceSort,
 } from '@/lib/registry-source'
-import { notify, useAppRuntimeStore } from '@/stores/app'
+import { notify, useAppPreferencesStore, useAppRuntimeStore } from '@/stores/app'
 
 type TabType = 'installed' | 'marketplace'
 type InstalledWorkspace =
@@ -51,6 +51,8 @@ type InstalledWorkspace =
 
 export function Skills() {
   const { t, locale } = useI18n()
+  const skillsViewMode = useAppPreferencesStore((state) => state.skillsViewMode)
+  const setSkillsViewMode = useAppPreferencesStore((state) => state.setSkillsViewMode)
   const registrySource = useAppRuntimeStore((state) => state.registrySource)
   const registrySources = useAppRuntimeStore((state) => state.registrySources)
   const setRegistrySource = useAppRuntimeStore((state) => state.setRegistrySource)
@@ -369,6 +371,8 @@ export function Skills() {
             void refreshInstalledData()
           }}
           workspaceContent={installedWorkspaceContent}
+          viewMode={skillsViewMode}
+          onViewModeChange={setSkillsViewMode}
         />
       )}
 
@@ -394,6 +398,8 @@ export function Skills() {
             void loadMoreMarketplace()
           }}
           listKey={marketplaceListKey}
+          viewMode={skillsViewMode}
+          onViewModeChange={setSkillsViewMode}
         />
       )}
 

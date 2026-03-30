@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useMemo, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { ManagedSkill, Skill } from '@/api/client'
 import { InstalledSkillDetailDialog } from '@/components/skills/InstalledSkillDetailDialog'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +39,7 @@ import {
   type InstalledSkillSourceFilter,
 } from './skills-view-types'
 import { canDeleteInstalledSkill } from './shared-utils'
+import type { SkillsViewMode } from '@/stores/app'
 
 interface InstalledSkillsViewProps {
   builtinSkillItems: InstalledSkillListItem[]
@@ -60,6 +61,8 @@ interface InstalledSkillsViewProps {
   onToggleSkill: (skillName: string, enabled: boolean) => Promise<void>
   onReloadSkills: () => void
   workspaceContent?: ReactNode
+  viewMode: SkillsViewMode
+  onViewModeChange: (viewMode: SkillsViewMode) => void
 }
 
 type InstalledSkillSectionViewModel = {
@@ -67,8 +70,6 @@ type InstalledSkillSectionViewModel = {
   label: string
   items: InstalledSkillListItem[]
 }
-
-type InstalledSkillsViewMode = 'grid' | 'list'
 
 function InstalledSkillCard({
   item,
@@ -79,7 +80,7 @@ function InstalledSkillCard({
   onToggleSkill,
 }: {
   item: InstalledSkillListItem
-  viewMode: InstalledSkillsViewMode
+  viewMode: SkillsViewMode
   onOpen: (skillName: string) => void
   onEditSkill: (skillName: string) => void
   onDeleteSkill: (skillName: string) => void
@@ -238,9 +239,10 @@ export function InstalledSkillsView({
   onToggleSkill,
   onReloadSkills,
   workspaceContent,
+  viewMode,
+  onViewModeChange,
 }: InstalledSkillsViewProps) {
   const { t } = useI18n()
-  const [viewMode, setViewMode] = useState<InstalledSkillsViewMode>('grid')
 
   const sourceOptions = useMemo<Array<{ value: InstalledSkillSourceFilter; label: string }>>(() => ([
     { value: 'all', label: t.skills.installedSourceAll },
@@ -353,7 +355,7 @@ export function InstalledSkillsView({
                 aria-label={viewMode === 'grid' ? t.skills.switchToListView : t.skills.switchToGridView}
                 type="button"
                 onClick={() => {
-                  setViewMode((current) => current === 'grid' ? 'list' : 'grid')
+                  onViewModeChange(viewMode === 'grid' ? 'list' : 'grid')
                 }}
               >
                 {viewMode === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}

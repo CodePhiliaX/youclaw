@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { MarketplaceCardViewModel, MarketplaceResultsViewModel } from '@/lib/marketplace-view-model'
 import type { MarketplaceSort, RegistrySelectableSource, RegistrySourceInfo } from '@/api/client'
 import type { MarketplaceChangeEvent } from '@/lib/marketplace-updates'
@@ -19,9 +19,9 @@ import {
 } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { type TencentMarketplaceCategoryFilter } from '@/lib/tencent-marketplace-category'
+import type { SkillsViewMode } from '@/stores/app'
 
 type MarketplaceViewRow = { key: string; type: 'card'; viewModel: MarketplaceCardViewModel }
-type MarketplaceViewMode = 'grid' | 'list'
 
 function getMarketplaceSortLabel(
   sort: MarketplaceSort,
@@ -67,6 +67,8 @@ interface MarketplaceViewProps {
   onLoadMore: () => void
   onRetryLoadMore: () => void
   listKey: string
+  viewMode: SkillsViewMode
+  onViewModeChange: (viewMode: SkillsViewMode) => void
 }
 
 export function MarketplaceView({
@@ -88,9 +90,10 @@ export function MarketplaceView({
   onLoadMore,
   onRetryLoadMore,
   listKey,
+  viewMode,
+  onViewModeChange,
 }: MarketplaceViewProps) {
   const { t } = useI18n()
-  const [viewMode, setViewMode] = useState<MarketplaceViewMode>('grid')
   const availableSorts = useMemo(
     () => (registrySourceInfo?.capabilities.sorts ?? []).filter((sort) => sort !== 'name'),
     [registrySourceInfo],
@@ -164,7 +167,7 @@ export function MarketplaceView({
               aria-label={viewMode === 'grid' ? t.skills.switchToListView : t.skills.switchToGridView}
               type="button"
               onClick={() => {
-                setViewMode((current) => current === 'grid' ? 'list' : 'grid')
+                onViewModeChange(viewMode === 'grid' ? 'list' : 'grid')
               }}
             >
               {viewMode === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}

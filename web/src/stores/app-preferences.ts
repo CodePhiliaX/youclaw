@@ -5,6 +5,7 @@ import { applyThemeToDOM, type Theme } from '@/hooks/useTheme'
 import type { Locale } from '@/i18n/context'
 
 export type CloseAction = '' | 'minimize' | 'quit'
+export type SkillsViewMode = 'grid' | 'list'
 
 const APP_PREFERENCES_STORAGE_KEY = 'youclaw-app-preferences'
 
@@ -29,6 +30,9 @@ interface AppPreferencesState {
   toggleSidebar: () => void
   collapseSidebar: () => void
   expandSidebar: () => void
+
+  skillsViewMode: SkillsViewMode
+  setSkillsViewMode: (mode: SkillsViewMode) => void
 }
 
 export const useAppPreferencesStore = create<AppPreferencesState>()(persist((set, get) => ({
@@ -59,6 +63,11 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(persist((set
   },
   expandSidebar: () => {
     set({ sidebarCollapsed: false })
+  },
+
+  skillsViewMode: 'grid',
+  setSkillsViewMode: (skillsViewMode) => {
+    set({ skillsViewMode })
   },
 }), {
   name: APP_PREFERENCES_STORAGE_KEY,
