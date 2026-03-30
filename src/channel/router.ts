@@ -147,7 +147,23 @@ export class MessageRouter {
         }
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
       logger.error({ error: err, chatId: message.chatId }, 'Message processing failed')
+
+      // Emit error event so frontend and channels are notified
+      this.eventBus.emit({
+        type: 'error',
+        agentId: config.id,
+        chatId: message.chatId,
+        error: errorMessage,
+        turnId: message.id,
+      })
+
+      // Send error notification to the originating channel (avoid leaking internal details)
+      const errorText = errorMessage.includes('timed out')
+        ? '⚠️ 请求超时，请稍后重试。'
+        : '⚠️ 处理失败，请稍后重试。'
+      this.handleOutbound(message.chatId, errorText).catch(() => {})
     }
   }
 

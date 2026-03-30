@@ -4,6 +4,8 @@ import type { EventBus } from '../events/bus.ts'
 import type { Channel, InboundMessage, OnInboundMessage } from './types.ts'
 
 const FEISHU_TEXT_CHUNK_LIMIT = 4000
+// Interactive cards have stricter limits due to JSON wrapper overhead (~200 bytes)
+const FEISHU_CARD_CHUNK_LIMIT = 3500
 
 export interface FeishuChannelOpts {
   onMessage: OnInboundMessage
@@ -263,15 +265,22 @@ export class FeishuChannel implements Channel {
     try {
       const feishuChatId = chatId.replace(/^feishu:/, '')
 
-      // Long message chunking
-      const chunks = chunkText(text, FEISHU_TEXT_CHUNK_LIMIT)
+      // Check for code blocks or tables to choose message format
+      const shouldUseCard = /```[\s\S]*?```/.test(text) || /\|.+\|[\r\n]+\|[-:| ]+\|/.test(text)
+
+      // Use stricter limit for cards (JSON wrapper overhead)
+      const chunkLimit = shouldUseCard ? FEISHU_CARD_CHUNK_LIMIT : FEISHU_TEXT_CHUNK_LIMIT
+      const chunks = chunkText(text, chunkLimit)
 
       for (const chunk of chunks) {
-        // Check for code blocks or tables to choose message format
-        const shouldUseCard = /```[\s\S]*?```/.test(chunk) || /\|.+\|[\r\n]+\|[-:| ]+\|/.test(chunk)
-
         if (shouldUseCard) {
-          await this.sendCard(feishuChatId, chunk)
+          try {
+            await this.sendCard(feishuChatId, chunk)
+          } catch (cardErr) {
+            // Fallback to post format if card fails (e.g. content too long)
+            logger.warn({ chatId, error: cardErr }, 'Feishu card send failed, falling back to post format')
+            await this.sendPost(feishuChatId, chunk)
+          }
         } else {
           await this.sendPost(feishuChatId, chunk)
         }
@@ -280,6 +289,7 @@ export class FeishuChannel implements Channel {
       logger.debug({ chatId, length: text.length }, 'Feishu message sent')
     } catch (err) {
       logger.error({ chatId, error: err }, 'Feishu message send failed')
+      throw err  // Re-throw so caller knows the send failed
     }
   }
 
