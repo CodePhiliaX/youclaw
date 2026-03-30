@@ -294,6 +294,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     })
     return true
   }
+  if (message?.type === 'bridge-detached') {
+    chrome.storage.local.set({
+      bridgeProfileId: null,
+      bridgeTabId: null,
+    }).then(() => {
+      sendResponse({ ok: true })
+    }).catch((error) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) })
+    })
+    return true
+  }
   return false
 })
 
