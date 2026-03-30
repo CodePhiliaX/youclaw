@@ -42,6 +42,14 @@ import {
   setBrowserMainBridgeSession,
 } from './main-bridge.ts'
 import {
+  buildSetupSessionProfile,
+  buildSetupSessionRelayState,
+  createBrowserSetupSession,
+  deleteBrowserSetupSession,
+  getBrowserSetupSession,
+  updateBrowserSetupSession,
+} from './setup-session.ts'
+import {
   clearExtensionBridgeSession,
   createMainBridgePairingCode,
   deleteExtensionBridgeProfile,
@@ -54,6 +62,7 @@ import type {
   BrowserProfile,
   BrowserProfileRuntime,
   BrowserDiscoveryKind,
+  BrowserSetupSession,
   CreateBrowserProfileInput,
   UpdateBrowserProfileInput,
 } from './types.ts'
@@ -63,6 +72,12 @@ type ProfileTab = {
   title?: string
   url?: string
   type?: string
+}
+
+type MainBridgeContainer = {
+  kind: 'profile' | 'setup'
+  id: string
+  profile: BrowserProfile
 }
 
 export class BrowserManager {
@@ -94,33 +109,21 @@ export class BrowserManager {
   }
 
   getMainBridgeState(id: string): BrowserMainBridgeState {
-    const profile = getBrowserProfile(id)
-    if (!profile) throw new Error('Browser profile not found')
-    if (profile.driver !== 'extension-relay') {
-      throw new Error('Browser profile does not use the extension-relay driver')
-    }
-    return buildBrowserMainBridgeState(profile, getBrowserRelayState(id))
+    const container = this.resolveMainBridgeContainer(id)
+    return container.kind === 'profile'
+      ? buildBrowserMainBridgeState(container.profile, getBrowserRelayState(id))
+      : buildBrowserMainBridgeState(container.profile, buildSetupSessionRelayState(getBrowserSetupSession(id)!))
   }
 
   createMainBridgePairing(id: string): BrowserMainBridgeState {
-    const profile = getBrowserProfile(id)
-    if (!profile) throw new Error('Browser profile not found')
-    if (profile.driver !== 'extension-relay') {
-      throw new Error('Browser profile does not use the extension-relay driver')
-    }
-
+    this.resolveMainBridgeContainer(id)
     createMainBridgePairingCode(id)
-    return buildBrowserMainBridgeState(profile, getBrowserRelayState(id))
+    return this.getMainBridgeState(id)
   }
 
   selectMainBridgeBrowser(id: string, browserId: string | null): BrowserMainBridgeState {
-    const profile = getBrowserProfile(id)
-    if (!profile) throw new Error('Browser profile not found')
-    if (profile.driver !== 'extension-relay') {
-      throw new Error('Browser profile does not use the extension-relay driver')
-    }
-
-    const state = buildBrowserMainBridgeState(profile, getBrowserRelayState(id))
+    const container = this.resolveMainBridgeContainer(id)
+    const state = this.getMainBridgeState(id)
     const selected = browserId
       ? state.browsers.find((browser) => browser.id === browserId)
       : null
@@ -129,14 +132,60 @@ export class BrowserManager {
       throw new Error(`Detected browser "${browserId}" not found`)
     }
 
-    const nextProfile = updateBrowserProfile(id, {
-      executablePath: selected?.executablePath ?? null,
-    })
-    if (!nextProfile) {
-      throw new Error('Failed to update browser profile configuration')
+    if (container.kind === 'profile') {
+      const nextProfile = updateBrowserProfile(id, {
+        executablePath: selected?.executablePath ?? null,
+      })
+      if (!nextProfile) {
+        throw new Error('Failed to update browser profile configuration')
+      }
+    } else {
+      const nextSession = updateBrowserSetupSession(id, {
+        executablePath: selected?.executablePath ?? null,
+      })
+      if (!nextSession) {
+        throw new Error('Failed to update browser setup session')
+      }
     }
 
-    return buildBrowserMainBridgeState(nextProfile, getBrowserRelayState(id))
+    return this.getMainBridgeState(id)
+  }
+
+  createSetupSession(driver: BrowserSetupSession['driver']): BrowserSetupSession {
+    return createBrowserSetupSession(driver)
+  }
+
+  getSetupSession(id: string): BrowserSetupSession | null {
+    return getBrowserSetupSession(id)
+  }
+
+  deleteSetupSession(id: string): boolean {
+    const existing = getBrowserSetupSession(id)
+    if (!existing) return false
+    deleteBrowserSetupSession(id)
+    clearBrowserMainBridgeSession(id)
+    clearExtensionBridgeSession(id)
+    return true
+  }
+
+  finalizeSetupSession(id: string, input: { name: string }): BrowserProfile {
+    const session = getBrowserSetupSession(id)
+    if (!session) {
+      throw new Error('Browser setup session not found')
+    }
+    if (getBrowserProfile(id)) {
+      throw new Error('Browser profile already exists')
+    }
+
+    const profile = createBrowserProfile({
+      id: session.id,
+      name: input.name,
+      driver: session.driver,
+      executablePath: session.executablePath,
+      cdpUrl: session.cdpUrl,
+    })
+    deleteBrowserSetupSession(id)
+    return profile
   }
 
   createProfile(input: CreateBrowserProfileInput): BrowserProfile {
@@ -358,11 +407,7 @@ export class BrowserManager {
     extensionVersion?: string | null
   }): BrowserMainBridgeState {
     const resolved = consumeMainBridgePairingCode(params.pairingCode)
-    const profile = getBrowserProfile(resolved.profileId)
-    if (!profile) throw new Error('Browser profile not found')
-    if (profile.driver !== 'extension-relay') {
-      throw new Error('Browser profile does not use the extension-relay driver')
-    }
+    const container = this.resolveMainBridgeContainer(resolved.profileId)
 
     setExtensionBridgeSession(resolved.profileId, {
       browserId: params.browserId ?? null,
@@ -374,18 +419,15 @@ export class BrowserManager {
       extensionVersion: params.extensionVersion ?? null,
     })
 
-    return buildBrowserMainBridgeState(profile, getBrowserRelayState(resolved.profileId))
+    return container.kind === 'profile'
+      ? buildBrowserMainBridgeState(container.profile, getBrowserRelayState(resolved.profileId))
+      : buildBrowserMainBridgeState(container.profile, buildSetupSessionRelayState(getBrowserSetupSession(resolved.profileId)!))
   }
 
   disconnectExtensionMainBridge(id: string): BrowserMainBridgeState {
-    const profile = getBrowserProfile(id)
-    if (!profile) throw new Error('Browser profile not found')
-    if (profile.driver !== 'extension-relay') {
-      throw new Error('Browser profile does not use the extension-relay driver')
-    }
-
+    this.resolveMainBridgeContainer(id)
     clearExtensionBridgeSession(id)
-    return buildBrowserMainBridgeState(profile, getBrowserRelayState(id))
+    return this.getMainBridgeState(id)
   }
 
   syncExtensionMainBridge(params: {
@@ -398,11 +440,7 @@ export class BrowserManager {
     tabTitle?: string | null
     extensionVersion?: string | null
   }): BrowserMainBridgeState {
-    const profile = getBrowserProfile(params.profileId)
-    if (!profile) throw new Error('Browser profile not found')
-    if (profile.driver !== 'extension-relay') {
-      throw new Error('Browser profile does not use the extension-relay driver')
-    }
+    this.resolveMainBridgeContainer(params.profileId)
 
     if (params.tabId === null) {
       clearExtensionBridgeSession(params.profileId)
@@ -418,7 +456,7 @@ export class BrowserManager {
       })
     }
 
-    return buildBrowserMainBridgeState(profile, getBrowserRelayState(params.profileId))
+    return this.getMainBridgeState(params.profileId)
   }
 
   async rotateRelayToken(id: string): Promise<{ relay: BrowserRelayState; runtime: BrowserProfileRuntime }> {
@@ -716,5 +754,33 @@ export class BrowserManager {
     }
 
     return updatedAgents
+  }
+
+  private resolveMainBridgeContainer(id: string): MainBridgeContainer {
+    const profile = getBrowserProfile(id)
+    if (profile) {
+      if (profile.driver !== 'extension-relay') {
+        throw new Error('Browser profile does not use the extension-relay driver')
+      }
+      return {
+        kind: 'profile',
+        id,
+        profile,
+      }
+    }
+
+    const session = getBrowserSetupSession(id)
+    if (session) {
+      if (session.driver !== 'extension-relay') {
+        throw new Error('Browser setup session does not use the extension-relay driver')
+      }
+      return {
+        kind: 'setup',
+        id,
+        profile: buildSetupSessionProfile(session),
+      }
+    }
+
+    throw new Error('Browser profile not found')
   }
 }

@@ -850,6 +850,10 @@ export const en = {
     mainBridgeStepAdvanced: 'Step 5: Advanced Troubleshooting',
     mainBridgeStepDone: 'Done',
     mainBridgeStepTodo: 'Next',
+    mainBrowserSetupChoose: 'Choose Browser',
+    mainBrowserSetupInstall: 'Install Extension',
+    mainBrowserSetupConnect: 'Connect Current Tab',
+    mainBrowserSetupCreate: 'Create Profile',
   },
   channels: {
     title: 'Channels',

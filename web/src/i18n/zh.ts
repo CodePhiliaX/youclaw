@@ -852,6 +852,10 @@ export const zh: Translations = {
     mainBridgeStepAdvanced: '步骤 5：高级排障',
     mainBridgeStepDone: '已完成',
     mainBridgeStepTodo: '下一步',
+    mainBrowserSetupChoose: '选择浏览器',
+    mainBrowserSetupInstall: '安装扩展',
+    mainBrowserSetupConnect: '连接当前标签页',
+    mainBrowserSetupCreate: '创建 Profile',
   },
   channels: {
     title: '渠道',

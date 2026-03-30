@@ -74,6 +74,15 @@ export interface BrowserProfile {
   runtime: BrowserProfileRuntime | null
 }
 
+export interface BrowserSetupSession {
+  id: string
+  driver: BrowserDriver
+  executablePath: string | null
+  cdpUrl: string | null
+  createdAt: string
+  updatedAt: string | null
+}
+
 export interface ChatBrowserState {
   chatId: string
   agentId: string

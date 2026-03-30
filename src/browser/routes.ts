@@ -24,6 +24,14 @@ const CreateProfileSchema = z.object({
   isDefault: z.boolean().optional(),
 })
 
+const CreateSetupSessionSchema = z.object({
+  driver: z.enum(['extension-relay']),
+})
+
+const FinalizeSetupSessionSchema = z.object({
+  name: z.string().min(1),
+})
+
 const UpdateProfileSchema = CreateProfileSchema.partial().extend({
   name: z.string().min(1).optional(),
 })
@@ -85,7 +93,7 @@ const ExtensionMainBridgeSyncSchema = z.object({
 function routeErrorStatus(err: unknown): 400 | 401 | 404 | 500 {
   if (err instanceof BrowserRelayTokenError) return 401
   const message = err instanceof Error ? err.message : String(err)
-  if (message === 'Browser profile not found') return 404
+  if (message === 'Browser profile not found' || message === 'Browser setup session not found') return 404
   if (
     message.includes('extension-relay') ||
     message.includes('CDP URL') ||
@@ -135,6 +143,76 @@ export function createBrowserRoutes(browserManager: BrowserManager, _agentManage
 
   app.get('/browser/profiles', (c) => {
     return c.json(browserManager.listProfiles())
+  })
+
+  app.post('/browser/setup-sessions', async (c) => {
+    const parsed = CreateSetupSessionSchema.safeParse(await c.req.json())
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid request', details: parsed.error.issues }, 400)
+    }
+
+    return c.json(browserManager.createSetupSession(parsed.data.driver), 201)
+  })
+
+  app.delete('/browser/setup-sessions/:id', (c) => {
+    const deleted = browserManager.deleteSetupSession(c.req.param('id'))
+    if (!deleted) {
+      return c.json({ error: 'not found' }, 404)
+    }
+    return c.json({ ok: true })
+  })
+
+  app.get('/browser/setup-sessions/:id/main-bridge', (c) => {
+    try {
+      const state = browserManager.getMainBridgeState(c.req.param('id'))
+      return c.json(state)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, { status: routeErrorStatus(err) })
+    }
+  })
+
+  app.post('/browser/setup-sessions/:id/main-bridge/select', async (c) => {
+    const parsed = MainBridgeSelectSchema.safeParse(await c.req.json())
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid request', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const state = browserManager.selectMainBridgeBrowser(
+        c.req.param('id'),
+        parsed.data.browserId ?? null,
+      )
+      return c.json({ ok: true, state })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, { status: routeErrorStatus(err) })
+    }
+  })
+
+  app.post('/browser/setup-sessions/:id/main-bridge/pairing', async (c) => {
+    try {
+      const state = browserManager.createMainBridgePairing(c.req.param('id'))
+      return c.json({ ok: true, state })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, { status: routeErrorStatus(err) })
+    }
+  })
+
+  app.post('/browser/setup-sessions/:id/finalize', async (c) => {
+    const parsed = FinalizeSetupSessionSchema.safeParse(await c.req.json())
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid request', details: parsed.error.issues }, 400)
+    }
+
+    try {
+      const profile = browserManager.finalizeSetupSession(c.req.param('id'), parsed.data)
+      return c.json(profile, 201)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, { status: routeErrorStatus(err) })
+    }
   })
 
   app.post('/browser/profiles', async (c) => {

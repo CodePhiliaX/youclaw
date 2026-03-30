@@ -919,8 +919,60 @@ export interface BrowserMainBridgeDTO {
   extensionBridgeAvailable: true
 }
 
+export interface BrowserSetupSessionDTO {
+  id: string
+  driver: 'extension-relay'
+  executablePath: string | null
+  cdpUrl: string | null
+  createdAt: string
+  updatedAt: string | null
+}
+
 export async function getBrowserProfiles() {
   return apiFetch<BrowserProfileDTO[]>('/api/browser/profiles')
+}
+
+export async function createBrowserSetupSession(input: { driver: 'extension-relay' }) {
+  return apiFetch<BrowserSetupSessionDTO>('/api/browser/setup-sessions', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteBrowserSetupSession(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/browser/setup-sessions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function getBrowserSetupSessionMainBridge(id: string) {
+  return apiFetch<BrowserMainBridgeDTO>(`/api/browser/setup-sessions/${encodeURIComponent(id)}/main-bridge`)
+}
+
+export async function selectBrowserSetupSessionMainBridgeBrowser(id: string, browserId: string | null) {
+  return apiFetch<{ ok: boolean; state: BrowserMainBridgeDTO }>(
+    `/api/browser/setup-sessions/${encodeURIComponent(id)}/main-bridge/select`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ browserId }),
+    },
+  )
+}
+
+export async function createBrowserSetupSessionMainBridgePairing(id: string) {
+  return apiFetch<{ ok: boolean; state: BrowserMainBridgeDTO }>(
+    `/api/browser/setup-sessions/${encodeURIComponent(id)}/main-bridge/pairing`,
+    {
+      method: 'POST',
+    },
+  )
+}
+
+export async function finalizeBrowserSetupSession(id: string, input: { name: string }) {
+  return apiFetch<BrowserProfileDTO>(`/api/browser/setup-sessions/${encodeURIComponent(id)}/finalize`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function getBrowserDiscovery() {

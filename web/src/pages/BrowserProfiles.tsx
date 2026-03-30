@@ -1,17 +1,23 @@
 import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react'
 import {
+  createBrowserSetupSession,
+  createBrowserSetupSessionMainBridgePairing,
   connectBrowserProfileMainBridge,
   createBrowserProfileMainBridgePairing,
   createBrowserProfile,
   deleteBrowserProfile,
+  deleteBrowserSetupSession,
   disconnectBrowserProfileMainBridge,
   getBrowserDiscovery,
   getBrowserMainBridgeExtensionPackage,
   getBrowserProfileMainBridge,
   getBrowserProfileRelay,
+  getBrowserSetupSessionMainBridge,
+  finalizeBrowserSetupSession,
   restartBrowserProfile,
   rotateBrowserProfileRelayToken,
   selectBrowserProfileMainBridgeBrowser,
+  selectBrowserSetupSessionMainBridgeBrowser,
   startBrowserProfile,
   stopBrowserProfile,
   downloadBrowserMainBridgeExtensionBundle,
@@ -22,6 +28,7 @@ import type {
   BrowserMainBridgeDTO,
   BrowserProfileDTO,
   BrowserRelayDTO,
+  BrowserSetupSessionDTO,
 } from '../api/client'
 import { cn } from '../lib/utils'
 import { useI18n } from '../i18n'
@@ -37,7 +44,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { AlertTriangle, FolderOpen, Globe, Link, Play, Plus, RotateCw, Square, Trash2 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { AlertTriangle, Check, ChevronLeft, FolderOpen, Globe, Link, Play, Plus, RotateCw, Square, Trash2 } from 'lucide-react'
 import { useDragRegion } from '@/hooks/useDragRegion'
 import { notify } from '@/stores/app'
 import { getBackendBaseUrl } from '@/api/transport'
@@ -171,15 +186,7 @@ export function BrowserProfiles() {
       </SidePanel>
 
       <div className="flex-1 overflow-y-auto">
-        {showCreate ? (
-          <CreateProfileForm
-            onCreated={() => {
-              loadProfiles()
-              setShowCreate(false)
-            }}
-            onCancel={() => setShowCreate(false)}
-          />
-        ) : selectedProfile ? (
+        {selectedProfile ? (
           <ProfileDetail
             profile={selectedProfile}
             extensionPackage={extensionPackage}
@@ -218,6 +225,19 @@ export function BrowserProfiles() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <BrowserProfileSetupDrawer
+        open={showCreate}
+        browserDiscovery={browserDiscovery}
+        extensionPackage={extensionPackage}
+        backendUrlHint={backendUrlHint}
+        onOpenChange={setShowCreate}
+        onCreated={(profile) => {
+          loadProfiles()
+          setSelectedId(profile.id)
+          setShowCreate(false)
+        }}
+      />
     </div>
   )
 }
@@ -1014,32 +1034,137 @@ function InfoCard({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function CreateProfileForm({
+type BrowserSetupMode = 'managed' | 'remote-cdp' | 'extension-relay'
+type BrowserSetupStage =
+  | 'choose-mode'
+  | 'managed'
+  | 'remote'
+  | 'main-choose'
+  | 'main-install'
+  | 'main-connect'
+  | 'main-finish'
+
+function BrowserProfileSetupDrawer({
+  open,
+  browserDiscovery,
+  extensionPackage,
+  backendUrlHint,
+  onOpenChange,
   onCreated,
-  onCancel,
 }: {
-  onCreated: () => void
-  onCancel: () => void
+  open: boolean
+  browserDiscovery: BrowserDiscoveryDTO | null
+  extensionPackage: BrowserExtensionPackageDTO | null
+  backendUrlHint: string
+  onOpenChange: (open: boolean) => void
+  onCreated: (profile: BrowserProfileDTO) => void
 }) {
   const { t } = useI18n()
+  const [stage, setStage] = useState<BrowserSetupStage>('choose-mode')
+  const [mode, setMode] = useState<BrowserSetupMode | null>(null)
   const [name, setName] = useState('')
-  const [driver, setDriver] = useState<'managed' | 'remote-cdp' | 'extension-relay'>('managed')
   const [cdpUrl, setCdpUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [setupSession, setSetupSession] = useState<BrowserSetupSessionDTO | null>(null)
+  const [mainBridge, setMainBridge] = useState<BrowserMainBridgeDTO | null>(null)
+  const [mainBusy, setMainBusy] = useState(false)
+  const effectiveBackendUrl = backendUrlHint || 'http://127.0.0.1:62601'
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
+  const resetLocalState = useCallback(() => {
+    setStage('choose-mode')
+    setMode(null)
+    setName('')
+    setCdpUrl('')
+    setSubmitting(false)
+    setError('')
+    setSetupSession(null)
+    setMainBridge(null)
+    setMainBusy(false)
+  }, [])
+
+  const cleanupSetupSession = useCallback(async () => {
+    if (!setupSession?.id) return
+    await deleteBrowserSetupSession(setupSession.id).catch(() => {})
+  }, [setupSession?.id])
+
+  const handleDrawerOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) {
+      void cleanupSetupSession()
+      resetLocalState()
+    }
+    onOpenChange(nextOpen)
+  }, [cleanupSetupSession, onOpenChange, resetLocalState])
+
+  const loadSetupMainBridge = useCallback(async (sessionId: string) => {
+    const state = await getBrowserSetupSessionMainBridge(sessionId)
+    setMainBridge(state)
+    return state
+  }, [])
+
+  useEffect(() => {
+    if (!open || !setupSession?.id || !stage.startsWith('main-')) return
+
+    const intervalId = window.setInterval(() => {
+      void loadSetupMainBridge(setupSession.id).catch(() => {})
+    }, 4000)
+
+    return () => window.clearInterval(intervalId)
+  }, [loadSetupMainBridge, open, setupSession?.id, stage])
+
+  const copyText = useCallback((text: string, successMessage: string, errorMessage: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      notify.success(successMessage)
+    }).catch((err) => {
+      notify.error(err instanceof Error ? err.message : errorMessage, {
+        durationMs: 6000,
+      })
+    })
+  }, [])
+
+  const beginMainBrowserFlow = useCallback(async () => {
+    setSubmitting(true)
+    setError('')
+    try {
+      const session = await createBrowserSetupSession({ driver: 'extension-relay' })
+      setSetupSession(session)
+      setMode('extension-relay')
+      await loadSetupMainBridge(session.id)
+      setStage('main-choose')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start main browser setup')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [loadSetupMainBridge])
+
+  const handleContinueFromMode = async () => {
+    setError('')
+    if (mode === 'managed') {
+      setStage('managed')
+      return
+    }
+    if (mode === 'remote-cdp') {
+      setStage('remote')
+      return
+    }
+    if (mode === 'extension-relay') {
+      await beginMainBrowserFlow()
+    }
+  }
+
+  const handleCreateSimpleProfile = async (driver: 'managed' | 'remote-cdp') => {
     if (!name.trim()) return
     setSubmitting(true)
     setError('')
     try {
-      await createBrowserProfile({
+      const profile = await createBrowserProfile({
         name: name.trim(),
         driver,
         cdpUrl: driver === 'remote-cdp' ? cdpUrl.trim() || null : undefined,
       })
-      onCreated()
+      resetLocalState()
+      onCreated(profile)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create profile')
     } finally {
@@ -1047,73 +1172,563 @@ function CreateProfileForm({
     }
   }
 
+  const handleSelectSetupBrowser = async (browserId: string | null) => {
+    if (!setupSession?.id) return
+    setMainBusy(true)
+    setError('')
+    try {
+      const result = await selectBrowserSetupSessionMainBridgeBrowser(setupSession.id, browserId)
+      setMainBridge(result.state)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to select browser')
+    } finally {
+      setMainBusy(false)
+    }
+  }
+
+  const handleCreateSetupPairing = async () => {
+    if (!setupSession?.id) return
+    setMainBusy(true)
+    setError('')
+    try {
+      const result = await createBrowserSetupSessionMainBridgePairing(setupSession.id)
+      setMainBridge(result.state)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create pairing code')
+    } finally {
+      setMainBusy(false)
+    }
+  }
+
+  const handleFinalizeMainProfile = async () => {
+    if (!setupSession?.id || !name.trim()) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const profile = await finalizeBrowserSetupSession(setupSession.id, { name: name.trim() })
+      setSetupSession(null)
+      setMainBridge(null)
+      resetLocalState()
+      onCreated(profile)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create main browser profile')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const mainSteps: Array<{ key: BrowserSetupStage; label: string }> = [
+    { key: 'main-choose', label: t.browser.mainBrowserSetupChoose },
+    { key: 'main-install', label: t.browser.mainBrowserSetupInstall },
+    { key: 'main-connect', label: t.browser.mainBrowserSetupConnect },
+    { key: 'main-finish', label: t.browser.mainBrowserSetupCreate },
+  ]
+
+  const stepIndex = mainSteps.findIndex((entry) => entry.key === stage)
+  const mainConnected = mainBridge?.connectionMode === 'extension-bridge'
+
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-bold mb-6">{t.browser.createTitle}</h2>
-      <div className="mb-6">
-        <BrowserGuideCard />
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-5 max-w-lg">
-        <div>
-          <label className="block text-xs font-medium mb-1.5">{t.browser.profileName}</label>
-          <input
-            type="text"
-            data-testid="browser-input-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t.browser.profileNamePlaceholder}
-            className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
-            autoFocus
-          />
-        </div>
+    <Dialog open={open} onOpenChange={handleDrawerOpenChange}>
+      <DialogContent className="left-auto right-0 top-0 h-full w-[min(96vw,760px)] max-w-none translate-x-0 translate-y-0 rounded-none border-l border-border p-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right">
+        <div className="flex h-full flex-col overflow-hidden">
+          <DialogHeader className="border-b border-border px-6 py-5">
+            <DialogTitle>{t.browser.createTitle}</DialogTitle>
+            <DialogDescription>
+              {stage === 'choose-mode'
+                ? 'Choose how you want this browser profile to work.'
+                : mode === 'extension-relay'
+                  ? 'Set up your main browser first, then create the profile at the final step.'
+                  : 'Finish the required fields, then create the profile.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div>
-          <label className="block text-xs font-medium mb-1.5">Driver</label>
-          <select
-            value={driver}
-            onChange={(e) => setDriver(e.target.value as 'managed' | 'remote-cdp' | 'extension-relay')}
-            className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="managed">Managed Chromium</option>
-            <option value="remote-cdp">Remote CDP</option>
-            <option value="extension-relay">Main Browser (Advanced)</option>
-          </select>
-        </div>
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {stage === 'choose-mode' && (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <ModeOptionCard
+                    title={t.browser.managedTitle}
+                    description={t.browser.managedBody}
+                    selected={mode === 'managed'}
+                    onClick={() => setMode('managed')}
+                    badge="Recommended"
+                  />
+                  <ModeOptionCard
+                    title="Use My Browser"
+                    description="Connect the browser you already use, then create the profile after the extension is attached."
+                    selected={mode === 'extension-relay'}
+                    onClick={() => setMode('extension-relay')}
+                    badge={browserDiscovery?.browsers.length ? `${browserDiscovery.browsers.length} detected` : undefined}
+                  />
+                  <ModeOptionCard
+                    title={t.browser.remoteTitle}
+                    description={t.browser.remoteBody}
+                    selected={mode === 'remote-cdp'}
+                    onClick={() => setMode('remote-cdp')}
+                  />
+                </div>
+                <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+                  `Use My Browser` now runs as a guided setup. You pick the browser, install the extension, connect the current tab, and only then create the final profile.
+                </div>
+              </div>
+            )}
 
-        {driver === 'remote-cdp' && (
-          <div>
-            <label className="block text-xs font-medium mb-1.5">CDP URL</label>
-            <input
-              type="text"
-              value={cdpUrl}
-              onChange={(e) => setCdpUrl(e.target.value)}
-              placeholder="http://127.0.0.1:9222 or ws://host/devtools/browser/..."
-              className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            {stage === 'managed' && (
+              <form className="space-y-5" onSubmit={(e: FormEvent) => {
+                e.preventDefault()
+                void handleCreateSimpleProfile('managed')
+              }}>
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+                  YouClaw will launch an isolated Chromium window and store login state inside this profile.
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">{t.browser.profileName}</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t.browser.profileNamePlaceholder}
+                    className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
+                    autoFocus
+                  />
+                </div>
+              </form>
+            )}
+
+            {stage === 'remote' && (
+              <form className="space-y-5" onSubmit={(e: FormEvent) => {
+                e.preventDefault()
+                void handleCreateSimpleProfile('remote-cdp')
+              }}>
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+                  Use this only if you already have a browser exposing a CDP endpoint.
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">{t.browser.profileName}</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t.browser.profileNamePlaceholder}
+                    className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">CDP URL</label>
+                  <input
+                    type="text"
+                    value={cdpUrl}
+                    onChange={(e) => setCdpUrl(e.target.value)}
+                    placeholder="http://127.0.0.1:9222 or ws://host/devtools/browser/..."
+                    className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              </form>
+            )}
+
+            {stage.startsWith('main-') && (
+              <div className="space-y-5">
+                <div className="grid gap-2 sm:grid-cols-4">
+                  {mainSteps.map((entry, index) => {
+                    const active = stage === entry.key
+                    const done = stepIndex > index
+                    return (
+                      <div
+                        key={entry.key}
+                        className={cn(
+                          'rounded-2xl border px-3 py-3 text-xs transition-colors',
+                          active ? 'border-primary bg-primary/5 text-foreground' : 'border-border bg-background/70 text-muted-foreground',
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            'inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold',
+                            done ? 'bg-emerald-500/15 text-emerald-400' : active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+                          )}>
+                            {done ? <Check className="h-3 w-3" /> : index + 1}
+                          </span>
+                          <span className="leading-5">{entry.label}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {stage === 'main-choose' && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+                      Choose which installed browser should represent your main browser. You can keep the recommended browser or switch to another detected one.
+                    </div>
+                    {mainBridge && mainBridge.browsers.length > 0 ? (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleSelectSetupBrowser(null)}
+                            disabled={mainBusy}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
+                          >
+                            {t.browser.mainBridgeUseRecommended}
+                          </button>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5">{t.browser.mainBridgeSelectLabel}</label>
+                          <select
+                            value={mainBridge.selectedBrowserId ?? '__recommended__'}
+                            onChange={(e) => void handleSelectSetupBrowser(e.target.value === '__recommended__' ? null : e.target.value)}
+                            disabled={mainBusy}
+                            className="w-full rounded-xl border border-border bg-muted px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                          >
+                            <option value="__recommended__">{t.browser.mainBridgeUseRecommended}</option>
+                            {mainBridge.browsers.map((browser) => (
+                              <option key={browser.id} value={browser.id}>
+                                {browser.name}{browser.isRecommended ? ` · ${t.browser.detectedRecommended}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+                          {mainBridge.browsers.map((browser) => (
+                            <div key={browser.id} className="rounded-xl border border-border/70 bg-background/80 px-4 py-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="font-medium text-foreground">{browser.name}</div>
+                                {browser.isRecommended && (
+                                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                    {t.browser.detectedRecommended}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1 text-xs text-muted-foreground break-all">{browser.executablePath}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-4 text-sm text-muted-foreground">
+                        {t.browser.detectedBrowsersEmpty}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {stage === 'main-install' && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+                      Install the unpacked browser extension in the selected browser before moving on to pairing.
+                    </div>
+                    {extensionPackage ? (
+                      <>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <InfoCard label="Browser" value={mainBridge?.selectedBrowserName ?? t.browser.mainBridgeSelectionNone} />
+                          <InfoCard label="Backend URL" value={effectiveBackendUrl} />
+                        </div>
+                        <InfoCard label="Extension Path" value={extensionPackage.directoryPath} />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => copyText(effectiveBackendUrl, 'Backend URL copied.', 'Failed to copy backend URL')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors"
+                          >
+                            {t.browser.mainBridgeCopyBackend}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadBrowserMainBridgeExtensionBundle().catch((err) => {
+                              notify.error(err instanceof Error ? err.message : 'Failed to download extension bundle', {
+                                durationMs: 6000,
+                              })
+                            })}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors"
+                          >
+                            Download Extension Bundle
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => copyText(extensionPackage.directoryPath, 'Extension path copied.', 'Failed to copy extension path')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors"
+                          >
+                            Copy Extension Path
+                          </button>
+                        </div>
+                        <ol className="space-y-2 rounded-2xl border border-border bg-background/70 p-4 text-sm text-muted-foreground">
+                          <li>1. Open `chrome://extensions` in your selected browser.</li>
+                          <li>2. Turn on Developer Mode.</li>
+                          <li>3. Click `Load unpacked` and choose the extension folder.</li>
+                          <li>4. Keep the extension popup available for the connection step.</li>
+                        </ol>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-4 text-sm text-muted-foreground">
+                        Extension package metadata is not available yet.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {stage === 'main-connect' && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+                      Generate a pairing code if needed, then open the tab you want YouClaw to control, click the extension icon, enter the backend URL and pairing code, and click `Connect Current Tab`.
+                    </div>
+                    <div className="space-y-3 rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleCreateSetupPairing()}
+                          disabled={mainBusy}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
+                        >
+                          {mainBridge?.pairingCode ? 'Refresh Pairing Code' : 'Generate Pairing Code'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyText(effectiveBackendUrl, 'Backend URL copied.', 'Failed to copy backend URL')}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors"
+                        >
+                          {t.browser.mainBridgeCopyBackend}
+                        </button>
+                      </div>
+                      {mainBridge?.pairingCode ? (
+                        <div className="space-y-2">
+                          <div>
+                            <div className="text-xs text-muted-foreground mb-1.5">Pairing Code</div>
+                            <div className="font-mono text-lg text-foreground">{mainBridge.pairingCode}</div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {t.browser.mainBridgePairingExpires} {mainBridge.pairingCodeExpiresAt ? new Date(mainBridge.pairingCodeExpiresAt).toLocaleString() : 'N/A'}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyText(mainBridge.pairingCode ?? '', 'Pairing code copied.', 'Failed to copy pairing code')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-accent transition-colors"
+                          >
+                            {t.browser.mainBridgeCopyPairing}
+                          </button>
+                        </div>
+                      ) : mainConnected ? (
+                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
+                          Pairing code was already used by the extension. The current tab is connected.
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+                          Generate a pairing code before connecting the current tab from the extension popup.
+                        </div>
+                      )}
+                    </div>
+                    {mainBridge?.connectedBrowserName ? (
+                      <div className="space-y-2 rounded-2xl border border-border bg-background/80 p-4">
+                        <div className="text-xs text-muted-foreground">{t.browser.mainBridgeConnectedSession}</div>
+                        <div className="text-sm font-medium text-foreground">{mainBridge.connectedBrowserName}</div>
+                        {mainBridge.connectedTabTitle && (
+                          <div className="text-sm text-foreground break-words">{mainBridge.connectedTabTitle}</div>
+                        )}
+                        {mainBridge.connectedTabUrl && (
+                          <div className="text-xs text-muted-foreground break-all">{mainBridge.connectedTabUrl}</div>
+                        )}
+                        {mainBridge.connectedAt && (
+                          <div className="text-xs text-muted-foreground">
+                            Connected at {new Date(mainBridge.connectedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-4 text-sm text-muted-foreground">
+                        Waiting for the extension to attach the current tab.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {stage === 'main-finish' && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+                      The browser is already connected. Give this browser profile a name and create it.
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InfoCard label="Browser" value={mainBridge?.connectedBrowserName ?? mainBridge?.selectedBrowserName ?? 'N/A'} />
+                      <InfoCard label="Tab" value={mainBridge?.connectedTabTitle ?? 'N/A'} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5">{t.browser.profileName}</label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={mainBridge?.connectedBrowserName ?? t.browser.profileNamePlaceholder}
+                        className="w-full px-3 py-2 text-sm rounded-xl bg-muted border border-border focus:outline-none focus:ring-1 focus:ring-ring"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {error && <p data-testid="browser-form-error" className="mt-4 text-xs text-red-400">{error}</p>}
           </div>
-        )}
 
-        {error && <p data-testid="browser-form-error" className="text-xs text-red-400">{error}</p>}
-
-        <div className="flex gap-2 pt-2">
-          <button
-            type="submit"
-            data-testid="browser-submit-btn"
-            disabled={submitting || !name.trim()}
-            className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {submitting ? t.browser.creating : t.common.create}
-          </button>
-          <button
-            type="button"
-            data-testid="browser-cancel-btn"
-            onClick={onCancel}
-            className="px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors"
-          >
-            {t.common.cancel}
-          </button>
+          <DialogFooter className="border-t border-border px-6 py-4">
+            {stage === 'choose-mode' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleDrawerOpenChange(false)}
+                  className="px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleContinueFromMode()}
+                  disabled={!mode || submitting}
+                  className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  Continue
+                </button>
+              </>
+            ) : stage === 'managed' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setStage('choose-mode')}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateSimpleProfile('managed')}
+                  disabled={submitting || !name.trim()}
+                  className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? t.browser.creating : t.common.create}
+                </button>
+              </>
+            ) : stage === 'remote' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setStage('choose-mode')}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateSimpleProfile('remote-cdp')}
+                  disabled={submitting || !name.trim() || !cdpUrl.trim()}
+                  className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? t.browser.creating : t.common.create}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (stage === 'main-choose') setStage('choose-mode')
+                    if (stage === 'main-install') setStage('main-choose')
+                    if (stage === 'main-connect') setStage('main-install')
+                    if (stage === 'main-finish') setStage('main-connect')
+                  }}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </button>
+                {stage === 'main-choose' && (
+                  <button
+                    type="button"
+                    onClick={() => setStage('main-install')}
+                    disabled={mainBusy || !mainBridge?.browsers.length}
+                    className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    Continue
+                  </button>
+                )}
+                {stage === 'main-install' && (
+                  <button
+                    type="button"
+                    onClick={() => setStage('main-connect')}
+                    className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Continue
+                  </button>
+                )}
+                {stage === 'main-connect' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setupSession?.id && void loadSetupMainBridge(setupSession.id)}
+                      disabled={!setupSession?.id || mainBusy}
+                      className="px-5 py-2 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                    >
+                      {t.browser.mainBridgeRefresh}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStage('main-finish')}
+                      disabled={!mainConnected}
+                      className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                )}
+                {stage === 'main-finish' && (
+                  <button
+                    type="button"
+                    onClick={() => void handleFinalizeMainProfile()}
+                    disabled={submitting || !mainConnected || !name.trim()}
+                    className="px-5 py-2 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {submitting ? t.browser.creating : t.common.create}
+                  </button>
+                )}
+              </>
+            )}
+          </DialogFooter>
         </div>
-      </form>
-    </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ModeOptionCard({
+  title,
+  description,
+  selected,
+  onClick,
+  badge,
+}: {
+  title: string
+  description: string
+  selected: boolean
+  onClick: () => void
+  badge?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-2xl border p-4 text-left transition-colors',
+        selected ? 'border-primary bg-primary/5' : 'border-border bg-background hover:bg-accent/40',
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold text-foreground">{title}</div>
+        {badge && (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="mt-2 text-xs leading-6 text-muted-foreground">{description}</div>
+    </button>
   )
 }
