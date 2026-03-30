@@ -54,6 +54,24 @@
         margin-top: 12px;
         white-space: pre-wrap;
       }
+      .panel {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border: 1px solid #e6e6e6;
+        border-radius: 10px;
+        background: #fafafa;
+      }
+      .panel-title {
+        font-size: 11px;
+        color: #6b6b6b;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .panel-body {
+        font-size: 12px;
+        word-break: break-word;
+      }
     </style>
   </head>
   <body>
@@ -68,6 +86,14 @@
 
     <button id="connect">Connect Current Tab</button>
     <button id="disconnect">Disconnect Current Tab</button>
+    <div class="panel">
+      <div class="panel-title">Current Tab</div>
+      <div id="current-tab" class="panel-body">Loading...</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Attached Tab</div>
+      <div id="attached-tab" class="panel-body">No tab connected.</div>
+    </div>
     <div id="status" class="status"></div>
 
     <script src="popup.js"></script>

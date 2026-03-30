@@ -2,6 +2,8 @@ const backendInput = document.getElementById('backend')
 const pairingInput = document.getElementById('pairing')
 const connectButton = document.getElementById('connect')
 const disconnectButton = document.getElementById('disconnect')
+const currentTabPanel = document.getElementById('current-tab')
+const attachedTabPanel = document.getElementById('attached-tab')
 const status = document.getElementById('status')
 
 function normalizeBackendUrl(url) {
@@ -11,6 +13,15 @@ function normalizeBackendUrl(url) {
 function setStatus(message, isError = false) {
   status.textContent = message
   status.style.color = isError ? '#c03a2b' : '#2f6f44'
+}
+
+function describeTab(tab) {
+  if (!tab) {
+    return 'Unavailable'
+  }
+  const title = tab.title || '(untitled tab)'
+  const url = tab.url || '(no URL)'
+  return `${title}\n${url}`
 }
 
 async function getStoredBridgeState() {
@@ -43,15 +54,31 @@ async function getCurrentTab() {
   return tab
 }
 
+async function getAttachedTab(attachedTabId) {
+  if (!attachedTabId) return null
+  try {
+    const tab = await chrome.tabs.get(Number(attachedTabId))
+    return tab
+  } catch {
+    return null
+  }
+}
+
 async function refreshUi() {
-  const [tab, stored] = await Promise.all([
+  const [currentTab, stored] = await Promise.all([
     getCurrentTab().catch(() => null),
     getStoredBridgeState(),
   ])
 
-  const activeTabId = tab?.id != null ? String(tab.id) : null
+  const activeTabId = currentTab?.id != null ? String(currentTab.id) : null
   const attachedTabId = stored.bridgeTabId ? String(stored.bridgeTabId) : null
+  const attachedTab = await getAttachedTab(attachedTabId)
   const hasBridge = !!stored.bridgeProfileId && !!attachedTabId
+
+  currentTabPanel.textContent = describeTab(currentTab)
+  attachedTabPanel.textContent = hasBridge
+    ? describeTab(attachedTab) + (attachedTabId ? `\n(tab id: ${attachedTabId})` : '')
+    : 'No tab connected.'
 
   disconnectButton.disabled = !hasBridge
 
@@ -63,12 +90,12 @@ async function refreshUi() {
 
   if (activeTabId && attachedTabId === activeTabId) {
     connectButton.textContent = 'Reconnect Current Tab'
-    setStatus('This tab is currently connected to YouClaw.')
+    setStatus('Current tab is connected to YouClaw.')
     return
   }
 
-  connectButton.textContent = 'Connect Current Tab'
-  setStatus('Another tab is already connected. Connect this tab to switch, or disconnect first.', true)
+  connectButton.textContent = 'Switch To Current Tab'
+  setStatus('Another tab is currently connected. Use this button to switch the bridge to the current tab.', true)
 }
 
 async function connectCurrentTab() {
