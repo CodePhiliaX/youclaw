@@ -42,7 +42,7 @@ import {
   getRegistrySourceInfo,
   resolveMarketplaceSort,
 } from '@/lib/registry-source'
-import { notify, useAppRuntimeStore } from '@/stores/app'
+import { useAppRuntimeStore } from '@/stores/app'
 
 type TabType = 'installed' | 'marketplace'
 type InstalledWorkspace =
@@ -113,10 +113,6 @@ export function Skills() {
     builtin: t.skills.builtin,
     user: t.skills.user,
   }), [t.skills.builtin, t.skills.user, t.skills.workspace])
-  const formatSkillMessage = useCallback((template: string, skillName: string) => (
-    template.replace('{name}', skillName)
-  ), [])
-
   const refreshInstalledData = useCallback(async () => {
     const [nextSkills, nextMySkills] = await Promise.all([getSkills(), getMySkills()])
     setSkills(nextSkills)
@@ -346,21 +342,8 @@ export function Skills() {
             try {
               await toggleSkill(skillName, enabled)
               await refreshInstalledData()
-              notify.success(
-                formatSkillMessage(
-                  enabled ? t.skills.skillEnabledSuccess : t.skills.skillDisabledSuccess,
-                  skillName,
-                ),
-              )
-            } catch (error) {
-              notify.error(
-                error instanceof Error && error.message
-                  ? error.message
-                  : formatSkillMessage(
-                    enabled ? t.skills.skillEnableFailed : t.skills.skillDisableFailed,
-                    skillName,
-                  ),
-              )
+            } catch {
+              return
             }
           }}
           onDeleteSkill={(skillName) => setDeleteTarget(skillName)}
@@ -461,15 +444,11 @@ export function Skills() {
                   await deleteSkill(skillName)
                   setInstalledWorkspace({ kind: 'detail', skillName: null })
                   await refreshInstalledData()
-                  notify.success(formatSkillMessage(t.skills.skillDeleteSuccess, skillName))
-                } catch (error) {
-                  notify.error(
-                    error instanceof Error && error.message
-                      ? error.message
-                      : formatSkillMessage(t.skills.skillDeleteFailed, skillName),
-                  )
+                } catch {
+                  return
+                } finally {
+                  closeDeleteDialog()
                 }
-                closeDeleteDialog()
               }}
             >
               {t.common.delete}

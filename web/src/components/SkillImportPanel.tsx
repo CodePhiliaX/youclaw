@@ -24,7 +24,6 @@ import {
   type SkillImportMode,
 } from '@/lib/skill-import'
 import { cn } from '@/lib/utils'
-import { notify } from '@/stores/app'
 import { Download, Loader2, Sparkles, X } from 'lucide-react'
 
 const URL_SOURCE_EXAMPLES = [
@@ -117,19 +116,16 @@ export function SkillUrlImportDialog({
 
       const nextSuggestedName = nextProbeResult.suggestedName?.trim() || ''
       if (nextSuggestedName && existingSkillNameSet.has(nextSuggestedName)) {
-        const message = t.skills.importSkillAlreadyExists.replace('{name}', nextSuggestedName)
-        notify.error(message)
+        setActionError(t.skills.importSkillAlreadyExists.replace('{name}', nextSuggestedName))
         return
       }
 
       await runImport(normalizedUrl, importMode)
       await onImported()
       onOpenChange(false)
-      notify.success(t.skills.importSuccess)
     } catch (error) {
       const message = getMappedImportErrorMessage(importMode, error, t)
       setActionError(message)
-      notify.error(message)
     } finally {
       setActionStatus('idle')
     }

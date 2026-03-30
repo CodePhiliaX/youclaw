@@ -12,7 +12,6 @@ import {
 import { useI18n } from '@/i18n'
 import { extractDuplicateSkillName } from '@/lib/skill-import'
 import { cn } from '@/lib/utils'
-import { notify } from '@/stores/app'
 import { FileArchive, FolderOpen, Loader2, Upload, X } from 'lucide-react'
 
 function isZipFile(file: File): boolean {
@@ -53,11 +52,9 @@ export function SkillUploadDialog({
       await runner()
       await onUploaded()
       onOpenChange(false)
-      notify.success(t.skills.uploadSuccess)
     } catch (error) {
       const message = getUploadErrorMessage(error, t)
       setActionError(message)
-      notify.error(message)
     } finally {
       setActionStatus('idle')
     }
@@ -95,7 +92,6 @@ export function SkillUploadDialog({
 
     if (!isZipFile(file)) {
       setActionError(t.skills.uploadInvalidArchive)
-      notify.error(t.skills.uploadInvalidArchive)
       return
     }
 

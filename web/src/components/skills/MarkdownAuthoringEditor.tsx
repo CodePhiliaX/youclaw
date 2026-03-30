@@ -63,7 +63,6 @@ export function MarkdownAuthoringEditor({
             size="icon"
             variant="ghost"
             aria-label={t.skills.tabPreview}
-            title={t.skills.tabPreview}
             className={cn(
               'h-14 w-14 rounded-3xl border border-border/70 shadow-none',
               mode === 'preview'
@@ -79,7 +78,6 @@ export function MarkdownAuthoringEditor({
             size="icon"
             variant="ghost"
             aria-label={t.skills.tabMarkdown}
-            title={t.skills.tabMarkdown}
             className={cn(
               'h-14 w-14 rounded-3xl border border-border/70 shadow-none',
               mode === 'markdown'

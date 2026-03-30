@@ -22,7 +22,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { bumpDraftVersion, normalizeSlug, stringifySkillMarkdownLocal } from '@/components/skills/authoring-helpers'
 import { useI18n } from '@/i18n'
-import { notify } from '@/stores/app'
 import { CheckCircle2, PencilLine, Rocket, Trash2 } from 'lucide-react'
 
 interface SkillEditorProps {
@@ -273,8 +272,6 @@ export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkills
       }
       onSkillsChanged()
       return response
-    } catch (nextError) {
-      throw nextError
     } finally {
       setSaving(false)
     }
@@ -306,9 +303,8 @@ export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkills
       setActiveSkillName(published.skill.name)
       onSkillSelected(published.skill.name)
       await loadSkill(published.skill.name)
-      notify.success(formatSkillMessage(t.skills.skillPublishSuccess, published.skill.name))
     } catch (nextError) {
-      notify.error(getOperationErrorMessage(nextError, t.skills.skillPublishFailed))
+      setError(getOperationErrorMessage(nextError, t.skills.skillPublishFailed))
     } finally {
       setPublishing(false)
     }
@@ -316,7 +312,6 @@ export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkills
     activeSkillName,
     bindingRows,
     dirty,
-    formatSkillMessage,
     getOperationErrorMessage,
     handleSaveDraft,
     loadSkill,
@@ -325,13 +320,11 @@ export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkills
     selectedBindingIds,
     t.skills.publishBeforeBind,
     t.skills.skillPublishFailed,
-    t.skills.skillPublishSuccess,
   ])
 
   const handleDiscardDraft = useCallback(async () => {
     if (!activeSkillName) {
       initializeDraft(createEmptyDraft(locale), { markDirty: false })
-      notify.success(t.skills.draftDiscardSuccess)
       return
     }
 
@@ -352,11 +345,10 @@ export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkills
       initializeDraft(baseDraft, { markDirty: false })
       setValidation(null)
       onSkillsChanged()
-      notify.success(t.skills.draftDiscardSuccess)
     } catch (nextError) {
-      notify.error(getOperationErrorMessage(nextError, t.skills.draftDiscardFailed))
+      setError(getOperationErrorMessage(nextError, t.skills.draftDiscardFailed))
     }
-  }, [activeSkillName, getOperationErrorMessage, initializeDraft, locale, onSkillsChanged, t.skills.draftDiscardFailed, t.skills.draftDiscardSuccess])
+  }, [activeSkillName, getOperationErrorMessage, initializeDraft, locale, onSkillsChanged, t.skills.draftDiscardFailed])
 
   const handleDelete = useCallback(async () => {
     if (!activeSkillName) {
@@ -367,24 +359,20 @@ export function SkillEditor({ mode, skillName, onBack, onSkillSelected, onSkills
 
     setDeleting(true)
     try {
-      const deletedSkillName = activeSkillName
       await deleteManagedSkill(activeSkillName)
       setDeleteOpen(false)
       onSkillsChanged()
       onSkillSelected(null)
       onBack()
-      notify.success(formatSkillMessage(t.skills.skillDeleteSuccess, deletedSkillName))
     } catch (nextError) {
-      notify.error(
-        getOperationErrorMessage(
-          nextError,
-          formatSkillMessage(t.skills.skillDeleteFailed, activeSkillName),
-        ),
-      )
+      setError(getOperationErrorMessage(
+        nextError,
+        formatSkillMessage(t.skills.skillDeleteFailed, activeSkillName),
+      ))
     } finally {
       setDeleting(false)
     }
-  }, [activeSkillName, formatSkillMessage, getOperationErrorMessage, onBack, onSkillSelected, onSkillsChanged, t.skills.skillDeleteFailed, t.skills.skillDeleteSuccess])
+  }, [activeSkillName, formatSkillMessage, getOperationErrorMessage, onBack, onSkillSelected, onSkillsChanged, t.skills.skillDeleteFailed])
 
   const handleDraftBindingToggle = useCallback((agentId: string, checked: boolean) => {
     setSelectedBindingIds((current) => {

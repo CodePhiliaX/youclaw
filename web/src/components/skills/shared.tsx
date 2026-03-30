@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { notify } from '@/stores/app'
 import {
   AlertTriangle,
   Check,
@@ -125,8 +124,6 @@ export function EnvConfigRow({ envName, configured, onSaved }: { envName: string
   const [value, setValue] = useState('')
   const [status, setStatus] = useState<'idle' | 'saving'>('idle')
 
-  const formatMessage = (template: string) => template.replace('{key}', envName)
-
   const handleSave = async () => {
     if (!value.trim()) return
     setStatus('saving')
@@ -136,14 +133,8 @@ export function EnvConfigRow({ envName, configured, onSaved }: { envName: string
       setEditing(false)
       setValue('')
       onSaved()
-      notify.success(formatMessage(t.skills.envSaveSuccess))
-    } catch (error) {
+    } catch {
       setStatus('idle')
-      notify.error(
-        error instanceof Error && error.message
-          ? error.message
-          : formatMessage(t.skills.envSaveFailed),
-      )
     }
   }
 
@@ -222,14 +213,11 @@ export function InstallButton({ method, command, skillName, onInstalled }: { met
       if (result.ok) {
         setStatus('idle')
         onInstalled()
-        notify.success(t.skills.installSuccess)
       } else {
         setStatus('idle')
-        notify.error(result.stderr || `${t.skills.exitCodeLabel}: ${result.exitCode}`)
       }
-    } catch (error) {
+    } catch {
       setStatus('idle')
-      notify.error(error instanceof Error && error.message ? error.message : t.skills.installFailed)
     }
   }
 
@@ -242,7 +230,6 @@ export function InstallButton({ method, command, skillName, onInstalled }: { met
           onClick={handleCopy}
           className="shrink-0 p-1.5 rounded-md hover:bg-accent transition-colors"
           aria-label={t.common.copy}
-          title={t.common.copy}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
         </button>
@@ -289,33 +276,6 @@ export function SectionTitle({ icon, children }: { icon: ReactNode; children: Re
 }
 
 /**
- * Map executable names (from skill dependencies) to env tool names (from /api/install-tool).
- * If a dependency can be installed via the environment module, we show a one-click install button.
- */
-const DEP_TO_ENV_TOOL: Record<string, string> = {
-  uv: 'uv',
-  uvx: 'uv',       // uvx is part of the uv package
-  python: 'python',
-  python3: 'python',
-  bun: 'bun',
-  git: 'git',
-  node: 'node',
-}
-
-/**
- * Resolve which env tools are needed for a list of missing skill dependencies.
- * Returns deduplicated list of env tool names that can be installed via /api/install-tool.
- */
-export function resolveEnvTools(missingDeps: string[]): string[] {
-  const tools = new Set<string>()
-  for (const dep of missingDeps) {
-    const tool = DEP_TO_ENV_TOOL[dep]
-    if (tool) tools.add(tool)
-  }
-  return Array.from(tools)
-}
-
-/**
  * One-click install button for env-managed tools (uv, bun, git, python).
  * Reuses the /api/install-tool endpoint with CDN download support.
  */
@@ -328,19 +288,13 @@ export function EnvToolInstallButton({ tool, onInstalled }: { tool: string; onIn
     try {
       const result = await installTool(tool)
       if (result.ok) {
-        notify.success(`${tool} ${t.envSetup.installSuccess}`)
         onInstalled()
-      } else {
-        notify.error(result.stderr || t.envSetup.installFailed, {
-          durationMs: 6000,
-        })
       }
-    } catch (err) {
-      notify.error(err instanceof Error ? err.message : t.envSetup.installFailed, {
-        durationMs: 6000,
-      })
+    } catch {
+      return
+    } finally {
+      setStatus('idle')
     }
-    setStatus('idle')
   }
 
   return (
