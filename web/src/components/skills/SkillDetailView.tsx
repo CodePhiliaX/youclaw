@@ -25,9 +25,10 @@ import {
   InstallButton,
   InstallSectionHeader,
   SectionTitle,
-  resolveEnvTools,
 } from './shared'
+import { resolveEnvTools } from './skill-install-utils'
 import {
+  canDeleteInstalledSkill,
   getSkillDescription,
   isCustomEditableManagedSkill,
   resolveRuntimeSkillAvailability,
@@ -64,7 +65,7 @@ export function SkillDetailView({
 }: SkillDetailViewProps) {
   const { t } = useI18n()
   const showEditButton = Boolean(isCustomEditableManagedSkill(managedSkill) && onEditSkill)
-  const showDeleteButton = skill.source !== 'workspace'
+  const showDeleteButton = canDeleteInstalledSkill(skill)
   const description = getSkillDescription(skill, managedSkill, t)
   const sourceUrl = getSourceUrl(skill)
   const availability = resolveRuntimeSkillAvailability(skill)

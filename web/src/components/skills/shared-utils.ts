@@ -56,8 +56,13 @@ export function getInstalledSkillSourceLabel(
   t: ReturnType<typeof useI18n>['t'],
 ) {
   if (managedSkill?.userSkillKind === 'custom') return t.skills.sourceCustom
+  if (skill.source === 'workspace') return t.skills.workspace
   if (skill.source === 'builtin') return t.skills.builtin
   return getExternalSkillSourceLabel(skill, t)
+}
+
+export function canDeleteInstalledSkill(skill: Pick<Skill, 'source' | 'catalogGroup'>) {
+  return !(skill.source === 'builtin' && skill.catalogGroup === 'builtin')
 }
 
 export function resolveRuntimeSkillAvailability(

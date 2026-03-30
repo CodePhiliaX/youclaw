@@ -38,6 +38,7 @@ import {
   type InstalledSkillListItem,
   type InstalledSkillSourceFilter,
 } from './skills-view-types'
+import { canDeleteInstalledSkill } from './shared-utils'
 
 interface InstalledSkillsViewProps {
   builtinSkillItems: InstalledSkillListItem[]
@@ -90,7 +91,7 @@ function InstalledSkillCard({
   const draftOnly = isInstalledSkillDraftOnly(item)
   const interactive = Boolean(runtimeSkill || editable)
   const canShowToggle = Boolean(runtimeSkill)
-  const canShowDelete = Boolean(runtimeSkill && runtimeSkill.source !== 'workspace')
+  const canShowDelete = Boolean(runtimeSkill && canDeleteInstalledSkill(runtimeSkill))
   let iconClassName = 'border-border/70 bg-muted/60 text-muted-foreground'
 
   if (draftOnly) {
@@ -144,7 +145,7 @@ function InstalledSkillCard({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <h3 className="truncate text-base font-semibold tracking-tight" title={item.name}>{item.name}</h3>
+                <h3 className="truncate text-base font-semibold tracking-tight">{item.name}</h3>
                 {item.sourceLabel && (
                   <Badge variant="outline" className="shrink-0 text-[10px]">
                     {item.sourceLabel}
@@ -162,7 +163,7 @@ function InstalledSkillCard({
                 : 'opacity-0',
             )}
           >
-            {canShowToggle && runtimeSkill && (
+            {canShowToggle && runtimeSkill ? (
               <button
                 type="button"
                 onClick={(event) => {
@@ -170,7 +171,6 @@ function InstalledSkillCard({
                   void onToggleSkill(item.name, !runtimeSkill.enabled)
                 }}
                 aria-label={runtimeSkill.enabled ? t.skills.disable : t.skills.enable}
-                title={runtimeSkill.enabled ? t.skills.disable : t.skills.enable}
                 className={cn(
                   'relative inline-flex h-9 w-16 shrink-0 items-center rounded-full border px-1 transition-colors shadow-sm',
                   runtimeSkill.enabled
@@ -185,7 +185,7 @@ function InstalledSkillCard({
                   )}
                 />
               </button>
-            )}
+            ) : null}
 
             {canShowDelete && (
               <button
@@ -195,7 +195,6 @@ function InstalledSkillCard({
                   onDeleteSkill(item.name)
                 }}
                 aria-label={t.common.delete}
-                title={t.common.delete}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/95 text-muted-foreground shadow-sm transition-colors hover:text-red-500"
               >
                 <Trash2 className="h-5 w-5" />
@@ -352,7 +351,6 @@ export function InstalledSkillsView({
                 size="icon"
                 className="order-2 hidden h-12 w-12 rounded-2xl border-border/70 shadow-sm lg:inline-flex"
                 aria-label={viewMode === 'grid' ? t.skills.switchToListView : t.skills.switchToGridView}
-                title={viewMode === 'grid' ? t.skills.switchToListView : t.skills.switchToGridView}
                 type="button"
                 onClick={() => {
                   setViewMode((current) => current === 'grid' ? 'list' : 'grid')

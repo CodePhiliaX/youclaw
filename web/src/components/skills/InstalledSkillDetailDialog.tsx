@@ -13,6 +13,7 @@ import {
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
+  canDeleteInstalledSkill,
   getInstalledSkillSourceLabel,
   getSkillDescription,
   isCustomEditableManagedSkill,
@@ -52,10 +53,12 @@ export function InstalledSkillDetailDialog({
   }
 
   const showEditButton = Boolean(isCustomEditableManagedSkill(managedSkill) && onEditSkill)
-  const showDeleteButton = skill.source !== 'workspace'
+  const showDeleteButton = canDeleteInstalledSkill(skill)
   const description = getSkillDescription(skill, managedSkill, t)
   const isBuiltinSkill = skill.source === 'builtin'
-  const hasTopMetaBadges = Boolean(!isBuiltinSkill || managedSkill?.hasDraft || managedSkill?.hasPublished)
+  const userSkillKind = managedSkill?.userSkillKind ?? skill.userSkillKind
+  const showUserKindBadge = skill.source === 'user' && Boolean(userSkillKind)
+  const hasTopMetaBadges = Boolean(showUserKindBadge || managedSkill?.hasDraft || managedSkill?.hasPublished)
   const sourceLabel = getInstalledSkillSourceLabel(skill, managedSkill, t)
   const hasMetaBadges = Boolean((skill.registryMeta?.version || skill.frontmatter.version) || !isBuiltinSkill)
 
@@ -86,9 +89,9 @@ export function InstalledSkillDetailDialog({
                   <div className="min-w-0 space-y-2">
                     {hasTopMetaBadges && (
                       <div className="flex flex-wrap items-center gap-2">
-                        {!isBuiltinSkill && (
+                        {showUserKindBadge && (
                           <Badge variant="outline" className="border-border/70 bg-background/80 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                            {managedSkill?.userSkillKind === 'custom' ? t.skills.groupCustom : t.skills.groupExternal}
+                            {userSkillKind === 'custom' ? t.skills.groupCustom : t.skills.groupExternal}
                           </Badge>
                         )}
                         {managedSkill?.hasDraft && <Badge variant="outline" className="text-[10px]">{t.skills.draftBadge}</Badge>}
