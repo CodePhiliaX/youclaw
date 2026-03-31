@@ -48,6 +48,9 @@ playwright-report/
 
 plans/
 
+# Build-time generated constants (may contain secrets)
+src/config/build-constants.ts
+
 # Bun build cache
 *.bun-build
 
