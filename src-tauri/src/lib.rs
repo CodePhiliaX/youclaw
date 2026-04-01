@@ -80,10 +80,16 @@ fn normalize_deep_link(raw: &str) -> Option<String> {
 
 fn forward_deep_link(app: &AppHandle, url: String) {
     let state = app.state::<DeepLinkState>();
-    if state.frontend_ready.load(Ordering::SeqCst) {
-        let _ = app.emit("deep-link-received", url);
+    let ready = state.frontend_ready.load(Ordering::SeqCst);
+    log::info!("forward_deep_link: url={}, frontend_ready={}", url, ready);
+    if ready {
+        match app.emit("deep-link-received", &url) {
+            Ok(_) => log::info!("Emitted deep-link-received event to frontend"),
+            Err(e) => log::error!("Failed to emit deep-link-received: {}", e),
+        }
         return;
     }
+    log::info!("Frontend not ready, enqueuing deep link");
     enqueue_deep_link(app, url);
 }
 

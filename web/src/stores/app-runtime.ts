@@ -157,16 +157,11 @@ async function ensureWindowsDeepLinkRegistration(): Promise<void> {
       platform: 'windows',
       scheme: 'youclaw',
     })
-    const { isRegistered, register } = await import('@tauri-apps/plugin-deep-link')
-    const registered = await isRegistered('youclaw')
-    if (!registered) {
-      await register('youclaw')
-      await logAuthClientEvent('info', 'Windows deep-link protocol registered', {
-        scheme: 'youclaw',
-      })
-      return
-    }
-    await logAuthClientEvent('info', 'Windows deep-link protocol already registered', {
+    const { register } = await import('@tauri-apps/plugin-deep-link')
+    // Always re-register to ensure the registry points to the current exe,
+    // not a stale path from a previous installation or dev build.
+    await register('youclaw')
+    await logAuthClientEvent('info', 'Windows deep-link protocol registered', {
       scheme: 'youclaw',
     })
   } catch (err) {
