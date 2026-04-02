@@ -21,15 +21,19 @@ const binDir = resolve(root, 'src-tauri', 'bin')
 const targets = {
   'bun-darwin-arm64': 'youclaw-server-aarch64-apple-darwin',
   'bun-darwin-x64': 'youclaw-server-x86_64-apple-darwin',
-  'bun-linux-x64': 'youclaw-server-x86_64-unknown-linux-gnu',
-  'bun-windows-x64': 'youclaw-server-x86_64-pc-windows-msvc.exe',
+  'bun-linux-x64-baseline': 'youclaw-server-x86_64-unknown-linux-gnu',
+  'bun-windows-x64-baseline': 'youclaw-server-x86_64-pc-windows-msvc.exe',
 }
 
 // Detect current platform target
 function getCurrentTarget() {
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
   const os = process.platform === 'win32' ? 'windows' : process.platform
-  return `bun-${os}-${arch}`
+  const key = `bun-${os}-${arch}`
+  // Prefer baseline variant for broader CPU compatibility (no AVX requirement)
+  const baselineKey = `${key}-baseline`
+  if (targets[baselineKey]) return baselineKey
+  return key
 }
 
 // Generate build-constants.ts from env vars, compiled into sidecar
