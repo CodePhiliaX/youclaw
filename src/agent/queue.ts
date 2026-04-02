@@ -1,6 +1,5 @@
 import { getLogger } from '../logger/index.ts'
 import type { AgentManager } from './manager.ts'
-import { abortRegistry } from './abort-registry.ts'
 
 interface QueueItem {
   agentId: string
@@ -142,9 +141,6 @@ export class AgentQueue {
     }
   }
 
-  // Default timeout: 5 minutes
-  private static readonly PROCESS_TIMEOUT_MS = 5 * 60 * 1000
-
   /**
    * Process a single queue item
    */
@@ -156,7 +152,6 @@ export class AgentQueue {
       'Processing queue task',
     )
 
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     try {
       const managed = this.agentManager.getAgent(item.agentId)
       if (!managed) {
@@ -166,45 +161,24 @@ export class AgentQueue {
       // Update agent state
       managed.state.isProcessing = true
 
-      // Race against timeout to prevent stuck queue
-      const timeoutMs = AgentQueue.PROCESS_TIMEOUT_MS
       const processStartTime = Date.now()
       logger.debug({
         agentId: item.agentId,
         chatId: item.chatId,
         chatKey,
-        timeoutMs,
         promptLength: item.prompt.length,
         hasAttachments: !!(item.attachments && item.attachments.length > 0),
         category: 'queue',
-      }, 'Starting queue item processing with timeout')
-      const result = await Promise.race([
-        managed.runtime.process({
-          chatId: item.chatId,
-          prompt: item.prompt,
-          agentId: item.agentId,
-          turnId: item.turnId,
-          requestedSkills: item.requestedSkills,
-          browserProfileId: item.browserProfileId,
-          attachments: item.attachments,
-        }),
-        new Promise<never>((_, reject) => {
-          timeoutHandle = setTimeout(() => {
-            const elapsedMs = Date.now() - processStartTime
-            logger.error({
-              agentId: item.agentId,
-              chatId: item.chatId,
-              chatKey,
-              timeoutMs,
-              elapsedMs,
-              category: 'queue',
-            }, 'Queue item timed out — the model may be unreachable or the request is stuck')
-            // Abort the SDK subprocess so it doesn't keep running and block subsequent messages
-            abortRegistry.abort(item.chatId)
-            reject(new Error('Request timed out after 5 minutes. The model may be unreachable.'))
-          }, timeoutMs)
-        }),
-      ])
+      }, 'Starting queue item processing')
+      const result = await managed.runtime.process({
+        chatId: item.chatId,
+        prompt: item.prompt,
+        agentId: item.agentId,
+        turnId: item.turnId,
+        requestedSkills: item.requestedSkills,
+        browserProfileId: item.browserProfileId,
+        attachments: item.attachments,
+      })
 
       if (item.afterResult) {
         try {
@@ -238,8 +212,6 @@ export class AgentQueue {
       }
 
       item.reject(error)
-    } finally {
-      clearTimeout(timeoutHandle)
     }
   }
 

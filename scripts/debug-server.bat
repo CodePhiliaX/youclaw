@@ -15,6 +15,14 @@ echo   Architecture: %PROCESSOR_ARCHITECTURE%
 echo   Username: %USERNAME%
 echo.
 
+:: ---- CPU Info & AVX Check ----
+echo [CPU Info]
+for /f "tokens=2 delims==" %%A in ('wmic cpu get Name /value 2^>nul ^| find "="') do echo   CPU: %%A
+echo.
+echo [AVX Support Check]
+powershell -NoProfile -Command "try { $cpu = Get-CimInstance Win32_Processor; $id = $cpu.ProcessorId; Write-Host '  ProcessorId: ' $id; if ($cpu.Name -match 'Celeron|Pentium|Atom') { Write-Host '  WARNING: This CPU likely does NOT support AVX!' } } catch { Write-Host '  (unable to query)' }" 2>nul
+echo.
+
 :: ---- Check VC++ Runtime ----
 echo [VC++ Runtime Check]
 if exist "%SystemRoot%\System32\vcruntime140.dll" (
